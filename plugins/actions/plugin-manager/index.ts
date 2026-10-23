@@ -24,6 +24,8 @@ export const PLUGIN_CATALOG_MANIFEST: CapabilityManifest = { ...BASE, id: "plugi
 export const PLUGIN_LIST_MANIFEST: CapabilityManifest = { ...BASE, id: "plugin.list", name: "Plugins installés", description: "Liste les plugins installés et leur état.", locality: "local", cost: "local", offline: true, outputs: ["plugins"], timeoutMs: 10_000 };
 export const PLUGIN_INSTALL_MANIFEST: CapabilityManifest = { ...BASE, id: "plugin.install", name: "Installer un plugin", description: "Examine puis installe un plugin, après accord.", inputs: ["target"], timeoutMs: ACTION_TIMEOUT_MS };
 export const PLUGIN_REMOVE_MANIFEST: CapabilityManifest = { ...BASE, id: "plugin.remove", name: "Supprimer un plugin", description: "Supprime un plugin installé, après accord.", inputs: ["id"], locality: "local", cost: "local", offline: true, timeoutMs: ACTION_TIMEOUT_MS };
+/** Exécution d'une commande déjà approuvée : aucune confirmation, les permissions sont celles du plugin installé. */
+export const PLUGIN_RUN_MANIFEST: CapabilityManifest = { ...BASE, id: "plugin.run", name: "Commande de plugin", description: "Exécute une commande d'un plugin installé, avec ses permissions approuvées.", inputs: ["pluginId", "command", "text"], permissions: [], locality: "local", cost: "local", offline: true, timeoutMs: 15_000 };
 
 const ABSOLUTE_PATH = /^([a-zA-Z]:[\\/]|\/)/;
 const HTTPS = /^https:\/\//i;
@@ -96,7 +98,15 @@ export const remove: CapabilityHandler = async (input, context) => {
   return outcome(PLUGIN_REMOVE_MANIFEST, t("plugins.removed", { id }));
 };
 
+export const run: CapabilityHandler = async (input, context) => {
+  const { t } = context;
+  const result = await context.bridge.pluginRun(input.pluginId ?? "", input.command ?? "", input.text ?? "");
+  const presentations: PresentedContent[] = result.table ? [{ kind: "data-table", title: result.table.title, columns: result.table.columns, rows: result.table.rows }] : [];
+  return outcome(PLUGIN_RUN_MANIFEST, result.caption || t("plugins.run.empty"), presentations);
+};
+
 export function activate(api: PluginApi): void {
+  api.registerCapability(PLUGIN_RUN_MANIFEST, run);
   api.registerCapability(PLUGIN_CATALOG_MANIFEST, catalog);
   api.registerCapability(PLUGIN_LIST_MANIFEST, list);
   api.registerCapability(PLUGIN_INSTALL_MANIFEST, install);

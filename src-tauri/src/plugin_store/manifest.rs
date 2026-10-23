@@ -8,10 +8,15 @@ use serde::{Deserialize, Serialize};
 pub const SCHEMA_VERSION: u32 = 1;
 /// Version de Nexus contre laquelle les plugins sont vérifiés.
 pub const NEXUS_VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Types livrés dans cette version : uniquement des données, jamais de code.
-pub const PACK_KINDS: &[&str] = &["language", "aliases"];
-/// Types réservés aux plugins avec code, qui attendent le bac à sable.
-pub const CODE_KINDS: &[&str] = &["action", "source", "document", "agent", "speech"];
+/// Types livrés : paquets de données (`language`, `aliases`) et plugin WebAssembly (`action`).
+pub const KINDS: &[&str] = &["language", "aliases", "action"];
+/// Types réservés, qui attendent une décision sur le bac à sable de ces fonctions (voir docs/PLUGIN-SPEC.md).
+pub const CODE_KINDS: &[&str] = &["source", "document", "agent", "speech"];
+/// Permissions que l'utilisateur peut accorder à un plugin WebAssembly.
+pub const GRANTABLE: &[&str] = &["storage.local", "network.fetch"];
+/// Nombre maximal de domaines qu'un plugin peut déclarer.
+const MAX_HOSTS: usize = 10;
+const MAX_STORAGE_KB: u64 = 256;
 pub const MANIFEST_FILE: &str = "nexus.json";
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -29,13 +34,49 @@ pub struct Manifest {
     pub kinds: Vec<String>,
     pub entry_points: BTreeMap<String, String>,
     #[serde(default)]
-    pub permissions: Vec<serde_json::Value>,
+    pub permissions: Vec<PermissionDecl>,
+    /// Commandes exposées par un plugin WebAssembly. Vide pour un paquet de données.
+    #[serde(default)]
+    pub commands: Vec<CommandDecl>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Engines {
     pub nexus: String,
+}
+
+/// Permission demandée par un plugin WebAssembly. L'utilisateur la valide avec sa raison, à l'installation.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PermissionDecl {
+    pub id: String,
+    pub reason: String,
+    /// `storage.local` : quota de stockage, en kilo-octets (1 à 256).
+    #[serde(default)]
+    pub quota_kb: Option<u64>,
+    /// `network.fetch` : hôtes HTTPS autorisés (1 à 10), sans joker ni port.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+}
+
+/// Commande d'un plugin WebAssembly, déclenchée par une ou plusieurs expressions.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommandDecl {
+    pub name: String,
+    pub triggers: Vec<String>,
+    pub description: String,
+}
+
+fn valid_host(host: &str) -> bool {
+    host.len() <= 253
+        && host.contains('.')
+        && host.split('.').all(|label| !label.is_empty() && label.len() <= 63 && label.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') && !label.starts_with('-') && !label.ends_with('-'))
+}
+
+fn valid_command_name(name: &str) -> bool {
+    (1..=32).contains(&name.len()) && name.as_bytes()[0].is_ascii_lowercase() && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -138,13 +179,14 @@ pub fn problems(manifest: &Manifest, nexus_version: &str) -> Vec<String> {
             problems.push(format!("type « {kind} » déclaré deux fois"));
         }
         if CODE_KINDS.contains(&kind.as_str()) {
-            problems.push(format!("type « {kind} » indisponible : les plugins avec code attendent le bac à sable"));
-        } else if !PACK_KINDS.contains(&kind.as_str()) {
+            problems.push(format!("type « {kind} » indisponible dans cette version"));
+        } else if !KINDS.contains(&kind.as_str()) {
             problems.push(format!("type « {kind} » inconnu"));
         }
     }
 
     let declared: BTreeSet<&str> = manifest.kinds.iter().map(String::as_str).collect();
+    let has_action = manifest.kinds.iter().any(|kind| kind == "action");
     let entries: BTreeSet<&str> = manifest.entry_points.keys().map(String::as_str).collect();
     if declared != entries {
         problems.push("entryPoints doit contenir exactement un fichier par type (kinds)".into());
@@ -152,13 +194,86 @@ pub fn problems(manifest: &Manifest, nexus_version: &str) -> Vec<String> {
     for (kind, file) in &manifest.entry_points {
         if !is_safe_relative(file) {
             problems.push(format!("chemin « {file} » refusé pour le type « {kind} »"));
-        } else if !file.ends_with(".json") {
-            problems.push(format!("le fichier « {file} » doit être un JSON (type « {kind} »)"));
+            continue;
+        }
+        let expected = if kind == "action" { ".wasm" } else { ".json" };
+        if !file.ends_with(expected) {
+            problems.push(format!("le fichier « {file} » doit se terminer par {expected} (type « {kind} »)"));
         }
     }
 
-    if !manifest.permissions.is_empty() {
-        problems.push("les permissions ne sont pas encore accordables aux plugins de données : laisser « permissions » vide".into());
+    problems.extend(permission_problems(manifest, has_action));
+    problems.extend(command_problems(manifest, has_action));
+    problems
+}
+
+fn permission_problems(manifest: &Manifest, has_action: bool) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !manifest.permissions.is_empty() && !has_action {
+        problems.push("les permissions ne concernent que les plugins avec code (type « action »)".into());
+    }
+    let mut seen = BTreeSet::new();
+    for decl in &manifest.permissions {
+        if !seen.insert(decl.id.as_str()) {
+            problems.push(format!("permission « {} » déclarée deux fois", decl.id));
+        }
+        let reason = decl.reason.trim().chars().count();
+        if reason == 0 || reason > 200 {
+            problems.push(format!("raison de « {} » : entre 1 et 200 caractères", decl.id));
+        }
+        match decl.id.as_str() {
+            "storage.local" => {
+                if !matches!(decl.quota_kb, Some(kb) if (1..=MAX_STORAGE_KB).contains(&kb)) || !decl.hosts.is_empty() {
+                    problems.push(format!("« storage.local » demande un quotaKb entre 1 et {MAX_STORAGE_KB}, sans hosts"));
+                }
+            }
+            "network.fetch" => {
+                if decl.hosts.is_empty() || decl.hosts.len() > MAX_HOSTS || decl.quota_kb.is_some() {
+                    problems.push(format!("« network.fetch » demande entre 1 et {MAX_HOSTS} hosts, sans quotaKb"));
+                }
+                for host in &decl.hosts {
+                    if !valid_host(host) {
+                        problems.push(format!("hôte « {host} » refusé : nom de domaine en minuscules, sans joker ni port"));
+                    }
+                }
+            }
+            other => problems.push(format!("permission « {other} » inconnue (accordables : {})", GRANTABLE.join(", "))),
+        }
+    }
+    problems
+}
+
+fn command_problems(manifest: &Manifest, has_action: bool) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !manifest.commands.is_empty() && !has_action {
+        problems.push("les commandes ne concernent que les plugins avec code (type « action »)".into());
+    }
+    if has_action && manifest.commands.is_empty() {
+        problems.push("un plugin « action » déclare au moins une commande".into());
+    }
+    let mut names = BTreeSet::new();
+    let mut triggers = BTreeSet::new();
+    for command in &manifest.commands {
+        if !valid_command_name(&command.name) {
+            problems.push(format!("nom de commande « {} » invalide : minuscules, chiffres et tirets", command.name));
+        }
+        if !names.insert(command.name.as_str()) {
+            problems.push(format!("commande « {} » déclarée deux fois", command.name));
+        }
+        if command.triggers.is_empty() || command.triggers.len() > 5 {
+            problems.push(format!("« {} » : entre 1 et 5 déclencheurs", command.name));
+        }
+        for trigger in &command.triggers {
+            if !super::packs::valid_phrase(trigger) {
+                problems.push(format!("déclencheur « {trigger} » refusé : minuscules sans accent, 6 mots au plus"));
+            } else if !triggers.insert(trigger.as_str()) {
+                problems.push(format!("déclencheur « {trigger} » utilisé par deux commandes"));
+            }
+        }
+        let description = command.description.trim().chars().count();
+        if description == 0 || description > 200 {
+            problems.push(format!("description de « {} » : entre 1 et 200 caractères", command.name));
+        }
     }
     problems
 }
@@ -180,6 +295,7 @@ mod tests {
             kinds: vec!["language".into()],
             entry_points: BTreeMap::from([("language".to_string(), "language.json".to_string())]),
             permissions: vec![],
+            commands: vec![],
         }
     }
 
@@ -219,14 +335,51 @@ mod tests {
     }
 
     #[test]
-    fn code_kinds_and_permissions_are_refused_in_this_version() {
+    fn reserved_kinds_and_ungrantable_permissions_are_refused() {
+        let mut manifest = sample();
+        manifest.kinds = vec!["source".into()];
+        manifest.entry_points = BTreeMap::from([("source".to_string(), "source.json".to_string())]);
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains("indisponible")));
+
+        let mut manifest = sample();
+        manifest.permissions = vec![PermissionDecl { id: "file.read".into(), reason: "x".into(), quota_kb: None, hosts: vec![] }];
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains("inconnue")));
+    }
+
+    fn wasm_plugin() -> Manifest {
         let mut manifest = sample();
         manifest.kinds = vec!["action".into()];
-        manifest.entry_points = BTreeMap::from([("action".to_string(), "index.json".to_string())]);
-        manifest.permissions = vec![serde_json::json!({"id": "file.read"})];
-        let found = problems(&manifest, "0.1.0");
-        assert!(found.iter().any(|p| p.contains("bac à sable")));
-        assert!(found.iter().any(|p| p.contains("permissions")));
+        manifest.entry_points = BTreeMap::from([("action".to_string(), "plugin.wasm".to_string())]);
+        manifest.commands = vec![CommandDecl { name: "convertit".into(), triggers: vec!["convertis".into()], description: "Convertit".into() }];
+        manifest
+    }
+
+    #[test]
+    fn a_wasm_plugin_declares_its_permissions_and_commands() {
+        let mut manifest = wasm_plugin();
+        manifest.permissions = vec![
+            PermissionDecl { id: "storage.local".into(), reason: "Mémoriser".into(), quota_kb: Some(64), hosts: vec![] },
+            PermissionDecl { id: "network.fetch".into(), reason: "Météo".into(), quota_kb: None, hosts: vec!["api.exemple.org".into()] },
+        ];
+        assert!(problems(&manifest, "0.1.0").is_empty(), "{:?}", problems(&manifest, "0.1.0"));
+    }
+
+    #[test]
+    fn wasm_permissions_are_bounded_and_hosts_are_strict() {
+        let mut manifest = wasm_plugin();
+        manifest.permissions = vec![PermissionDecl { id: "network.fetch".into(), reason: "x".into(), quota_kb: None, hosts: vec!["*.exemple.org".into()] }];
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains("refusé")));
+        manifest.permissions = vec![PermissionDecl { id: "storage.local".into(), reason: "x".into(), quota_kb: Some(10_000), hosts: vec![] }];
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains("quotaKb")));
+    }
+
+    #[test]
+    fn a_wasm_plugin_needs_a_wasm_entry_point_and_a_command() {
+        let mut manifest = wasm_plugin();
+        manifest.entry_points = BTreeMap::from([("action".to_string(), "plugin.json".to_string())]);
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains(".wasm")));
+        manifest.commands.clear();
+        assert!(problems(&manifest, "0.1.0").iter().any(|p| p.contains("au moins une commande")));
     }
 
     #[test]

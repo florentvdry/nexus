@@ -1,5 +1,5 @@
 import type { LanguageDictionary } from "../intent/dictionaries";
-import { replacePacks } from "../intent/registry";
+import { replacePacks, type PluginActionEntry } from "../intent/registry";
 
 /** Vocabulaire d'un paquet : listes de mots, jamais d'expressions régulières écrites par son auteur. */
 export interface LanguagePackData {
@@ -12,6 +12,13 @@ export interface AliasesPackData {
   applications: { id: string; aliases: string[] }[];
 }
 
+/** Commande d'un plugin WebAssembly : déclenchée par ses expressions, exécutée par le natif. */
+export interface PluginActionData {
+  name: string;
+  triggers: string[];
+  description: string;
+}
+
 /** Paquet actif tel que le natif le renvoie. Un paquet modifié ou invalide n'apparaît jamais ici. */
 export interface PluginPackData {
   id: string;
@@ -19,6 +26,7 @@ export interface PluginPackData {
   version: string;
   language: LanguagePackData | null;
   aliases: AliasesPackData | null;
+  actions: PluginActionData[];
 }
 
 const NEVER = /(?!)/;
@@ -55,11 +63,15 @@ export function dictionaryFromPack(pack: LanguagePackData): LanguageDictionary {
 export function registerPacks(packs: readonly PluginPackData[]): void {
   const dictionaries = new Map<string, LanguageDictionary>();
   const aliases = new Map<string, readonly string[]>();
+  const actions: PluginActionEntry[] = [];
   for (const pack of packs) {
     if (pack.language) dictionaries.set(pack.id, dictionaryFromPack(pack.language));
     for (const app of pack.aliases?.applications ?? []) {
       aliases.set(app.id, [...(aliases.get(app.id) ?? []), ...app.aliases]);
     }
+    for (const action of pack.actions) {
+      actions.push({ pluginId: pack.id, command: action.name, triggers: action.triggers });
+    }
   }
-  replacePacks(dictionaries, aliases);
+  replacePacks(dictionaries, aliases, actions);
 }

@@ -8,8 +8,10 @@
 //! - `.staging/<id>.json`    : source et commit du plugin préparé.
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -18,11 +20,14 @@ use serde::{Deserialize, Serialize};
 
 use super::check::{self, digest, list_files};
 use super::index::valid_git_url;
-use super::manifest::{self, Manifest};
+use super::manifest::{self, Manifest, PermissionDecl};
 use super::packs::{self, AliasesPack, LanguagePack};
+use super::sandbox::{ActionOutput, Grants, Sandbox};
 use crate::error::AdapterError;
+use wasmtime::Module;
 
 const LOCK_FILE: &str = "plugins.lock.json";
+const DATA_DIR: &str = "data";
 const STAGING_DIR: &str = ".staging";
 const GIT_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -40,6 +45,10 @@ pub struct Prepared {
     pub source: String,
     pub commit: Option<String>,
     pub digest: String,
+    /// Permissions demandées : présentées à l'utilisateur avant l'installation.
+    pub permissions: Vec<PermissionDecl>,
+    /// Noms des commandes d'un plugin WebAssembly.
+    pub commands: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -66,6 +75,7 @@ pub struct Installed {
     pub digest: String,
     pub state: State,
     pub problems: Vec<String>,
+    pub permissions: Vec<PermissionDecl>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -83,6 +93,9 @@ pub struct LockEntry {
     pub commit: Option<String>,
     pub digest: String,
     pub approved_at: u64,
+    /// Permissions approuvées : seules celles-ci sont accordées au plugin à l'exécution.
+    #[serde(default)]
+    pub permissions: Vec<PermissionDecl>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -101,11 +114,26 @@ pub struct PackData {
     pub version: String,
     pub language: Option<LanguagePack>,
     pub aliases: Option<AliasesPack>,
+    /// Commandes d'un plugin WebAssembly actif.
+    pub actions: Vec<ActionData>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionData {
+    pub name: String,
+    pub triggers: Vec<String>,
+    pub description: String,
 }
 
 pub struct Store {
     root: PathBuf,
     known_apps: Vec<&'static str>,
+    sandbox: Sandbox,
+    /// Résultat des contrôles, par empreinte : un contenu identique n'est jamais réanalysé.
+    verified: Mutex<HashMap<String, Vec<String>>>,
+    /// Modules compilés, par empreinte.
+    compiled: Mutex<HashMap<String, Module>>,
 }
 
 fn now_secs() -> u64 {
@@ -124,8 +152,35 @@ fn problem(message: impl Into<String>) -> AdapterError {
 }
 
 impl Store {
-    pub fn new(root: PathBuf, known_apps: Vec<&'static str>) -> Store {
-        Store { root, known_apps }
+    pub fn new(root: PathBuf, known_apps: Vec<&'static str>) -> Result<Store, AdapterError> {
+        Ok(Store {
+            root,
+            known_apps,
+            sandbox: Sandbox::new()?,
+            verified: Mutex::new(HashMap::new()),
+            compiled: Mutex::new(HashMap::new()),
+        })
+    }
+
+    /// Contrôles complets d'un dossier, sans cache.
+    fn problems_of(&self, dir: &Path) -> Vec<String> {
+        check::check_dir(dir, &self.known_apps, &self.sandbox)
+    }
+
+    /// Contrôles d'un dossier déjà approuvé, mis en cache par empreinte.
+    fn problems_cached(&self, dir: &Path, digest: &str) -> Vec<String> {
+        if let Some(found) = self.verified.lock().ok().and_then(|cache| cache.get(digest).cloned()) {
+            return found;
+        }
+        let found = self.problems_of(dir);
+        if let Ok(mut cache) = self.verified.lock() {
+            cache.insert(digest.to_string(), found.clone());
+        }
+        found
+    }
+
+    fn data_dir(&self, id: &str) -> PathBuf {
+        self.root.join(DATA_DIR).join(id)
     }
 
     fn lock_path(&self) -> PathBuf {
@@ -206,7 +261,7 @@ impl Store {
 
     fn finish_prepare(&self, staging_id: &str, source: &str, commit: Option<String>) -> Result<Prepared, AdapterError> {
         let target = self.staging_dir(staging_id);
-        let problems = check::check_dir(&target, &self.known_apps);
+        let problems = self.problems_of(&target);
         if !problems.is_empty() {
             let _ = fs::remove_dir_all(&target);
             return Err(problem(problems.join(" ; ")));
@@ -226,7 +281,7 @@ impl Store {
             return Err(AdapterError::InvalidTarget(staging_id.to_string()));
         }
         let target = self.staging_dir(staging_id);
-        let problems = check::check_dir(&target, &self.known_apps);
+        let problems = self.problems_of(&target);
         if !problems.is_empty() {
             return Err(problem(problems.join(" ; ")));
         }
@@ -262,6 +317,7 @@ impl Store {
                 commit: prepared.commit.clone(),
                 digest: prepared.digest.clone(),
                 approved_at: now_secs(),
+                permissions: prepared.permissions.clone(),
             },
         );
         self.write_lock(&lock)?;
@@ -280,6 +336,11 @@ impl Store {
         let target = self.root.join(id);
         if target.exists() {
             fs::remove_dir_all(&target).map_err(|error| AdapterError::Operation(error.to_string()))?;
+        }
+        // Les données du plugin (stockage) partent avec lui : rien ne reste sans propriétaire.
+        let data = self.data_dir(id);
+        if data.exists() {
+            fs::remove_dir_all(&data).map_err(|error| AdapterError::Operation(error.to_string()))?;
         }
         self.write_lock(&lock)
     }
@@ -307,6 +368,7 @@ impl Store {
             digest: entry.digest.clone(),
             state,
             problems,
+            permissions: entry.permissions.clone(),
         };
         if !dir.is_dir() {
             return base(id.to_string(), State::Missing, vec!["dossier du plugin introuvable".into()]);
@@ -319,12 +381,51 @@ impl Store {
         if current != entry.digest {
             return base(name, State::Modified, vec!["le contenu a changé depuis l'approbation".into()]);
         }
-        let problems = check::check_dir(&dir, &self.known_apps);
+        let problems = self.problems_cached(&dir, &entry.digest);
         if problems.is_empty() {
             base(name, State::Active, vec![])
         } else {
             base(name, State::Invalid, problems)
         }
+    }
+
+    /// Exécute une commande d'un plugin WebAssembly actif, avec ses seules permissions approuvées.
+    pub fn run_action(&self, id: &str, command: &str, text: &str) -> Result<ActionOutput, AdapterError> {
+        let lock = self.read_lock()?;
+        let entry = lock.plugins.get(id).ok_or_else(|| AdapterError::InvalidTarget(id.to_string()))?;
+        let installed = self.status_of(id, entry);
+        if installed.state != State::Active {
+            return Err(problem(format!("« {id} » n'est pas actif : {}", installed.problems.join(" ; "))));
+        }
+        let dir = self.root.join(id);
+        let manifest = read_manifest(&dir)?;
+        if !manifest.commands.iter().any(|candidate| candidate.name == command) {
+            return Err(AdapterError::InvalidTarget(command.to_string()));
+        }
+        let module = self.module_for(&dir, &manifest, &entry.digest)?;
+        fs::create_dir_all(self.data_dir(id)).map_err(|error| AdapterError::Operation(error.to_string()))?;
+        let value = self.sandbox.run(
+            &module,
+            Grants::from_decls(&entry.permissions),
+            self.data_dir(id),
+            command,
+            &serde_json::json!({ "text": text }),
+        )?;
+        let output: ActionOutput = serde_json::from_value(value).map_err(|error| problem(format!("réponse invalide : {error}")))?;
+        output.validated()
+    }
+
+    fn module_for(&self, dir: &Path, manifest: &Manifest, digest: &str) -> Result<Module, AdapterError> {
+        if let Some(module) = self.compiled.lock().ok().and_then(|cache| cache.get(digest).cloned()) {
+            return Ok(module);
+        }
+        let file = manifest.entry_points.get("action").ok_or_else(|| problem("pas de point d'entrée « action »"))?;
+        let bytes = fs::read(dir.join(file)).map_err(|error| AdapterError::Operation(error.to_string()))?;
+        let module = self.sandbox.compile(&bytes)?;
+        if let Ok(mut cache) = self.compiled.lock() {
+            cache.insert(digest.to_string(), module.clone());
+        }
+        Ok(module)
     }
 
     /// Données des paquets actifs. Un paquet modifié ou invalide n'est jamais chargé.
@@ -336,8 +437,23 @@ impl Store {
             }
             let dir = self.root.join(&installed.id);
             let manifest = read_manifest(&dir)?;
-            let mut pack = PackData { id: installed.id.clone(), name: manifest.name.clone(), version: manifest.version.clone(), language: None, aliases: None };
+            let mut pack = PackData {
+                id: installed.id.clone(),
+                name: manifest.name.clone(),
+                version: manifest.version.clone(),
+                language: None,
+                aliases: None,
+                actions: manifest
+                    .commands
+                    .iter()
+                    .map(|command| ActionData { name: command.name.clone(), triggers: command.triggers.clone(), description: command.description.clone() })
+                    .collect(),
+            };
             for (kind, file) in &manifest.entry_points {
+                // Un module WebAssembly n'est jamais lu ici : ses commandes viennent du manifeste, son exécution du bac à sable.
+                if kind == "action" {
+                    continue;
+                }
                 let text = fs::read_to_string(dir.join(file)).map_err(|error| AdapterError::Operation(error.to_string()))?;
                 match kind.as_str() {
                     "language" => pack.language = packs::validate_language(&text).ok(),
@@ -358,6 +474,8 @@ fn read_manifest(dir: &Path) -> Result<Manifest, AdapterError> {
 
 fn summary(staging_id: &str, manifest: &Manifest, source: &str, commit: Option<String>, digest: String) -> Prepared {
     Prepared {
+        permissions: manifest.permissions.clone(),
+        commands: manifest.commands.iter().map(|command| command.name.clone()).collect(),
         staging_id: staging_id.to_string(),
         id: manifest.id.clone(),
         name: manifest.name.clone(),

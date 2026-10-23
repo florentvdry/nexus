@@ -33,6 +33,11 @@ Chaque dossier de plugin contient :
 | `languages` | vocabulaire et expressions pour comprendre les commandes | `fr`, `en` |
 | `agents` | agents externes qui travaillent dans un projet, sous confirmation | `claude-code` |
 
+Un plugin **WebAssembly** (`action`) est un module compilé, exécuté dans un bac à sable. Il déclare ses commandes et les
+permissions qu'il demande ; ses commandes sont déclenchées par des expressions (« convertis 12 km en miles »). Il s'écrit
+en Rust avec le SDK `sdk/nexus-plugin-sdk`, ou dans tout langage qui compile vers WebAssembly. Exemple complet :
+`examples/plugins/community.exemple.convertisseur` (conversions d'unités et mémo). Spécification : [PLUGIN-SPEC.md](PLUGIN-SPEC.md), § 4.4.
+
 Un **paquet de données** est un plugin installé par l'utilisateur, sans code : `language` (vocabulaire) et `aliases`
 (noms d'applications). Il est décrit par `nexus.json` et validé par `nexus-plugin validate`. La spécification complète
 est dans [PLUGIN-SPEC.md](PLUGIN-SPEC.md). Exemple : `examples/plugins/community.exemple.verbes`.
@@ -84,8 +89,9 @@ une erreur `permission-refused`, pas un accès silencieux.
 
 ## Ce qui n'est pas encore fait
 
-- **Chargement de code depuis le disque** : les plugins avec code sont compilés dans l'application. Seuls les paquets de données
-  sont chargés depuis le disque (voir la spécification, § 10 pour la décision à prendre avant le code).
+- **Plugins d'exécution plus larges** : les plugins WebAssembly n'ont accès qu'au stockage et au réseau déclaré. Les accès
+  aux fichiers, aux processus et au micro passeront par des permissions supplémentaires, une fois éprouvées.
+- **Bibliothèque publique de plugins** : le catalogue est défini, mais aucun dépôt public n'existe encore.
 - **Plugins de synthèse et de reconnaissance** : ce sont des plugins `speech` fixes, utilisés directement par l'interface.
   Ils ne passent pas encore par l'hôte. Ils le feront quand un second moteur vocal existera.
 - **Empaquetage du worker** : il doit être déclaré comme binaire externe avant tout installateur.

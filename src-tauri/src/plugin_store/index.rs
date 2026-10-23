@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::manifest::{self, PACK_KINDS};
+use super::manifest::{self, KINDS};
 use crate::error::AdapterError;
 
 /// Variable d'environnement qui indique l'adresse HTTPS du catalogue. Sans elle, aucun catalogue n'est proposé.
@@ -64,7 +64,7 @@ pub fn parse_index(text: &str) -> Result<Vec<IndexEntry>, Vec<String>> {
         if manifest::parse_version(&entry.version).is_none() {
             problems.push(format!("version de « {} » invalide", entry.id));
         }
-        if entry.kinds.iter().any(|kind| !PACK_KINDS.contains(&kind.as_str())) {
+        if entry.kinds.iter().any(|kind| !KINDS.contains(&kind.as_str())) {
             problems.push(format!("types de « {} » non disponibles dans cette version", entry.id));
         }
     }
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn code_types_and_duplicates_are_refused_in_the_catalogue() {
-        let code = GOOD.replace(r#""kinds":["language"]"#, r#""kinds":["action"]"#);
+        let code = GOOD.replace(r#""kinds":["language"]"#, r#""kinds":["agent"]"#);
         assert!(parse_index(&code).unwrap_err().iter().any(|p| p.contains("non disponibles")));
         let entry = r#"{"id":"community.ana.verbes","name":"Verbes","version":"1.0.0","description":"d","source":"https://example.org/x.git","kinds":["language"]}"#;
         let twice = format!(r#"{{"schemaVersion":1,"plugins":[{entry},{entry}]}}"#);

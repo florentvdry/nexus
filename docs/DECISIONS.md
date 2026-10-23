@@ -124,6 +124,14 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Pourquoi** : c'est le modèle sûr constaté chez Omarchy, sans son absence de contrôle. Un dépôt ne peut rien exécuter
   pendant l'installation.
 
+## ADR-022 — Plugins avec code : WebAssembly, avec une seule fonction hôte
+
+- **Choix** : un plugin `action` est un module WebAssembly exécuté par wasmtime 50. Il n'importe que `nexus.host_call` et chaque opération est vérifiée contre les permissions approuvées dans le lock.
+- **Pourquoi** : un plugin Rust reste possible, car Rust compile vers WebAssembly. Le choix porte sur le bac à sable. Une DLL chargée dans NEXUS aurait les droits de l'application. Un processus séparé n'a pas de contrôle fin des permissions sans bac à sable système, complexe sous Windows. Une iframe JavaScript offre une garantie plus faible.
+- **Conséquence** : le SDK Rust (`sdk/nexus-plugin-sdk`) et un exemple complet. Les autres langages peuvent cibler le même contrat.
+- **Coût** : wasmtime exige Rust 1.97 (la version minimale du projet passe à 1.97). Le module est compilé à la vérification et mis en cache par empreinte.
+- **Limites** : pas de bibliothèque de plugins publique ; les types `source`, `document`, `agent` et `speech` restent réservés ; l'accès aux fichiers et au micro n'est pas ouvert.
+
 ## ADR-016 — Claude Code via le CLI officiel, en mode non interactif
 
 - **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.

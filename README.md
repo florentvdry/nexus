@@ -63,6 +63,11 @@ après deux confirmations. « liste mes plugins », « supprime le plugin <ident
 vocabulaire et des noms d'applications ; il ne contient aucun code. Spécification : [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md).
 Exemple : `examples/plugins/community.exemple.verbes`.
 
+**Plugins WebAssembly** : un plugin peut être écrit en Rust (SDK `sdk/nexus-plugin-sdk`) et compilé en WebAssembly.
+Il ne s'exécute que dans un bac à sable : il ne reçoit que le stockage et le réseau déclarés dans son manifeste, approuvés
+à l'installation. Exemple : `examples/plugins/community.exemple.convertisseur` (« convertis 12 km en miles », « retiens … »,
+« rappelle »).
+
 Les commandes sont conservées dans un journal local seulement si vous l'activez dans les réglages (désactivé par défaut,
 effaçable à tout moment). Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour ce qui est confirmé, et ce qui ne l'est pas.
 
@@ -71,7 +76,7 @@ effaçable à tout moment). Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour
 Prérequis :
 
 - Node.js 22 et pnpm 10
-- Rust stable (1.77.2 ou plus récent)
+- Rust 1.97 ou plus récent
 - Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11), et Visual Studio Build Tools (charge C++) avec CMake et LLVM/Clang, pour compiler whisper.cpp
 - Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libasound2-dev cmake clang`
 

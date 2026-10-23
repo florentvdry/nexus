@@ -133,6 +133,8 @@ fenêtre dédiée) et une identité que la fenêtre ne peut pas choisir.
   modifié entre-temps est refusé.
 - Supprimer un plugin demande une confirmation.
 - Un plugin de données n'a aucune permission native : il ne peut que compléter le vocabulaire et les noms d'applications.
+- Un plugin `action` (WebAssembly) ne reçoit que les permissions qu'il demande dans son manifeste, avec leur raison, et que l'utilisateur approuve à l'installation : `storage.local` (quota de 256 Ko au plus) et `network.fetch` (hôtes HTTPS déclarés, aucune redirection). Le natif applique le lock approuvé à chaque exécution, et refuse toute opération hors de ces permissions, même pour un module qui la demande.
+- Supprimer un plugin supprime aussi ses données (stockage clé-valeur).
 - Un plugin dont le contenu a changé après approbation n'est plus chargé. Son état apparaît dans « liste mes plugins ».
 - Les paquets sont revérifiés à chaque commande.
 - Seule l'interface lit les paquets actifs (`plugin_packs`).

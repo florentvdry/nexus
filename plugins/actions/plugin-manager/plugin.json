@@ -15,7 +15,8 @@
     "plugin.catalog",
     "plugin.list",
     "plugin.install",
-    "plugin.remove"
+    "plugin.remove",
+    "plugin.run"
   ],
   "connectors": [],
   "languages": [],

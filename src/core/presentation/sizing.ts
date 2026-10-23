@@ -19,8 +19,9 @@ export function estimateSize(content: PresentedContent): Size {
     case "error-card":
       return { width: 340, height: 130 };
     case "confirmation": {
+      // Au moins de quoi afficher les deux boutons, même pour une demande courte : jamais de bouton hors de la fenêtre.
       const height = content.rows.reduce((total, row) => total + rowHeight(row.value), 72 + 56);
-      return { width: 380, height: Math.min(MAX_WINDOW_HEIGHT, height) };
+      return { width: 380, height: Math.min(MAX_WINDOW_HEIGHT, Math.max(220, height)) };
     }
   }
 }

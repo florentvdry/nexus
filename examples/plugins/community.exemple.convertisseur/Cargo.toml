@@ -1,0 +1,22 @@
+[package]
+name = "community-exemple-convertisseur"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+description = "Exemple de plugin NEXUS en Rust, compilé en WebAssembly."
+
+# Ce dossier est un projet autonome : il ne fait pas partie de l'espace de travail de NEXUS.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+nexus-plugin-sdk = { path = "../../../sdk/nexus-plugin-sdk" }
+
+[profile.release]
+opt-level = "s"
+lto = false
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -86,6 +86,12 @@ export interface InstalledPlugin {
   problems: string[];
 }
 
+/** Réponse d'un plugin WebAssembly : une phrase et un tableau facultatif, déjà bornés par le natif. */
+export interface PluginActionResult {
+  caption: string;
+  table: { title: string; columns: string[]; rows: string[][] } | null;
+}
+
 /** Entrée du catalogue de plugins : où trouver un plugin, sans code ni binaire. */
 export interface CatalogEntry {
   id: string;
@@ -127,6 +133,8 @@ export interface NativeBridge {
   /** Paquets actifs, lus par l'interface seule. */
   pluginPacks(): Promise<PluginPackData[]>;
   pluginIndex(): Promise<CatalogEntry[]>;
+  /** Exécute une commande d'un plugin WebAssembly, avec ses seules permissions approuvées. */
+  pluginRun(pluginId: string, command: string, text: string): Promise<PluginActionResult>;
   /** Journal local : réservé à l'interface, désactivé par défaut. */
   journalStatus(): Promise<boolean>;
   setJournalEnabled(enabled: boolean): Promise<void>;
@@ -225,6 +233,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<CatalogEntry[]>("plugin_index");
   }
 
+  pluginRun(pluginId: string, command: string, text: string): Promise<PluginActionResult> {
+    return this.#call<PluginActionResult>("plugin_run", { pluginId, command, text });
+  }
+
   journalStatus(): Promise<boolean> {
     return this.#call<boolean>("journal_status");
   }
@@ -275,6 +287,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   pluginList = () => this.unavailable();
   pluginPacks = () => this.unavailable();
   pluginIndex = () => this.unavailable();
+  pluginRun = () => this.unavailable();
   journalStatus = () => this.unavailable();
   setJournalEnabled = () => this.unavailable();
   recordJournal = () => this.unavailable();

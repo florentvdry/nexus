@@ -84,6 +84,8 @@ const ROW_LABEL: Record<string, MessageKey> = {
   kinds: "confirm.row.kinds",
   digest: "confirm.row.digest",
   source: "confirm.row.source",
+  permissions: "confirm.row.permissions",
+  commands: "confirm.row.commands",
   previous: "confirm.row.previous",
 };
 
@@ -232,6 +234,8 @@ export class Engine {
         return this.#runCapability("plugin.list", {}, { labelKey: "task.pluginList" }, reply);
       case "PLUGIN_INSTALL":
         return this.#runCapability("plugin.install", { target: intent.target }, { labelKey: "task.pluginInstall", labelParams: { target: intent.target }, cancellable: true }, reply);
+      case "PLUGIN_ACTION":
+        return this.#runCapability("plugin.run", { pluginId: intent.pluginId, command: intent.command, text: intent.text }, { labelKey: "task.pluginAction", labelParams: { command: intent.command }, cancellable: true }, reply);
       case "PLUGIN_REMOVE":
         return this.#runCapability("plugin.remove", { id: intent.id }, { labelKey: "task.pluginRemove", labelParams: { id: intent.id } }, reply);
       case "WINDOW_LIST":

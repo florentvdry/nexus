@@ -1,5 +1,5 @@
 import { type AppId, type LanguageDictionary, findApplication, matchesAny } from "./dictionaries";
-import { languageDictionaries, registeredApplications } from "./registry";
+import { languageDictionaries, matchPluginAction, registeredApplications } from "./registry";
 import { normalize, stripWakeWord } from "./normalize";
 
 export type Intent =
@@ -25,6 +25,7 @@ export type Intent =
   | { type: "PLUGIN_LIST" }
   | { type: "PLUGIN_INSTALL"; target: string }
   | { type: "PLUGIN_REMOVE"; id: string }
+  | { type: "PLUGIN_ACTION"; pluginId: string; command: string; text: string }
   | { type: "AGENT_RUN"; project?: string; prompt?: string }
   | { type: "UNKNOWN"; text: string };
 
@@ -215,6 +216,10 @@ function classify(text: string): Intent {
   if (languageDictionaries().some((dictionary) => matchesAny(dictionary.systemInfo, text))) {
     return { type: "SYSTEM_INFO" };
   }
+
+  // Un plugin installé peut déclarer le déclencheur : la commande lui revient, pas à une réponse « je ne comprends pas ».
+  const action = matchPluginAction(text);
+  if (action) return { type: "PLUGIN_ACTION", ...action };
 
   return { type: "UNKNOWN", text };
 }

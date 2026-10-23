@@ -9,11 +9,13 @@ use walkdir::WalkDir;
 
 use super::manifest::{self, Manifest, NEXUS_VERSION};
 use super::packs;
+use super::sandbox::Sandbox;
 
 const MAX_FILES: usize = 300;
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_ENTRY_BYTES: u64 = 512 * 1024;
+const MAX_MODULE_BYTES: u64 = 2 * 1024 * 1024;
 
 /// Fichier du dossier : chemin relatif avec `/`, et chemin réel.
 pub type FileEntry = (String, PathBuf);
@@ -22,7 +24,11 @@ pub type FileEntry = (String, PathBuf);
 pub fn list_files(dir: &Path) -> Result<Vec<FileEntry>, String> {
     let mut files = Vec::new();
     let mut total = 0u64;
-    for entry in WalkDir::new(dir).follow_links(false).sort_by_file_name() {
+    // `.git` et `target` à la racine ne font pas partie du plugin : dépôt et sorties de compilation sont ignorés.
+    let walk = WalkDir::new(dir).follow_links(false).sort_by_file_name().into_iter().filter_entry(|entry| {
+        !(entry.depth() == 1 && matches!(entry.file_name().to_str(), Some(".git") | Some("target")))
+    });
+    for entry in walk {
         let entry = entry.map_err(|error| format!("dossier illisible : {error}"))?;
         let kind = entry.file_type();
         if kind.is_symlink() {
@@ -73,7 +79,7 @@ fn read_limited(path: &Path, limit: u64, label: &str) -> Result<String, String> 
 
 /// Problèmes d'un dossier de plugin. Liste vide : le dossier peut être installé.
 /// `known_apps` : identifiants du catalogue, pour valider les alias.
-pub fn check_dir(dir: &Path, known_apps: &[&str]) -> Vec<String> {
+pub fn check_dir(dir: &Path, known_apps: &[&str], sandbox: &Sandbox) -> Vec<String> {
     let files = match list_files(dir) {
         Ok(files) => files,
         Err(problem) => return vec![problem],
@@ -94,6 +100,14 @@ pub fn check_dir(dir: &Path, known_apps: &[&str]) -> Vec<String> {
             problems.push(format!("fichier « {file} » absent pour le type « {kind} »"));
             continue;
         };
+        if kind == "action" {
+            match fs::read(path) {
+                Ok(bytes) if bytes.len() as u64 <= MAX_MODULE_BYTES => problems.extend(sandbox.check_module(&bytes)),
+                Ok(_) => problems.push(format!("module « {file} » trop volumineux : 2 Mo au maximum")),
+                Err(error) => problems.push(format!("module « {file} » illisible : {error}")),
+            }
+            continue;
+        }
         let text = match read_limited(path, MAX_ENTRY_BYTES, file) {
             Ok(text) => text,
             Err(problem) => {
@@ -114,6 +128,10 @@ pub fn check_dir(dir: &Path, known_apps: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sandbox() -> Sandbox {
+        Sandbox::new().unwrap()
+    }
 
     fn write(dir: &Path, rel: &str, text: &str) {
         let path = dir.join(rel);
@@ -137,7 +155,7 @@ mod tests {
         let dir = scratch("ok");
         write(&dir, "nexus.json", MANIFEST);
         write(&dir, "language.json", r#"{"locale":"fr","phrases":{"openVerbs":["ouvre"]}}"#);
-        assert!(check_dir(&dir, &[]).is_empty());
+        assert!(check_dir(&dir, &[], &sandbox()).is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -145,9 +163,9 @@ mod tests {
     fn a_missing_entry_file_or_bad_content_is_reported() {
         let dir = scratch("missing");
         write(&dir, "nexus.json", MANIFEST);
-        assert!(check_dir(&dir, &[]).iter().any(|p| p.contains("absent pour le type")));
+        assert!(check_dir(&dir, &[], &sandbox()).iter().any(|p| p.contains("absent pour le type")));
         write(&dir, "language.json", r#"{"locale":"fr","phrases":{"openVerbs":["OUVRE"]}}"#);
-        assert!(check_dir(&dir, &[]).iter().any(|p| p.contains("refusée")));
+        assert!(check_dir(&dir, &[], &sandbox()).iter().any(|p| p.contains("refusée")));
         let _ = fs::remove_dir_all(dir);
     }
 

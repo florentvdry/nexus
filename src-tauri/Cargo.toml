@@ -5,7 +5,7 @@ version = "0.1.0"
 description = "NEXUS, assistant personnel intelligent pour Windows"
 license = "MIT"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.97"
 
 [lib]
 name = "nexus_lib"
@@ -31,6 +31,7 @@ walkdir = "2"
 trash = "5"
 dirs = "6"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+wasmtime = { version = "50", default-features = false, features = ["runtime", "cranelift", "std"] }
 
 [profile.release]
 codegen-units = 1
@@ -41,3 +42,6 @@ strip = true
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+wat = "1.243.0"

@@ -192,7 +192,7 @@ si ses critères sont atteints et vérifiés.
 
 ## Phase 5 — Intelligence et écosystème
 
-**Statut : première brique livrée (journal des commandes). Chargement des plugins depuis le disque, marketplace et modèle de langage : non commencés.**
+**Statut : plugins de données et plugins WebAssembly livrés, journal des commandes livré. Bibliothèque publique de plugins et modèle de langage : non commencés.**
 
 ### Livrables
 
@@ -203,7 +203,8 @@ si ses critères sont atteints et vérifiés.
 - [x] Installation depuis un dépôt Git HTTPS ou un dossier local, avec deux confirmations et suppression confirmée.
 - [x] Validateur officiel `nexus-plugin`, utilisé par la CI sur les exemples.
 - [x] Format de catalogue défini (`index.json`, adresse configurée par `NEXUS_PLUGIN_INDEX`). Aucun catalogue public n'existe encore : le site de référence (plugins.omarchy.org) n'est pas joignable depuis cet environnement.
-- [ ] Plugins avec code : attendent la décision WebAssembly ou iframe (spécification, § 10).
+- [x] Plugins avec code en WebAssembly (wasmtime 50) : une seule fonction hôte, permissions approuvées dans le lock (`storage.local`, `network.fetch`), limites de mémoire, de temps et de taille, commandes déclenchées par expressions.
+- [x] SDK Rust `sdk/nexus-plugin-sdk` et exemple complet `community.exemple.convertisseur`, validé par la CI et exécuté dans l'application.
 - [ ] Signature des auteurs, métriques sociales et mises à jour automatiques : hors périmètre de la version 1.
 - [ ] Modèle de langage local ou distant pour les cas que les règles ne couvrent pas.
 
@@ -229,4 +230,6 @@ si ses critères sont atteints et vérifiés.
 - Les plugins avec code restent compilés dans l'application.
 - L'installation depuis une adresse HTTPS n'a été testée qu'avec un dépôt Git local : aucun dépôt HTTPS public de plugin n'existe pour l'instant.
 - Le validateur et l'installation vérifient l'empreinte, pas l'identité de l'auteur.
+- Les plugins WebAssembly sont exécutés dans un bac à sable, mais un module malveillant peut quand même consommer la mémoire et le temps alloués, dans les limites fixées (32 Mo, 10 s par appel).
+- Le SDK n'est pas encore publié sur un registre : il s'utilise par chemin depuis le dépôt.
 - Le modèle de langage n'est pas branché : toute compréhension reste déterministe.

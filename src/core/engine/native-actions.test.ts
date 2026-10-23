@@ -38,6 +38,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     pluginRemove: vi.fn(async () => {}),
     pluginList: vi.fn(async () => []),
     pluginPacks: vi.fn(async () => []),
+    pluginRun: vi.fn(async () => ({ caption: "ok", table: null })),
     pluginIndex: vi.fn(async () => [
       { id: "community.ana.verbes", name: "Verbes", version: "1.0.0", description: "Vocabulaire", source: "https://example.org/ana/verbes.git", kinds: ["language"] },
     ]),
@@ -92,6 +93,36 @@ function setup(bridge: NativeBridge) {
 
 const presented = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "present" ? [event.content] : []));
 const assistant = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : []));
+
+describe("commandes de plugins WebAssembly (phase 5)", () => {
+  const converter = {
+    id: "community.exemple.convertisseur",
+    name: "Convertisseur",
+    version: "1.0.0",
+    language: null,
+    aliases: null,
+    actions: [{ name: "convertit", triggers: ["convertis", "convertir"], description: "Convertit" }],
+  };
+
+  it("exécute la commande déclenchée, avec le texte qui suit le déclencheur", async () => {
+    const bridge = fakeBridge({
+      pluginPacks: vi.fn(async () => [converter]),
+      pluginRun: vi.fn(async () => ({ caption: "12,00 km = 7,46 mi", table: null })),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("convertis 12 km en miles");
+    expect(bridge.pluginRun).toHaveBeenCalledWith("community.exemple.convertisseur", "convertit", "12 km en miles");
+    expect(assistant(events)).toContain("12,00 km = 7,46 mi");
+  });
+
+  it("ne lance aucune commande quand aucun plugin n'est installé", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("convertis 12 km en miles");
+    expect(bridge.pluginRun).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("convertis 12 km en miles");
+  });
+});
 
 describe("plugins de données (phase 5)", () => {
   it("examine puis installe une adresse HTTPS, chaque étape passant par le natif", async () => {

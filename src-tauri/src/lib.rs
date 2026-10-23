@@ -295,6 +295,13 @@ async fn plugin_install(
             Row { key: "kinds".into(), value: prepared.kinds.join(", ") },
             Row { key: "digest".into(), value: prepared.digest.chars().take(23).collect() },
         ];
+        if !prepared.permissions.is_empty() {
+            let granted: Vec<String> = prepared.permissions.iter().map(|decl| format!("{} — {}", decl.id, decl.reason)).collect();
+            rows.push(Row { key: "permissions".into(), value: granted.join(" ; ") });
+        }
+        if !prepared.commands.is_empty() {
+            rows.push(Row { key: "commands".into(), value: prepared.commands.join(", ") });
+        }
         if let Some(previous) = previous {
             rows.push(Row { key: "previous".into(), value: previous.version });
         }
@@ -323,6 +330,18 @@ async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'
     })
     .await
     .map_err(blocking_failed)?
+}
+
+/// Exécute une commande d'un plugin WebAssembly. Seul le gestionnaire de plugins peut appeler cette commande ;
+/// le texte est borné avant d'atteindre le module.
+#[tauri::command]
+async fn plugin_run(caller: String, store: State<'_, PluginStore>, plugin_id: String, command: String, text: String) -> Result<plugin_store::sandbox::ActionOutput, AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    if text.chars().count() > 2_000 {
+        return Err(AdapterError::InvalidTarget("texte trop long".into()));
+    }
+    let store = store.get()?;
+    tauri::async_runtime::spawn_blocking(move || store.run_action(&plugin_id, &command, &text)).await.map_err(blocking_failed)?
 }
 
 #[tauri::command]
@@ -404,7 +423,7 @@ fn open_journal(app: &tauri::App) -> Option<Journal> {
 fn open_plugin_store(app: &tauri::App) -> Option<Arc<Store>> {
     let root = app.path().app_data_dir().ok()?.join("plugins");
     let known: Vec<&'static str> = plugins::actions::apps::CATALOG.iter().map(|spec| spec.id).collect();
-    Some(Arc::new(Store::new(root, known)))
+    Store::new(root, known).ok().map(Arc::new)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -447,6 +466,7 @@ pub fn run() {
             plugin_install,
             plugin_remove,
             plugin_list,
+            plugin_run,
             plugin_packs,
             plugin_index
         ])

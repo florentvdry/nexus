@@ -31,6 +31,16 @@ describe("pont natif attribué", () => {
     expect(callNative).toHaveBeenCalledWith("plugin_remove", { caller: "actions.plugin-manager", id: "community.ana.verbes" });
   });
 
+  it("exécute une commande de plugin au nom de l'interface, jamais au nom du plugin lui-même", async () => {
+    await new TauriNativeBridge().forPlugin("actions.plugin-manager").pluginRun("community.exemple.convertisseur", "convertit", "1 km en mi");
+    expect(callNative).toHaveBeenCalledWith("plugin_run", {
+      caller: "actions.plugin-manager",
+      pluginId: "community.exemple.convertisseur",
+      command: "convertit",
+      text: "1 km en mi",
+    });
+  });
+
   it("n'altère pas le pont de l'interface quand un plugin en dérive un autre", async () => {
     const core = new TauriNativeBridge();
     core.forPlugin("agents.claude-code");

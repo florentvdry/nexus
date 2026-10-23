@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use nexus_lib::error::AdapterError;
-use nexus_lib::plugin_store::{check, manifest};
+use nexus_lib::plugin_store::{check, manifest, sandbox::Sandbox};
 use nexus_lib::plugins::actions::apps::CATALOG;
 
 fn main() -> ExitCode {
@@ -24,7 +24,14 @@ fn main() -> ExitCode {
     let known: Vec<&str> = CATALOG.iter().map(|spec| spec.id).collect();
     match command.as_str() {
         "validate" => {
-            let problems = check::check_dir(&dir, &known);
+            let sandbox = match Sandbox::new() {
+                Ok(sandbox) => sandbox,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let problems = check::check_dir(&dir, &known, &sandbox);
             if problems.is_empty() {
                 let text = std::fs::read_to_string(dir.join(manifest::MANIFEST_FILE)).unwrap_or_default();
                 let parsed = manifest::parse(&text);

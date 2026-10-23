@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "community.exemple.convertisseur",
+  "name": "Convertisseur et mémo",
+  "version": "1.0.0",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "description": "Convertit des distances, masses et températures, et garde une note à rappeler. Exemple de plugin WebAssembly écrit en Rust.",
+  "engines": { "nexus": ">=0.1.0 <1.0.0" },
+  "kinds": ["action"],
+  "entryPoints": { "action": "plugin.wasm" },
+  "permissions": [
+    { "id": "storage.local", "reason": "Garder la note à rappeler", "quotaKb": 16 }
+  ],
+  "commands": [
+    { "name": "convertit", "triggers": ["convertis", "convertir"], "description": "Convertit une unité (km, mi, kg, lb, °C, °F)" },
+    { "name": "memorise", "triggers": ["memorise", "retiens"], "description": "Garde une note" },
+    { "name": "rappelle", "triggers": ["rappelle"], "description": "Rappelle la note gardée" }
+  ]
+}
