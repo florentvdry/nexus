@@ -57,6 +57,37 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | `file.write` | confirmation | oui (demande à chaque fois) | `files.operate` : renommer, déplacer, copier |
 | `file.delete` | confirmation | oui (demande à chaque fois) | `files.operate` : envoi à la corbeille |
 | `agent.run` | confirmation | oui (demande à chaque fois) | `agent.claude-code` |
+| `window.read` | automatic | oui | `actions.window-control` : liste des fenêtres visibles (Windows) |
+| `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) |
+
+### Qui peut appeler quoi : l'identité de l'appelant
+
+Chaque commande native reçoit l'identifiant de son appelant : `core` pour l'interface, `type.dossier` pour un
+plugin (par exemple `actions.file-search`). Le backend vérifie la permission correspondante avant toute action,
+d'après la table `src-tauri/src/grants.rs`. Un test compare cette table aux `plugin.json` : une permission
+déclarée sans être accordée, ou accordée sans être déclarée, fait échouer la compilation des tests.
+
+| Appelant | Peut faire |
+|---|---|
+| `actions.process-list` | `system.read` uniquement |
+| `actions.file-search` | `file.read` uniquement |
+| `actions.file-operations` | `file.write`, `file.delete` (chacune confirmée) |
+| `agents.claude-code` | `agent.run` (confirmé) |
+| `actions.window-control` | `window.read`, `window.control` (confirmé) |
+| `core` (interface) | répondre aux confirmations, gérer le journal. Rien d'autre. |
+
+Chaque plugin ne reçoit qu'un pont attribué à son identifiant : il ne peut pas agir au nom d'un autre plugin
+en passant par ce pont. Une confirmation affiche « Demandé par » avec l'identifiant de l'appelant.
+
+Un plugin ne peut pas approuver sa propre demande : seul `core` peut répondre à `permission_answer`.
+
+### Limite de l'identité
+
+L'identité est fournie par la fenêtre. Elle empêche un plugin de dépasser son manifeste lorsqu'il passe par le
+pont de NEXUS. Elle **ne** protège **pas** contre du code hostile qui appellerait directement l'API Tauri de la
+fenêtre : il pourrait se déclarer `core`. Aujourd'hui, les plugins sont compilés dans l'application et seul ce
+code tourne dans la fenêtre. Avant de charger des plugins tiers, il faudra un isolement réel (processus séparé ou
+fenêtre dédiée) et une identité que la fenêtre ne peut pas choisir.
 
 ### Confirmation native
 
@@ -84,13 +115,22 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 - La demande est transmise sur l'entrée standard, jamais dans la ligne de commande.
 - Budget plafonné à 0,50 $ par run ; délai de 15 minutes ; annulation possible à tout moment.
 
-### Limite à traiter avant les plugins tiers
+## Contrôle des fenêtres (Windows)
 
-Aujourd'hui, tous les plugins sont compilés dans l'application et partagent le même contexte. Le registre
-TypeScript est la seule barrière qui décide quelles capacités un plugin peut appeler. Les commandes natives
-protègent les actions dangereuses (confirmation, racines), mais ne savent pas encore quel plugin les appelle.
-Avant tout chargement de plugin depuis le disque, il faudra une identité de plugin vérifiée côté natif et
-une permission par plugin contrôlée dans le backend.
+- Lister : permission automatique, lecture seule. Les fenêtres d'outils, sans titre, et celles de NEXUS sont exclues.
+- Activer ou fermer : confirmation obligatoire, avec le titre et le processus de la fenêtre visés.
+- Un nom qui correspond à plusieurs fenêtres n'entraîne aucune action : NEXUS demande de préciser.
+- La fermeture envoie `WM_CLOSE`. L'application décide : elle peut refuser, ou demander d'enregistrer. NEXUS ne termine jamais un processus.
+- NEXUS ne ferme jamais sa propre fenêtre.
+- Identifiant de fenêtre revérifié juste avant chaque action : une fenêtre fermée entre-temps n'est pas remplacée par une autre.
+
+## Journal des commandes (phase 5)
+
+- Désactivé par défaut. Aucune commande n'est conservée tant que l'option n'est pas activée dans les réglages.
+- Conservé : le texte de la commande (300 caractères au plus) et son type reconnu. Jamais les résultats, ni le contenu des fichiers.
+- 500 commandes au plus ; les plus anciennes sont supprimées. Le journal peut être vidé à tout moment.
+- Stocké dans le dossier de données de l'application, sur cet ordinateur. Aucun envoi réseau.
+- Réservé à l'interface : un plugin ne peut ni lire ni alimenter le journal.
 
 ## Prévu pour les phases suivantes
 

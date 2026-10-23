@@ -30,6 +30,7 @@ sha2 = "0.10"
 walkdir = "2"
 trash = "5"
 dirs = "6"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 [profile.release]
 codegen-units = 1

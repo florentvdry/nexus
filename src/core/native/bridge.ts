@@ -58,6 +58,15 @@ export interface ConfirmationRequest {
   expiresInSecs: number;
 }
 
+/** Une commande du journal local. Seuls le texte saisi ou dicté et son type sont conservés. */
+export interface JournalEntry {
+  id: number;
+  /** Date d'enregistrement, en millisecondes depuis l'époque Unix. */
+  at: number;
+  kind: string;
+  text: string;
+}
+
 export interface WindowEntry {
   /** Identifiant natif de la fenêtre. Il n'est valable que tant que la fenêtre existe. */
   id: number;
@@ -72,6 +81,12 @@ export interface NativeBridge {
   listWindows(): Promise<WindowEntry[]>;
   focusWindow(id: number): Promise<void>;
   closeWindow(id: number): Promise<void>;
+  /** Journal local : réservé à l'interface, désactivé par défaut. */
+  journalStatus(): Promise<boolean>;
+  setJournalEnabled(enabled: boolean): Promise<void>;
+  recordJournal(kind: string, text: string): Promise<boolean>;
+  listJournal(limit: number): Promise<JournalEntry[]>;
+  clearJournal(): Promise<void>;
   listProcesses(limit: number): Promise<ProcessEntry[]>;
   searchFiles(query: FileSearchQuery): Promise<FileEntry[]>;
   operateFile(operation: FileOperation): Promise<string>;
@@ -140,6 +155,26 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<void>("window_close", { id });
   }
 
+  journalStatus(): Promise<boolean> {
+    return this.#call<boolean>("journal_status");
+  }
+
+  setJournalEnabled(enabled: boolean): Promise<void> {
+    return this.#call<void>("journal_set_enabled", { enabled });
+  }
+
+  recordJournal(kind: string, text: string): Promise<boolean> {
+    return this.#call<boolean>("journal_record", { kind, text });
+  }
+
+  listJournal(limit: number): Promise<JournalEntry[]> {
+    return this.#call<JournalEntry[]>("journal_list", { limit });
+  }
+
+  clearJournal(): Promise<void> {
+    return this.#call<void>("journal_clear");
+  }
+
   onAgentEvent(listener: (runId: string, event: AgentEvent) => void): () => void {
     const unlisten = listen<AgentEvent & { runId: string }>(AGENT_CHANNEL, (message) => {
       const { runId, ...event } = message.payload;
@@ -164,6 +199,11 @@ export class UnavailableNativeBridge implements NativeBridge {
   }
 
   forPlugin = (): NativeBridge => this;
+  journalStatus = () => this.unavailable();
+  setJournalEnabled = () => this.unavailable();
+  recordJournal = () => this.unavailable();
+  listJournal = () => this.unavailable();
+  clearJournal = () => this.unavailable();
   listWindows = () => this.unavailable();
   focusWindow = () => this.unavailable();
   closeWindow = () => this.unavailable();

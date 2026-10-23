@@ -21,6 +21,11 @@ describe("pont natif attribué", () => {
     expect(callNative).toHaveBeenCalledWith("permission_answer", { caller: "core", id: "perm-1", approved: true });
   });
 
+  it("réserve le journal à l'interface : ses appels portent l'identité de l'interface", async () => {
+    await new TauriNativeBridge().recordJournal("HELP", "aide");
+    expect(callNative).toHaveBeenCalledWith("journal_record", { caller: "core", kind: "HELP", text: "aide" });
+  });
+
   it("n'altère pas le pont de l'interface quand un plugin en dérive un autre", async () => {
     const core = new TauriNativeBridge();
     core.forPlugin("agents.claude-code");

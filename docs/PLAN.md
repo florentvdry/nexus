@@ -154,7 +154,7 @@ si ses critères sont atteints et vérifiés.
 - [x] Permissions natives : la confirmation est exigée par le backend Rust, pas seulement par l'interface. Une demande expire après 120 secondes et une réponse inconnue est refusée.
 - [x] Intégration Claude Code : détection du CLI, exécution non interactive (`-p --output-format stream-json`), demande transmise sur l'entrée standard (jamais dans la ligne de commande), budget plafonné à 0,50 $ par run, annulation, délai de 15 minutes, flux d'événements affiché (outils, réponse, refus, coût, durée).
 - [x] Applications installées : catalogue de lancement avec statut (en cours ou non) ; pas de détection des installations hors catalogue.
-- [ ] Contrôle des fenêtres Windows (lister, activer, fermer) : **non implémenté**, dépend d'API Win32 qui ne peuvent pas être testées ici.
+- [x] Contrôle des fenêtres Windows (lister, activer, demander la fermeture) : implémenté avec confirmation, Windows uniquement. Non exécuté sous Windows dans cet environnement : la vérification est faite par la compilation croisée et par le job CI Windows.
 
 ### Critère d'acceptation
 
@@ -183,12 +183,44 @@ si ses critères sont atteints et vérifiés.
 
 ### Limites connues
 
-- Pas de contrôle des fenêtres Windows (lister, activer, fermer). Les commandes « ferme cette fenêtre » de la phase 1 restent celles de NEXUS.
 - Le lancement passe par le catalogue ; les applications installées hors catalogue ne sont pas détectées.
 - Le chemin `.cmd` de Claude Code (`cmd /C`) et la corbeille (crate `trash`) ne sont pas testés sous Windows.
 - La tâche « Claude Code en cours » s'affiche avant la confirmation : c'est un libellé à améliorer.
+- Le contrôle des fenêtres n'a pas été exécuté sur Windows : les appels Win32 sont compilés pour la cible MSVC, mais pas lancés.
 - Les demandes de permission propres à Claude Code restent actives. Un outil refusé est affiché comme tel, jamais contourné.
-- Le plugin ne peut pas encore demander une permission sous une identité distincte côté natif (voir `docs/PERMISSIONS.md`).
+- L'identité des appelants est vérifiée côté natif, mais elle est fournie par la fenêtre : elle ne résiste pas à du code hostile dans la même fenêtre (voir `docs/PERMISSIONS.md`).
 
 ## Phase 5 — Intelligence et écosystème
-Non commencée.
+
+**Statut : première brique livrée (journal des commandes). Chargement des plugins depuis le disque, marketplace et modèle de langage : non commencés.**
+
+### Livrables
+
+- [x] Identité des appelants côté natif : chaque plugin ne peut exercer que les permissions de son manifeste, et seule l'interface répond aux confirmations (voir `docs/PERMISSIONS.md`).
+- [x] Journal local des commandes dans SQLite : désactivé par défaut, 500 commandes au plus, vidable, réservé à l'interface.
+- [x] Réglage du journal dans les options, avec les dernières commandes affichées.
+- [ ] Chargement des plugins depuis un dossier utilisateur, avec validation du manifeste à chaque démarrage.
+- [ ] Marketplace : le format de catalogue n'est pas défini. Le site de référence (plugins.omarchy.org) n'est pas joignable depuis cet environnement, donc la forme du catalogue reste à concevoir.
+- [ ] Modèle de langage local ou distant pour les cas que les règles ne couvrent pas.
+
+### Critère d'acceptation (journal)
+
+« Activé, le journal garde les commandes récentes et les affiche dans les options. Désactivé, rien n'est écrit. Un plugin ne peut ni lire ni écrire dans le journal. »
+
+| Partie | Résultat | Preuve |
+|---|---|---|
+| Rien n'est écrit tant que l'option est désactivée | **Vérifié** : tests Rust et test d'intégration de l'engine | `journal.rs`, `native-actions.test.ts` |
+| Commandes affichées dans les options | **Vérifié** sous Xvfb : la commande « show my computer information » apparaît avec son heure | Capture `81-journal-on.png` |
+| Plugin refusé sur le journal | **Vérifié** par le code (`require_core`) et les tests de pont | `grants.rs`, `bridge.test.ts` |
+
+### Tests exécutés
+
+- Rust : 76 tests OK, 2 ignorés (Whisper et CLI réel). Clippy `-D warnings` OK. Cinq tests du journal, dont la persistance entre deux ouvertures du fichier.
+- Frontend : typecheck OK, 176 tests OK.
+- E2E Xvfb : recherche de fichiers toujours fonctionnelle après le passage de l'identité ; contrôle des fenêtres affiche « Indisponible sur cette plateforme » sous Linux ; journal activé, commande enregistrée.
+
+### Limites connues
+
+- Le journal conserve le texte des commandes, qui peut contenir des chemins. C'est pourquoi il est désactivé par défaut.
+- Les plugins restent compilés dans l'application.
+- Le modèle de langage n'est pas branché : toute compréhension reste déterministe.

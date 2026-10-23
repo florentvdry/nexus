@@ -88,6 +88,19 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Pourquoi** : une première version retenait le dossier personnel par repli de la bibliothèque `dirs`, et une recherche remontait des fichiers de configuration (`~/.claude`). Une racine trop large rend la confirmation inutile.
 - **Conséquence** : des fichiers rangés directement dans le dossier personnel ne sont pas accessibles. C'est voulu.
 
+## ADR-017 — Identité de l'appelant vérifiée côté natif
+
+- **Choix** : chaque commande native reçoit `caller`. Le backend compare la permission demandée à la table `grants.rs`, tenue synchronisée avec les `plugin.json` par un test. Seul `core` peut répondre à une confirmation.
+- **Pourquoi** : sans identité, une permission accordée à un plugin serait accordée à toute la fenêtre. Un plugin pourrait aussi approuver sa propre confirmation.
+- **Limite** : l'identifiant est fourni par la fenêtre. Il ne résiste pas à du code hostile qui utiliserait directement l'API Tauri. Un isolement réel viendra avec le chargement de plugins tiers.
+
+## ADR-018 — Journal des commandes : SQLite, opt-in, texte seulement
+
+- **Choix** : un fichier SQLite dans le dossier de données de l'application. Désactivé par défaut. 500 commandes au plus, texte tronqué à 300 caractères, type de commande validé (majuscules et `_`).
+- **Pourquoi** : l'historique est utile, mais une commande peut contenir des chemins personnels. Le choix par défaut doit donc protéger la vie privée. Le natif décide de l'enregistrement, pas l'interface : un désaccord entre les deux ne peut pas écrire de données.
+- **Exclus** : résultats, contenu des fichiers, réponses de Claude Code.
+- **Conséquence** : la base est créée vide au démarrage, sans aucune donnée personnelle, même si le journal reste désactivé.
+
 ## ADR-016 — Claude Code via le CLI officiel, en mode non interactif
 
 - **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.

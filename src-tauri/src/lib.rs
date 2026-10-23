@@ -1,6 +1,7 @@
 pub mod error;
 pub mod grants;
 pub mod host;
+pub mod journal;
 pub mod permissions;
 pub mod plugins;
 
@@ -11,6 +12,7 @@ use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 
 use error::AdapterError;
 use grants::{require, require_core};
+use journal::{Journal, JournalEntry};
 use host::runner;
 use permissions::{Broker, Permission, Row};
 use plugins as connectors;
@@ -194,6 +196,46 @@ async fn window_action(app: AppHandle, broker: Broker, caller: String, id: usize
     .map_err(blocking_failed)?
 }
 
+/// Journal ouvert au démarrage. `None` si le fichier n'a pas pu être ouvert : l'interface le signale.
+pub struct JournalStore(Option<Journal>);
+
+impl JournalStore {
+    fn get(&self) -> Result<&Journal, AdapterError> {
+        self.0.as_ref().ok_or_else(|| AdapterError::Operation("journal indisponible sur cette installation".into()))
+    }
+}
+
+// Le journal est réservé à l'interface : un plugin ne peut ni lire ni alimenter l'historique.
+#[tauri::command]
+fn journal_status(store: State<'_, JournalStore>, caller: String) -> Result<bool, AdapterError> {
+    require_core(&caller)?;
+    store.get()?.enabled()
+}
+
+#[tauri::command]
+fn journal_set_enabled(store: State<'_, JournalStore>, caller: String, enabled: bool) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    store.get()?.set_enabled(enabled)
+}
+
+#[tauri::command]
+fn journal_record(store: State<'_, JournalStore>, caller: String, kind: String, text: String) -> Result<bool, AdapterError> {
+    require_core(&caller)?;
+    store.get()?.record(&kind, &text)
+}
+
+#[tauri::command]
+fn journal_list(store: State<'_, JournalStore>, caller: String, limit: usize) -> Result<Vec<JournalEntry>, AdapterError> {
+    require_core(&caller)?;
+    store.get()?.list(limit)
+}
+
+#[tauri::command]
+fn journal_clear(store: State<'_, JournalStore>, caller: String) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    store.get()?.clear()
+}
+
 #[tauri::command]
 fn agent_cancel(runs: State<'_, Runs>, caller: String, run_id: String) -> Result<bool, AdapterError> {
     require(&caller, Permission::AgentRun)?;
@@ -235,6 +277,18 @@ fn shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     }
 }
 
+fn open_journal(app: &tauri::App) -> Option<Journal> {
+    let directory = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&directory).ok()?;
+    match Journal::open(&directory.join("journal.db")) {
+        Ok(journal) => Some(journal),
+        Err(error) => {
+            eprintln!("NEXUS : journal indisponible : {error}");
+            None
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -243,6 +297,7 @@ pub fn run() {
             app.manage(VoiceState::default());
             app.manage(Broker::default());
             app.manage(Runs::default());
+            app.manage(JournalStore(open_journal(app)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -263,7 +318,12 @@ pub fn run() {
             agent_run,
             agent_cancel,
             permission_answer,
-            permissions_status
+            permissions_status,
+            journal_status,
+            journal_set_enabled,
+            journal_record,
+            journal_list,
+            journal_clear
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de NEXUS");

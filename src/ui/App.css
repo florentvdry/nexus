@@ -545,3 +545,40 @@ input {
 .confirm-status.approved { color: var(--ok); }
 .confirm-status.refused { color: var(--muted); }
 .confirm-status.failed { color: var(--error); }
+
+.journal {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(140, 130, 255, 0.2);
+}
+
+.journal h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.journal .field-hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.journal-entries {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.journal-entries li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.journal-entries time {
+  color: var(--muted);
+  white-space: nowrap;
+}

@@ -172,6 +172,7 @@ export class Engine {
     this.#setOrb("thinking");
 
     const { intent } = parseIntent(text);
+    this.#journal(text, intent.type);
     try {
       await this.#route(intent, reply);
     } catch (error) {
@@ -280,6 +281,14 @@ export class Engine {
       t: reply.t,
       progress: (text) => this.#emit({ type: "message", role: "assistant", text, tone: "info", locale: reply.locale }),
     };
+  }
+
+  /**
+   * Le journal ne garde une commande que si l'utilisateur l'a activé : c'est le natif qui décide.
+   * Une panne du journal ne doit jamais bloquer une commande.
+   */
+  #journal(text: string, kind: string): void {
+    this.#bridge.recordJournal(kind, text).catch(() => {});
   }
 
   /** Une demande de confirmation venue du natif devient une fenêtre visible, avec ses deux réponses. */

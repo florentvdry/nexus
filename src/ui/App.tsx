@@ -24,6 +24,7 @@ import { FloatingWindow } from "./FloatingWindow";
 import { HistoryMenu } from "./HistoryMenu";
 import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
+import { JournalSection } from "./JournalSection";
 import { VoicePanel } from "./VoicePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
@@ -198,7 +199,9 @@ export function App({ engine: injectedEngine }: AppProps) {
       </div>
 
       {panelOpen && (
-        <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)} />
+        <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>
+          <JournalSection bridge={answerBridge} locale={locale} t={t} />
+        </VoicePanel>
       )}
 
       <div className="orb-zone">

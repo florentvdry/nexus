@@ -26,7 +26,7 @@ Chaque dossier de plugin contient :
 
 | Type | Contribue | Exemple |
 |---|---|---|
-| `actions` | capacités sur la machine, et éventuellement un catalogue d'applications | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations` |
+| `actions` | capacités sur la machine, et éventuellement un catalogue d'applications | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations`, `window-control` |
 | `sources` | connecteurs de données passifs, exécutés dans le worker isolé | `domain-analysis` |
 | `documents` | analyse locale de fichiers désignés explicitement | `file-inspect` |
 | `speech` | moteurs vocaux (entrée, sortie) | `whisper-stt`, `system-tts` |
@@ -70,6 +70,13 @@ des connecteurs Rust (`plugins::CONNECTORS`) correspond exactement aux fiches `s
 4. Ajouter des tests : au minimum, le plugin s'active (`src/core/plugins/plugins.test.ts`) et son comportement.
 
 Les simulations de source (serveurs locaux, runners factices) sont réservées aux tests et doivent être étiquetées comme telles.
+
+## Permissions et appels natifs
+
+Un plugin déclare ses permissions dans `plugin.json`. Ses appels natifs passent par un pont attribué à son
+identifiant : le natif n'accorde que les permissions de ce manifeste (`src-tauri/src/grants.rs`). Un test vérifie que
+la table native et les `plugin.json` restent identiques. Un plugin qui demande une permission non accordée reçoit
+une erreur `permission-refused`, pas un accès silencieux.
 
 ## Ce qui n'est pas encore fait
 

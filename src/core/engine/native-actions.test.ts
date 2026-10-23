@@ -13,6 +13,11 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     emitConfirmation(request: ConfirmationRequest): void;
   } = {
     forPlugin: () => bridge,
+    journalStatus: vi.fn(async () => false),
+    setJournalEnabled: vi.fn(async () => {}),
+    recordJournal: vi.fn(async () => false),
+    listJournal: vi.fn(async () => []),
+    clearJournal: vi.fn(async () => {}),
     listWindows: vi.fn(async () => [
       { id: 101, title: "Document1 - Word", process: "WINWORD.EXE", pid: 900 },
       { id: 102, title: "Facture - Navigateur", process: "chrome.exe", pid: 901 },
@@ -59,6 +64,23 @@ function setup(bridge: NativeBridge) {
 
 const presented = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "present" ? [event.content] : []));
 const assistant = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : []));
+
+describe("journal des commandes (phase 5)", () => {
+  it("transmet chaque commande au journal, qui décide de la conserver", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("  Lance Discord  ");
+    expect(bridge.recordJournal).toHaveBeenCalledWith("OPEN_APPLICATION", "Lance Discord");
+  });
+
+  it("ne bloque jamais une commande quand le journal est indisponible", async () => {
+    const bridge = fakeBridge({ recordJournal: vi.fn(async () => { throw new Error("journal indisponible"); }) });
+    const { engine, events } = setup(bridge);
+    await engine.submit("Analyse example.com");
+    expect(bridge.recordJournal).toHaveBeenCalled();
+    expect(events.some((event) => event.type === "message")).toBe(true);
+  });
+});
 
 describe("fenêtres (phase 4)", () => {
   it("liste les fenêtres visibles", async () => {

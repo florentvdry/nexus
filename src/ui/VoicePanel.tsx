@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { listSystemVoices, type SpeechVoice } from "../../plugins/speech/system-tts";
 import { readVoiceModelStatus, type VoiceModelStatus } from "../../plugins/speech/whisper-stt";
@@ -10,9 +10,11 @@ interface VoicePanelProps {
   onChange: (patch: Partial<VoiceSettings>) => void;
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
   onClose: () => void;
+  /** Sections supplémentaires des réglages, rendues sous les options vocales. */
+  children?: ReactNode;
 }
 
-export function VoicePanel({ settings, onChange, t, onClose }: VoicePanelProps) {
+export function VoicePanel({ settings, onChange, t, onClose, children }: VoicePanelProps) {
   const [voices, setVoices] = useState<SpeechVoice[]>([]);
   const [model, setModel] = useState<VoiceModelStatus | null | undefined>(undefined);
 
@@ -108,6 +110,7 @@ export function VoicePanel({ settings, onChange, t, onClose }: VoicePanelProps) 
       </div>
 
       <p className="muted small">{t("voice.shortcut")}</p>
+      {children}
     </section>
   );
 }
