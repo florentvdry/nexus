@@ -1,9 +1,10 @@
 import { type AppId, type LanguageDictionary, findApplication, matchesAny } from "./dictionaries";
 import { languageDictionaries, matchPluginAction, registeredApplications } from "./registry";
 import { normalize, stripWakeWord } from "./normalize";
+import { closestAlias, stripPoliteness } from "./understand";
 
 export type Intent =
-  | { type: "OPEN_APPLICATION"; appId?: AppId; appName: string }
+  | { type: "OPEN_APPLICATION"; appId?: AppId; appName: string; suggestion?: { appId: AppId; alias: string } }
   | { type: "SYSTEM_INFO" }
   | { type: "CLOSE_WINDOW" }
   | { type: "CLOSE_ALL_WINDOWS" }
@@ -176,7 +177,8 @@ function classifyTarget(raw: string): Intent | null {
  * et ordre de priorité explicite. Ne fait jamais d'appel réseau.
  */
 export function parseIntent(input: string): ParseResult {
-  const raw = input.trim();
+  // La politesse et les formules de question ne changent pas la demande : « peux-tu ouvrir Discord ? » = « ouvre Discord ».
+  const raw = stripPoliteness(input.trim());
   const normalized = stripWakeWord(normalize(raw));
   const intent = classifyTarget(stripWakeWord(raw)) ?? classify(normalized);
   return { intent, normalized, resolvedBy: "rules" };
@@ -210,7 +212,12 @@ function classify(text: string): Intent {
       (name, dictionary) => name.replace(dictionary.fillerWords, ""),
       remainder,
     ).trim();
-    return { type: "OPEN_APPLICATION", appId: application?.entry.id, appName: appName || remainder };
+    if (application) return { type: "OPEN_APPLICATION", appId: application.entry.id, appName: appName || remainder };
+    // Nom inconnu mais proche d'une application du catalogue : on demande confirmation au lieu d'échouer.
+    const aliases = registeredApplications().flatMap((entry) => entry.aliases.map((alias) => ({ id: entry.id, alias: normalize(alias) })));
+    const closest = closestAlias(appName || remainder, aliases);
+    const suggestion = closest ? { appId: closest.id, alias: closest.alias } : undefined;
+    return { type: "OPEN_APPLICATION", appId: undefined, appName: appName || remainder, suggestion };
   }
 
   if (languageDictionaries().some((dictionary) => matchesAny(dictionary.systemInfo, text))) {

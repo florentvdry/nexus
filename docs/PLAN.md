@@ -192,7 +192,41 @@ si ses critères sont atteints et vérifiés.
 
 ## Phase 5 — Intelligence et écosystème
 
-**Statut : plugins de données et plugins WebAssembly livrés, journal des commandes livré. Bibliothèque publique de plugins et modèle de langage : non commencés.**
+**Statut : plugins de données et plugins WebAssembly livrés, journal des commandes livré, compréhension enrichie (politesse, références, questions, demandes enchaînées, fautes de frappe). Bibliothèque publique de plugins et modèle de langage : non commencés.**
+
+### Compréhension enrichie (ADR-023)
+
+- [x] Politesse et formules de question retirées : « peux-tu ouvrir Discord ? » = « ouvre Discord ».
+- [x] Demandes enchaînées : « ouvre X puis Y » (trois au maximum, dans l'ordre, une question suspend la suite).
+- [x] Fautes de frappe sur les noms d'application : une suggestion, jamais un choix ambigu.
+- [x] Mémoire de conversation : « le deuxième », « ferme-le », « renomme ça en X » après une liste de fichiers ou de fenêtres.
+- [x] Questions à réponses numérotées quand c'est ambigu ; « non » annule ; « oui » valide une suggestion unique.
+- [x] Fenêtres au nom ambigu : la question est posée, et la fenêtre choisie est identifiée par son numéro, jamais par son titre.
+- [ ] Modèle de langage pour les formulations hors vocabulaire : décision à prendre avec l'utilisateur (ADR-023).
+
+### Critère d'acceptation (compréhension)
+
+« Une demande naturelle, une référence à une liste précédente, une ambiguïté : NEXUS agit sur la bonne cible, ou demande, sans jamais agir à l'aveugle. »
+
+| Partie | Résultat | Preuve |
+|---|---|---|
+| Politesse, questions, fautes de frappe | **Vérifié** : tests unitaires, parcours dans l'application | `understand.test.ts`, capture `110-conv-rename.png` |
+| Références après une liste | **Vérifié** dans l'application : « renomme le deuxième » vise `notes.txt`, la confirmation affiche la bonne cible | capture `110-conv-rename.png`, tests moteur |
+| Question à réponses numérotées | **Vérifié** dans l'application : « Lequel ? 1) facture.txt · 2) notes.txt », la réponse « 2 » aboutit à une confirmation sur `notes.txt` | capture `111-question.png`, `112-trash-confirm.png` |
+| Refus à la confirmation | **Vérifié** : fichiers intacts après refus | `53-refused.png`, contrôle sur disque |
+| Suggestion d'application | **Vérifié** dans l'application : « Tu voulais dire Discord ? » | capture `113-suggest.png` |
+| Fenêtres ambiguës | **Vérifié** par les tests moteur ; non exécuté sous Windows (pas de fenêtres sous Linux) | `native-actions.test.ts` |
+
+### Tests exécutés
+
+- Frontend : typecheck OK, 227 tests OK.
+- Dans l'application (Xvfb) : parcours décrit ci-dessus.
+
+### Limites connues
+
+- Les formulations hors du vocabulaire restent non comprises : elles reçoivent un message d'aide, sans deviner.
+- La mémoire est propre à la session : elle n'est pas conservée au redémarrage.
+- Les fenêtres ambiguës ne se vérifient que par les tests moteur sur cette plateforme.
 
 ### Livrables
 

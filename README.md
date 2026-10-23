@@ -63,6 +63,14 @@ après deux confirmations. « liste mes plugins », « supprime le plugin <ident
 vocabulaire et des noms d'applications ; il ne contient aucun code. Spécification : [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md).
 Exemple : `examples/plugins/community.exemple.verbes`.
 
+**Conversation** : NEXUS comprend mieux les formulations naturelles et retient ce dont on parle :
+
+- « peux-tu ouvrir Discord ? », « lance Discrd » (il propose Discord), « ouvre Discord puis montre le CPU ».
+- après « cherche mes fichiers txt » : « renomme le deuxième en idees.txt », « supprime-le ». Quand c'est ambigu, NEXUS
+  demande « Lequel ? 1) … 2) … » et la réponse (« 2 », « le premier », « non ») suit.
+- Une demande ambiguë, comme plusieurs fenêtres du même nom, pose la question au lieu de deviner.
+- Toute action destructive passe toujours par la confirmation, y compris après une référence.
+
 **Plugins WebAssembly** : un plugin peut être écrit en Rust (SDK `sdk/nexus-plugin-sdk`) et compilé en WebAssembly.
 Il ne s'exécute que dans un bac à sable : il ne reçoit que le stockage et le réseau déclarés dans son manifeste, approuvés
 à l'installation. Exemple : `examples/plugins/community.exemple.convertisseur` (« convertis 12 km en miles », « retiens … »,

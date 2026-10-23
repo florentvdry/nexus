@@ -74,32 +74,54 @@ export const listWindows: CapabilityHandler = async (_input, context) => {
       rows: windows.map((window) => [window.title, window.process]),
     },
   ];
-  return outcome(WINDOW_LIST_MANIFEST, windows.length === 0 ? t("windows.none") : t("windows.caption", { count: windows.length }), presentations);
+  return {
+    ...outcome(WINDOW_LIST_MANIFEST, windows.length === 0 ? t("windows.none") : t("windows.caption", { count: windows.length }), presentations),
+    referents: windows.map((window) => ({ kind: "window", label: window.title, value: `#${window.id}` })),
+  };
 };
 
-/** Trouve la fenêtre visée, ou explique pourquoi aucune action n'est engagée (aucune ou plusieurs correspondances). */
-async function findTarget(input: CapabilityInput, context: CapabilityContext): Promise<WindowEntry | string> {
+type Target = { window: WindowEntry } | { outcome: CapabilityResult };
+
+/**
+ * Trouve la fenêtre visée. `#<identifiant>` désigne une fenêtre précise (choisie dans une question). Un nom qui
+ * correspond à plusieurs fenêtres ne déclenche rien : la réponse pose la question, avec une option par fenêtre.
+ */
+async function findTarget(manifest: CapabilityManifest, input: CapabilityInput, context: CapabilityContext, verb: string): Promise<Target> {
   const name = (input.name ?? "").trim();
   const { t } = context;
-  if (normalize(name).length < 2) return t("windows.nameNeeded");
-  const matches = matchWindows(await context.bridge.listWindows(), name);
-  if (matches.length === 0) return t("windows.notFound", { name });
-  if (matches.length > 1) return t("windows.ambiguous", { name, titles: matches.slice(0, 5).map((window) => window.title).join(" ; ") });
-  return matches[0];
+  const windows = await context.bridge.listWindows();
+  const byId = /^#(\d+)$/.exec(name);
+  if (byId) {
+    const window = windows.find((candidate) => candidate.id === Number(byId[1]));
+    return window ? { window } : { outcome: outcome(manifest, t("windows.gone")) };
+  }
+  if (normalize(name).length < 2) return { outcome: outcome(manifest, t("windows.nameNeeded")) };
+  const matches = matchWindows(windows, name);
+  if (matches.length === 0) return { outcome: outcome(manifest, t("windows.notFound", { name })) };
+  if (matches.length === 1) return { window: matches[0] };
+  const question = t("windows.ambiguous", { name });
+  return {
+    outcome: {
+      ...outcome(manifest, question),
+      clarification: {
+        options: matches.slice(0, 8).map((window) => ({ label: `${window.title} (${window.process})`, text: `${verb} la fenêtre #${window.id}` })),
+      },
+    },
+  };
 }
 
 export const focusWindow: CapabilityHandler = async (input, context) => {
-  const target = await findTarget(input, context);
-  if (typeof target === "string") return outcome(WINDOW_FOCUS_MANIFEST, target);
-  await context.bridge.focusWindow(target.id);
-  return outcome(WINDOW_FOCUS_MANIFEST, context.t("windows.focused", { title: target.title }));
+  const target = await findTarget(WINDOW_FOCUS_MANIFEST, input, context, "passe sur");
+  if ("outcome" in target) return target.outcome;
+  await context.bridge.focusWindow(target.window.id);
+  return outcome(WINDOW_FOCUS_MANIFEST, context.t("windows.focused", { title: target.window.title }));
 };
 
 export const closeWindow: CapabilityHandler = async (input, context) => {
-  const target = await findTarget(input, context);
-  if (typeof target === "string") return outcome(WINDOW_CLOSE_MANIFEST, target);
-  await context.bridge.closeWindow(target.id);
-  return outcome(WINDOW_CLOSE_MANIFEST, context.t("windows.closeSent", { title: target.title }));
+  const target = await findTarget(WINDOW_CLOSE_MANIFEST, input, context, "ferme");
+  if ("outcome" in target) return target.outcome;
+  await context.bridge.closeWindow(target.window.id);
+  return outcome(WINDOW_CLOSE_MANIFEST, context.t("windows.closeSent", { title: target.window.title }));
 };
 
 export function activate(api: PluginApi): void {

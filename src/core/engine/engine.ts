@@ -1,4 +1,7 @@
 import { registerPacks } from "../plugins/packs";
+import { Conversation, answerClarification } from "../conversation/conversation";
+import type { Clarification } from "../conversation/types";
+import { splitSteps } from "../intent/understand";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
@@ -105,6 +108,7 @@ export class Engine {
   readonly #native: NativeAdapter;
   readonly #osint: OsintRunner;
   readonly #bridge: NativeBridge;
+  readonly #conversation = new Conversation();
   readonly #unsubscribeConfirmations: () => void;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
@@ -185,18 +189,60 @@ export class Engine {
     this.#emit({ type: "message", role: "user", text, tone: "info", locale: reply.locale });
     this.#setOrb("thinking");
 
-    const { intent } = parseIntent(text);
-    this.#journal(text, intent.type);
     try {
-      await this.#route(intent, reply);
+      await this.#handle(text, reply);
     } catch (error) {
       this.#fail(toCapabilityError(error), reply);
     }
   }
 
+  /**
+   * Traite une saisie : répond d'abord à la question en attente, découpe les demandes successives, puis résout
+   * les références (« le deuxième », « ferme-le ») avant la compréhension.
+   */
+  async #handle(text: string, reply: Reply): Promise<void> {
+    const pending = this.#conversation.pending();
+    if (pending) {
+      this.#conversation.clearPending();
+      const answer = answerClarification(pending, text);
+      if (answer === "cancel") return this.#reply(reply, reply.t("clarify.cancelled"));
+      if (answer) return this.#handle(answer.text, reply);
+    }
+
+    const steps = splitSteps(text);
+    if (steps.length > 1) {
+      for (const step of steps) {
+        await this.#handle(step, reply);
+        // Une étape qui pose une question suspend la suite : la réponse concerne d'abord cette question.
+        if (this.#conversation.pending()) return;
+      }
+      return;
+    }
+
+    const resolution = this.#conversation.resolve(text);
+    if (resolution.clarification) return this.#ask(resolution.clarification, reply);
+
+    const { intent } = parseIntent(resolution.text);
+    this.#journal(text, intent.type);
+    await this.#route(intent, reply);
+  }
+
+  /** Pose une question : la réponse de l'utilisateur sera interprétée par `#handle`. */
+  #ask(clarification: Clarification, reply: Reply): void {
+    this.#conversation.ask(clarification);
+    const choices = clarification.options.map((option, index) => `${index + 1}) ${option.label}`).join(" · ");
+    this.#reply(reply, choices ? `${clarification.question} ${choices}` : clarification.question);
+  }
+
   async #route(intent: Intent, reply: Reply): Promise<void> {
     switch (intent.type) {
       case "OPEN_APPLICATION": {
+        if (!intent.appId && intent.suggestion) {
+          // Un nom proche d'une application connue : on demande avant de lancer quoi que ce soit.
+          const suggested = registeredApplications().find((app) => app.id === intent.suggestion?.appId);
+          const name = reply.t(suggested?.nameKey ?? "app.Notepad");
+          return this.#ask({ question: reply.t("clarify.didYouMean", { name }), options: [{ label: name, text: `lance ${intent.suggestion.alias}` }] }, reply);
+        }
         if (!intent.appId) {
           this.#fail(new CapabilityError("unknown-app", { name: intent.appName }), reply);
           return;
@@ -289,6 +335,12 @@ export class Engine {
       return;
     }
 
+    // Une réponse qui dépend d'un choix pose la question au lieu de conclure.
+    if (result.clarification) {
+      return this.#ask({ question: result.caption, options: result.clarification.options }, reply);
+    }
+    // Les éléments de cette réponse deviennent la référence de la suite ; une réponse sans liste l'efface.
+    this.#conversation.setReferents(result.referents ?? []);
     for (const content of result.presentations) {
       this.#emit({ type: "present", content, source: result.source });
     }

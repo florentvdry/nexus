@@ -340,3 +340,74 @@ describe("Claude Code", () => {
     expect(assistant(events)[0]).toContain("Indique le projet");
   });
 });
+
+describe("conversation : références, questions et demandes enchaînées (phase 5)", () => {
+  it("« renomme le deuxième » désigne le deuxième fichier de la dernière recherche", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("Cherche mes fichiers PDF");
+    await engine.submit("renomme le deuxième en idees.pdf");
+    expect(bridge.operateFile).toHaveBeenCalledWith({
+      kind: "rename",
+      from: "/home/ana/Téléchargements/facture.pdf",
+      newName: "idees.pdf",
+    });
+  });
+
+  it("un pronom ambigu pose la question, et la réponse « 2 » exécute le bon choix", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("Cherche mes fichiers PDF");
+    await engine.submit("supprime-le");
+    expect(bridge.operateFile).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("Lequel ? 1) contrat.pdf · 2) facture.pdf");
+    await engine.submit("2");
+    expect(bridge.operateFile).toHaveBeenCalledWith({ kind: "trash", path: "/home/ana/Téléchargements/facture.pdf" });
+  });
+
+  it("« non » annule la question sans rien faire", async () => {
+    const bridge = fakeBridge({
+      listWindows: vi.fn(async () => [
+        { id: 201, title: "Notes - Bloc-notes", process: "notepad.exe", pid: 1 },
+        { id: 202, title: "Notes de réunion - Word", process: "WINWORD.EXE", pid: 2 },
+      ]),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("ferme la fenêtre notes");
+    expect(assistant(events).join(" ")).toContain("Laquelle ?");
+    await engine.submit("non");
+    expect(bridge.closeWindow).not.toHaveBeenCalled();
+    expect(assistant(events)).toContain("D'accord, je ne fais rien.");
+  });
+
+  it("une fenêtre ambiguë se règle par la réponse : seule la fenêtre choisie est fermée", async () => {
+    const bridge = fakeBridge({
+      listWindows: vi.fn(async () => [
+        { id: 201, title: "Notes - Bloc-notes", process: "notepad.exe", pid: 1 },
+        { id: 202, title: "Notes de réunion - Word", process: "WINWORD.EXE", pid: 2 },
+      ]),
+    });
+    const { engine } = setup(bridge);
+    await engine.submit("ferme la fenêtre notes");
+    await engine.submit("le deuxième");
+    expect(bridge.closeWindow).toHaveBeenCalledExactlyOnceWith(202);
+  });
+
+  it("un nom proche suggère l'application, et « oui » la lance", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("lance Discrd");
+    expect(assistant(events)).toContain("Tu voulais dire Discord ? 1) Discord");
+    await engine.submit("oui");
+    expect(nativeDouble.launchApp).toHaveBeenCalledWith("discord");
+  });
+
+  it("exécute deux demandes dans l'ordre quand elles sont reliées par « puis »", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("liste mes fenêtres puis montre le cpu");
+    expect(bridge.listWindows).toHaveBeenCalled();
+    expect(nativeDouble.systemInfo).toHaveBeenCalled();
+    expect(vi.mocked(bridge.listWindows).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(nativeDouble.systemInfo).mock.invocationCallOrder[0]);
+  });
+});

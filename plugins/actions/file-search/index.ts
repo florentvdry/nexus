@@ -45,6 +45,7 @@ export const fileSearch: CapabilityHandler = async (input, context) => {
     caption: files.length === 0 ? t("files.none") : t("files.caption", { count: files.length }),
     presentations,
     source: { capabilityId: FILE_SEARCH_MANIFEST.id, locality: "local", collectedAt: Date.now() },
+    referents: files.map((file) => ({ kind: "file", label: file.name, value: file.path })),
   };
 };
 

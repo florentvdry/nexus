@@ -132,6 +132,13 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Coût** : wasmtime exige Rust 1.97 (la version minimale du projet passe à 1.97). Le module est compilé à la vérification et mis en cache par empreinte.
 - **Limites** : pas de bibliothèque de plugins publique ; les types `source`, `document`, `agent` et `speech` restent réservés ; l'accès aux fichiers et au micro n'est pas ouvert.
 
+## ADR-023 — Compréhension plus souple, contexte et questions, sans modèle de langage
+
+- **Choix** : la compréhension reste déterministe, enrichie de trois mécanismes. (1) Politesse et formules de question retirées avant classification, demandes enchaînées par « puis / ensuite / then » (trois au maximum), fautes de frappe sur les noms d'application (une seule suggestion, jamais un choix ambigu). (2) Une mémoire de conversation : les éléments d'une liste (fichiers trouvés, fenêtres) deviennent des références (« le deuxième », « ferme-le »), réécrites en commandes explicites avant la compréhension. (3) Des questions : quand une demande est ambiguë, NEXUS demande lequel, et la réponse (numéro, ordinal, libellé, « oui », « non ») exécute l'option choisie.
+- **Pourquoi** : les règles couvrent mal les formulations naturelles, mais un modèle de langage enverrait les demandes hors de la machine et exigerait une clé et une connexion. La mémoire et les questions donnent l'impression de comprendre sans rien quitter de l'ordinateur, et sans déplacer la décision de sécurité.
+- **Garanties** : une référence réécrite passe par les mêmes confirmations que la commande saisie. Un pronom qui ne désigne pas un seul élément pose une question au lieu de deviner. « ouvre la calculatrice » n'est jamais réécrite, même après une liste.
+- **Limites** : les formulations hors du vocabulaire restent non comprises. Un modèle de langage local ou distant reste une décision à part, à prendre avec l'utilisateur (confidentialité, clé, connexion).
+
 ## ADR-016 — Claude Code via le CLI officiel, en mode non interactif
 
 - **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.

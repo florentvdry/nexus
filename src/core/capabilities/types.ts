@@ -3,6 +3,7 @@ import type { Locale, MessageKey } from "../../i18n/messages";
 import type { PresentedContent } from "../presentation/types";
 import type { OsintRunner } from "../osint/types";
 import type { NativeBridge } from "../native/bridge";
+import type { Clarification, Referent } from "../conversation/types";
 
 /** local : sans réseau · network : contacte Internet ou un service distant. */
 export type Locality = "local" | "network";
@@ -71,6 +72,10 @@ export interface CapabilityResult {
   caption: string;
   presentations: PresentedContent[];
   source: SourceRef;
+  /** Éléments de cette réponse auxquels l'utilisateur peut se référer ensuite (« le deuxième »). */
+  referents?: Referent[];
+  /** Le résultat dépend d'un choix : la réponse de l'utilisateur déclenche l'option choisie. */
+  clarification?: Pick<Clarification, "options">;
 }
 
 export type Translator = (key: MessageKey, params?: Record<string, string | number>) => string;
