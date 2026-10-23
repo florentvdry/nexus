@@ -26,6 +26,7 @@ import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
 import { FirstRunSetup } from "./FirstRunSetup";
+import { HardwareSection } from "./HardwareSection";
 import { hasSeenModelSetup, markModelSetupSeen } from "./setupMemory";
 import { PermissionsSection } from "./PermissionsSection";
 import { VoicePanel } from "./VoicePanel";
@@ -212,6 +213,7 @@ export function App({ engine: injectedEngine }: AppProps) {
 
       {panelOpen && (
         <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>
+          <HardwareSection bridge={answerBridge} t={t} />
           <PermissionsSection bridge={answerBridge} locale={locale} t={t} />
           <button type="button" className="chip" onClick={() => setSetupOpen(true)}>
             {t("setup.open")}

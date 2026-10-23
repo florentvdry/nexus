@@ -90,7 +90,11 @@ export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
           </div>
           <div>
             <dt>{t("setup.profile.gpu")}</dt>
-            <dd>{machine.gpu ? machine.gpu.name : t("setup.profile.gpuUnknown")}</dd>
+            <dd>
+              {machine.gpu
+                ? `${machine.gpu.name} · ${machine.gpu.vramGiB.toFixed(1)} ${t("setup.unit.gib")}`
+                : t("setup.profile.gpuUnknown")}
+            </dd>
           </div>
         </dl>
       );

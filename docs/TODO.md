@@ -9,7 +9,7 @@ classer la demande en intention JSON existante. Les règles restent prioritaires
 confirmations, racines autorisées et permissions restent identiques.
 
 - [x] **Décider** : activation explicite, avec accord et taille affichés (recommandation retenue, ADR-025).
-- [ ] **Profil matériel** (Rust) : mémoire vive, cœurs et AVX2 lus par `src-tauri/src/hardware.rs` (commande `hardware_profile`, écrite, non exécutée). Carte graphique et mémoire vidéo : pas encore lues. Le choix des niveaux à partir du profil est dans `hardware.ts`.
+- [x] **Profil matériel** (Rust) : mémoire vive, cœurs, AVX2 et carte graphique (nom et mémoire dédiée, lus par DXGI, adaptateurs logiciels exclus) par `src-tauri/src/hardware.rs`, commande `hardware_profile`. Vérifié dans l'application le 23/10 : « NVIDIA GeForce RTX 4060 · 7.8 Go » affiché dans les réglages. Le choix des niveaux à partir du profil est dans `hardware.ts`.
 - [ ] **Trois niveaux** : définis dans `src/core/language-model/tiers.ts` (ordres de grandeur). Reste à choisir les modèles candidats : vérifier la licence et le support du français de chacun avant de le proposer.
 - [ ] **Test de rapidité et de précision sur la machine**, à la première activation, après accord : logique écrite (`benchmark.ts` : 22 phrases de référence, `runTierBenchmark`, `chooseTier` avec les limites de 3 s et 80 %). Mesure réelle sur la machine : à faire, avec un modèle.
 - [ ] **Mémoriser le choix**, le relancer seulement si le matériel ou le modèle change. Niveau modifiable dans les réglages.
@@ -25,7 +25,7 @@ Bloquant dans cet environnement : Hugging Face est refusé par le proxy. Le tél
 
 Au lancement, un parcours de configuration visible, étape par étape, sans rien faire en cachette :
 
-- [ ] **Profil de la machine** : mémoire, cœurs et AVX2 lus (commande `hardware_profile`) et affichés (`src/ui/FirstRunSetup.tsx`). Carte graphique : pas encore lue.
+- [x] **Profil de la machine** : mémoire, cœurs, AVX2 et carte graphique lus (commande `hardware_profile`) et affichés dans le parcours (`src/ui/FirstRunSetup.tsx`) et dans les réglages (section « Matériel », `src/ui/HardwareSection.tsx`).
 - [ ] **Choix du mode** : écran écrit (automatique, « plus rapide », « plus précis », avec la taille du niveau). Le temps estimé n'est pas encore affiché : il viendra du test de référence.
 - [ ] **Téléchargement** : taille, source, somme de contrôle, avec accord explicite et possibilité de passer.
 - [ ] **Test sur la machine** : chaque phrase de référence et le résultat s'affichent au fil de l'eau (temps, réussite), avec possibilité d'annuler.
