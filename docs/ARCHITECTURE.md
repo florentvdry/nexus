@@ -75,7 +75,7 @@ Frontend : osint.domain / osint.username / document.inspect (capacités, permiss
 Backend : osint_run ──► liste fermée CONNECTORS ──► spawn `nexus-worker` (processus séparé)
                                                         │ requête JSON sur stdin
                                                         ▼
-                                          connectors::run ──► dns | certificates | usernames | document
+                                          plugins::run_connector ──► sources (dns, certificates, usernames) | documents
                                                         │ rapport JSON sur stdout (4 Mo max)
      ◄──────────── rapport normalisé (findings, errors, partial) ◄──┘
 Délai dépassé : le worker est arrêté (kill). Sortie invalide ou code d'erreur : erreur explicite.
@@ -99,6 +99,8 @@ Coût des capacités (champ `cost` du manifeste) : `local`, `internet`, `externa
 
 ## Capacités et plugins
 
+La convention complète (dossiers par type, fiche `plugin.json`, cycle de vie) est dans [PLUGINS.md](PLUGINS.md).
+
 Chaque capacité déclare un `CapabilityManifest` : identifiant (`domaine.action`), version
 sémantique, description, catégories, entrées et sorties, dépendances, permissions requises,
 localité (`local` ou `network`), API requises, délai maximal, coût, disponibilité hors ligne.
@@ -106,7 +108,7 @@ localité (`local` ou `network`), API requises, délai maximal, coût, disponibi
 Les entrées sont sérialisables (`Record<string, string>`) : c'est la frontière qui permettra,
 en phase 3, de déplacer les plugins dans des processus isolés sans changer leur contrat.
 
-En phase 1, les capacités intégrées (`src/core/capabilities/builtin`) s'exécutent dans le
+En phase 1, les capacités intégrées (désormais dans `plugins/`) s'exécutent dans le
 processus de l'application. Le registre garantit déjà qu'une erreur ou un dépassement de délai
 ne fait pas tomber l'application.
 

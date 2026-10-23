@@ -1,8 +1,9 @@
-import { registerBuiltinCapabilities } from "../capabilities/builtin";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
-import { APPS } from "../intent/dictionaries";
+import { registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
+import { loadBuiltinPlugins } from "../plugins/builtin";
+import type { PluginStatus } from "../plugins/types";
 import { parseIntent, type Intent } from "../intent/parse";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
@@ -53,6 +54,7 @@ function replyFor(locale: Locale): Reply {
 export class Engine {
   readonly #native: NativeAdapter;
   readonly #osint: OsintRunner;
+  readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
   readonly #listeners = new Set<(event: EngineEvent) => void>();
@@ -66,8 +68,17 @@ export class Engine {
     this.#locale = options.locale;
     this.#holdMs = options.responseHoldMs ?? 2500;
     this.#registry = new CapabilityRegistry(options.grantedPermissions ?? DEFAULT_GRANTED);
-    registerBuiltinCapabilities(this.#registry);
+    this.#plugins = loadBuiltinPlugins({
+      registerCapability: (manifest, handler) => this.#registry.register(manifest, handler),
+      registerLanguage: (locale, dictionary) => registerLanguageDictionary(locale, dictionary),
+      registerApplications: (entries) => registerApplications(entries),
+    });
     this.#tasks = new TaskManager({ concurrency: 3, historySize: 30 });
+  }
+
+  /** État de chaque plugin chargé : un plugin en échec est signalé, il ne bloque pas les autres. */
+  get plugins(): readonly PluginStatus[] {
+    return this.#plugins;
   }
 
   get locale(): Locale {
@@ -128,7 +139,7 @@ export class Engine {
           this.#fail(new CapabilityError("unknown-app", { name: intent.appName }), reply);
           return;
         }
-        const entry = APPS.find((app) => app.id === intent.appId);
+        const entry = registeredApplications().find((app) => app.id === intent.appId);
         const name = reply.t(entry?.nameKey ?? "app.Notepad");
         return this.#runCapability("apps.launch", { appId: intent.appId }, { labelKey: "task.openApp", labelParams: { app: name } }, reply);
       }

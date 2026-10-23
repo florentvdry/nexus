@@ -1,0 +1,26 @@
+{
+  "id": "actions.app-launch",
+  "name": "Lancement d'applications",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Lance une application du catalogue natif. Aucune commande libre n'est exécutée. Fournit le catalogue d'alias.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::apps"
+  ],
+  "capabilities": [
+    "apps.launch"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": true,
+  "permissions": [
+    "process.launch"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

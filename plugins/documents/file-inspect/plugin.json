@@ -1,0 +1,28 @@
+{
+  "id": "documents.file-inspect",
+  "name": "Analyse locale d'un fichier",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "documents",
+  "description": "Empreinte SHA-256, taille, type et statistiques d'un fichier désigné. Rien n'est envoyé.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "documents::inspect"
+  ],
+  "capabilities": [
+    "document.inspect"
+  ],
+  "connectors": [
+    "document.inspect"
+  ],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "file.read"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

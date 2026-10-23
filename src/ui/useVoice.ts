@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 
 import type { Engine } from "../core/engine/engine";
 import { VoiceController } from "../core/voice/controller";
-import { createSpeechInput } from "../core/voice/speech-input";
-import { WebSpeechOutput } from "../core/voice/speech-output";
+import { createSpeechInput } from "../../plugins/speech/whisper-stt";
+import { WebSpeechOutput } from "../../plugins/speech/system-tts";
 import type { VoiceSettings } from "../core/voice/settings";
 import type { VoiceStatus } from "../core/voice/types";
 

@@ -1,6 +1,6 @@
 import type { Locale } from "../../i18n/messages";
 
-/** Connecteurs exécutés par le worker. Miroir de `connectors::CONNECTORS` côté Rust. */
+/** Connecteurs exécutés par le worker. Miroir de `plugins::CONNECTORS` côté Rust. */
 export type ConnectorId = "domain.dns" | "domain.certificates" | "username.profiles" | "document.inspect";
 
 export type FindingStatus = "verified" | "possible-match" | "unverified" | "not-found" | "source-unreachable" | "error";

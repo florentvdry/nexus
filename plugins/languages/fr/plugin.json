@@ -1,0 +1,22 @@
+{
+  "id": "languages.fr",
+  "name": "Français",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "languages",
+  "description": "Verbes, expressions et mots-clés pour comprendre les commandes en français.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [],
+  "capabilities": [],
+  "connectors": [],
+  "languages": [
+    "fr"
+  ],
+  "applications": false,
+  "permissions": [],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

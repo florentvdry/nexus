@@ -1,0 +1,26 @@
+{
+  "id": "actions.system-info",
+  "name": "Informations système",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Charge du processeur, mémoire, disques et durée de fonctionnement, lus sur la machine.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::system"
+  ],
+  "capabilities": [
+    "system.info"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "system.read"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

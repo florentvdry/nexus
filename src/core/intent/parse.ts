@@ -1,4 +1,5 @@
-import { type AppId, LANGUAGE_DICTIONARIES, type LanguageDictionary, findApplication, matchesAny } from "./dictionaries";
+import { type AppId, type LanguageDictionary, findApplication, matchesAny } from "./dictionaries";
+import { languageDictionaries, registeredApplications } from "./registry";
 import { normalize, stripWakeWord } from "./normalize";
 
 export type Intent =
@@ -82,31 +83,31 @@ function findOpenVerb(text: string, dictionary: LanguageDictionary): RegExpMatch
 function classify(text: string): Intent {
   if (!text) return { type: "UNKNOWN", text: "" };
 
-  for (const dictionary of LANGUAGE_DICTIONARIES) {
+  for (const dictionary of languageDictionaries()) {
     if (matchesAny(dictionary.closeAll, text)) return { type: "CLOSE_ALL_WINDOWS" };
   }
-  for (const dictionary of LANGUAGE_DICTIONARIES) {
+  for (const dictionary of languageDictionaries()) {
     if (matchesAny(dictionary.closeWindow, text)) return { type: "CLOSE_WINDOW" };
   }
-  for (const dictionary of LANGUAGE_DICTIONARIES) {
+  for (const dictionary of languageDictionaries()) {
     if (matchesAny(dictionary.cancelTasks, text)) return { type: "CANCEL_TASKS" };
   }
-  for (const dictionary of LANGUAGE_DICTIONARIES) {
+  for (const dictionary of languageDictionaries()) {
     if (matchesAny(dictionary.help, text)) return { type: "HELP" };
   }
 
-  const application = findApplication(text);
-  const openVerb = LANGUAGE_DICTIONARIES.map((dictionary) => findOpenVerb(text, dictionary)).find(Boolean);
+  const application = findApplication(text, registeredApplications());
+  const openVerb = languageDictionaries().map((dictionary) => findOpenVerb(text, dictionary)).find(Boolean);
   if (openVerb) {
     const remainder = text.slice((openVerb.index ?? 0) + openVerb[0].length).trim();
-    const appName = LANGUAGE_DICTIONARIES.reduce(
+    const appName = languageDictionaries().reduce(
       (name, dictionary) => name.replace(dictionary.fillerWords, ""),
       remainder,
     ).trim();
     return { type: "OPEN_APPLICATION", appId: application?.entry.id, appName: appName || remainder };
   }
 
-  if (LANGUAGE_DICTIONARIES.some((dictionary) => matchesAny(dictionary.systemInfo, text))) {
+  if (languageDictionaries().some((dictionary) => matchesAny(dictionary.systemInfo, text))) {
     return { type: "SYSTEM_INFO" };
   }
 

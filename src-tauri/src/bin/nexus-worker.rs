@@ -3,7 +3,7 @@
 
 use std::io::{Read, Write};
 
-use nexus_lib::connectors::{self, ConnectorRequest};
+use nexus_lib::plugins::{self, report::ConnectorRequest};
 
 fn main() {
     let mut input = String::new();
@@ -18,7 +18,7 @@ fn main() {
         }
     };
 
-    match connectors::run(&request) {
+    match plugins::run_connector(&request) {
         Ok(report) => {
             let json = serde_json::to_vec(&report).unwrap_or_default();
             let _ = std::io::stdout().write_all(&json);

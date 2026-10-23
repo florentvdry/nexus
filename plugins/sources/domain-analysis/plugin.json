@@ -1,0 +1,30 @@
+{
+  "id": "sources.domain-analysis",
+  "name": "Analyse d'un domaine",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "sources",
+  "description": "Adresses du domaine (DNS système) et noms listés dans les journaux publics de certificats. Passif.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "sources::dns",
+    "sources::certificates"
+  ],
+  "capabilities": [
+    "osint.domain"
+  ],
+  "connectors": [
+    "domain.dns",
+    "domain.certificates"
+  ],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "osint.passive"
+  ],
+  "locality": "network",
+  "cost": "internet",
+  "offline": false
+}

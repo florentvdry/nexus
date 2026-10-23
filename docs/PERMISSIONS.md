@@ -31,7 +31,7 @@ n'existe pas : l'erreur `confirmation-required` est alors affichée, jamais masq
 ## Garanties techniques (phase 1)
 
 - Le lancement d'application n'accepte que des identifiants du catalogue Rust
-  (`src-tauri/src/apps.rs`). Aucune chaîne venant de l'interface n'est exécutée comme commande.
+  (`src-tauri/src/plugins/actions/apps.rs`). Aucune chaîne venant de l'interface n'est exécutée comme commande.
 - Aucune élévation de privilèges n'est demandée ni tentée.
 - Le processus lancé est détaché : NEXUS ne le surveille pas et n'injecte rien dans lui.
 - Aucun appel réseau n'est effectué par les capacités de la phase 1.

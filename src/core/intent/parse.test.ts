@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { beforeAll } from "vitest";
+
+import { loadBuiltinPlugins } from "../plugins/builtin";
+import { registerApplications, registerLanguageDictionary } from "./registry";
 import { parseIntent } from "./parse";
 import { normalize, stripWakeWord } from "./normalize";
+
+beforeAll(() => {
+  // Les dictionnaires et le catalogue viennent des plugins : on les charge comme le ferait le moteur.
+  loadBuiltinPlugins({ registerCapability: () => {}, registerLanguage: registerLanguageDictionary, registerApplications });
+});
 
 describe("normalize", () => {
   it("supprime accents, ponctuation et casse", () => {

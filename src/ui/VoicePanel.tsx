@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { listSystemVoices, type SpeechVoice } from "../core/voice/speech-output";
-import { readVoiceModelStatus, type VoiceModelStatus } from "../core/voice/speech-input";
+import { listSystemVoices, type SpeechVoice } from "../../plugins/speech/system-tts";
+import { readVoiceModelStatus, type VoiceModelStatus } from "../../plugins/speech/whisper-stt";
 import type { ReplyMode, VoiceSettings, VoiceLanguageSetting } from "../core/voice/settings";
 import type { MessageKey } from "../i18n/messages";
 

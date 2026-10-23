@@ -1,0 +1,28 @@
+{
+  "id": "sources.username-search",
+  "name": "Recherche de pseudo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "sources",
+  "description": "Présence d'un pseudo sur quelques plateformes publiques. Une correspondance n'est jamais une identité.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "sources::usernames"
+  ],
+  "capabilities": [
+    "osint.username"
+  ],
+  "connectors": [
+    "username.profiles"
+  ],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "osint.passive"
+  ],
+  "locality": "network",
+  "cost": "internet",
+  "offline": false
+}

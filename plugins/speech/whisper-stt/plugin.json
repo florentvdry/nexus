@@ -1,0 +1,28 @@
+{
+  "id": "speech.whisper-stt",
+  "name": "Reconnaissance vocale (Whisper + Silero VAD)",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "speech",
+  "description": "Micro, détection de la parole (Silero VAD) et transcription locale (whisper.cpp). Aucun flux envoyé à un service.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "speech::audio",
+    "speech::capture",
+    "speech::vad",
+    "speech::segmenter",
+    "speech::transcribe",
+    "speech::session",
+    "speech::commands"
+  ],
+  "capabilities": [],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

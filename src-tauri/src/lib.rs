@@ -1,17 +1,17 @@
-mod apps;
-pub mod connectors;
 pub mod error;
-mod system;
-mod voice;
+pub mod host;
+pub mod plugins;
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 
-use apps::{AppStatus, LaunchOutcome, OsEnvironment};
-use connectors::{runner, ConnectorReport, ConnectorRequest};
 use error::AdapterError;
-use system::SystemInfo;
-use voice::commands::{self, VoiceState};
+use host::runner;
+use plugins::actions::apps::{self, AppStatus, LaunchOutcome, OsEnvironment};
+use plugins::actions::system::{self, SystemInfo};
+use plugins::report::{ConnectorReport, ConnectorRequest};
+use plugins::speech::commands::{self, VoiceState};
+use plugins as connectors;
 
 /// Raccourci pour démarrer ou arrêter l'écoute, même lorsque NEXUS n'a pas le focus.
 pub const VOICE_SHORTCUT: &str = "Ctrl+Alt+Space";

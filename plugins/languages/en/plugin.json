@@ -1,0 +1,22 @@
+{
+  "id": "languages.en",
+  "name": "English",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "languages",
+  "description": "Verbs, expressions and keywords to understand commands in English.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [],
+  "capabilities": [],
+  "connectors": [],
+  "languages": [
+    "en"
+  ],
+  "applications": false,
+  "permissions": [],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

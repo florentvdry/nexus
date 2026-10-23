@@ -69,8 +69,11 @@ informations système répondent explicitement qu'ils exigent l'application de b
 ## Architecture
 
 - `src/ui` : interface React (orbe, fenêtres, barre de commande). Aucune logique métier.
-- `src/core` : moteur en TypeScript pur — intentions, capacités, tâches, placement, engine.
-- `src-tauri/src` : adaptateur Windows en Rust — informations système, catalogue d'applications.
+- `src/core` : moteur en TypeScript pur — intentions, capacités, tâches, placement, plugins.
+- `plugins/<type>/<nom>/` : **un dossier par plugin**, rangé par type (`actions`, `sources`, `documents`, `speech`, `languages`), avec sa fiche `plugin.json`.
+- `src-tauri/src` : noyau natif Rust ; le code natif des plugins est dans `src-tauri/src/plugins/<type>/`.
+
+La convention des plugins et la piste d'une marketplace sont décrites dans [docs/PLUGINS.md](docs/PLUGINS.md).
 
 Documentation complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/PERMISSIONS.md](docs/PERMISSIONS.md), [docs/DECISIONS.md](docs/DECISIONS.md).
