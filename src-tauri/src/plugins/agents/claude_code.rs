@@ -427,6 +427,7 @@ mod tests {
         assert!(validate_prompt(&"x".repeat(MAX_PROMPT_CHARS + 1)).is_err());
     }
 
+    #[cfg(unix)]
     fn fake_cli(name: &str, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let path = std::env::temp_dir().join(format!("nexus-fake-claude-{}-{name}", std::process::id()));
@@ -499,6 +500,23 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains(r#""costUsd":0.04"#) && json.contains(r#""durationMs":11497"#), "{json}");
         assert!(json.contains(r#""isError":false"#), "{json}");
+    }
+
+    /// Sous Windows, le CLI s'installe souvent sous forme de script `.cmd` : il doit passer par `cmd /C`.
+    #[cfg(windows)]
+    #[test]
+    fn a_cmd_shim_runs_through_the_command_interpreter() {
+        let command = command_for(Path::new(r"C:\Users\ana\AppData\Roaming\npm\claude.cmd"));
+        assert_eq!(command.get_program().to_string_lossy().to_lowercase(), "cmd");
+        assert!(command.get_args().any(|arg| arg == "/C"));
+    }
+
+    /// Ailleurs, un exécutable est lancé directement, sans interpréteur intermédiaire.
+    #[cfg(not(windows))]
+    #[test]
+    fn an_executable_runs_directly() {
+        let command = command_for(Path::new("/usr/local/bin/claude"));
+        assert_eq!(command.get_program(), "/usr/local/bin/claude");
     }
 
     /// Lance le vrai CLI (coût : quelques centimes). `cargo test -- --ignored real_cli` avec le CLI installé et connecté.

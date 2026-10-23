@@ -122,6 +122,25 @@ describe("parseIntent — analyse OSINT et fichiers", () => {
   });
 });
 
+describe("parseIntent — fenêtres (phase 4)", () => {
+  it.each([
+    ["ferme la fenêtre Word", { type: "WINDOW_CLOSE", name: "Word" }],
+    ["Jarvis, ferme la fenêtre « Discord ».", { type: "WINDOW_CLOSE", name: "Discord" }],
+    ["passe sur la fenêtre Discord", { type: "WINDOW_FOCUS", name: "Discord" }],
+    ["liste mes fenêtres ouvertes", { type: "WINDOW_LIST" }],
+    ["quelles fenêtres sont ouvertes ?", { type: "WINDOW_LIST" }],
+  ])("« %s » est reconnue", (input, intent) => {
+    expect(parseIntent(input).intent).toEqual(intent);
+  });
+
+  it("garde les commandes de NEXUS sur ses propres fenêtres", () => {
+    expect(parseIntent("ferme cette fenêtre").intent.type).toBe("CLOSE_WINDOW");
+    expect(parseIntent("ferme toutes les fenêtres").intent.type).toBe("CLOSE_ALL_WINDOWS");
+    expect(parseIntent("ferme toutes les fenêtres ouvertes").intent.type).toBe("CLOSE_ALL_WINDOWS");
+    expect(parseIntent("ferme la fenêtre").intent.type).not.toBe("WINDOW_CLOSE");
+  });
+});
+
 describe("parseIntent — fichiers, processus et agents (phase 4)", () => {
   it("cherche des fichiers par extension, dossier et période", () => {
     expect(parseIntent("Cherche mes fichiers PDF téléchargés cette semaine").intent).toEqual({

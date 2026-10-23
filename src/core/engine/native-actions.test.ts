@@ -12,6 +12,13 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     emitAgent(runId: string, event: AgentEvent): void;
     emitConfirmation(request: ConfirmationRequest): void;
   } = {
+    forPlugin: () => bridge,
+    listWindows: vi.fn(async () => [
+      { id: 101, title: "Document1 - Word", process: "WINWORD.EXE", pid: 900 },
+      { id: 102, title: "Facture - Navigateur", process: "chrome.exe", pid: 901 },
+    ]),
+    focusWindow: vi.fn(async () => {}),
+    closeWindow: vi.fn(async () => {}),
     listProcesses: vi.fn(async () => [{ name: "Discord.exe", pid: 4242, cpuPercent: 3, memoryBytes: 512 * 1024 * 1024 }]),
     searchFiles: vi.fn(async () => [
       { path: "/home/ana/Téléchargements/contrat.pdf", name: "contrat.pdf", size: 2048, modified: 1_780_000_000 },
@@ -52,6 +59,45 @@ function setup(bridge: NativeBridge) {
 
 const presented = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "present" ? [event.content] : []));
 const assistant = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : []));
+
+describe("fenêtres (phase 4)", () => {
+  it("liste les fenêtres visibles", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("Liste mes fenêtres ouvertes");
+    expect(bridge.listWindows).toHaveBeenCalled();
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "data-table", rows: [["Document1 - Word", "WINWORD.EXE"], ["Facture - Navigateur", "chrome.exe"]] }));
+  });
+
+  it("demande la fermeture de la fenêtre désignée par son nom, sans la fermer soi-même", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("ferme la fenêtre Word");
+    expect(bridge.closeWindow).toHaveBeenCalledWith(101);
+    expect(assistant(events)).toContain("Fermeture demandée pour « Document1 - Word ». L'application peut encore demander d'enregistrer.");
+  });
+
+  it("n'agit sur aucune fenêtre quand le nom en désigne plusieurs", async () => {
+    const bridge = fakeBridge({
+      listWindows: vi.fn(async () => [
+        { id: 201, title: "Notes - Bloc-notes", process: "notepad.exe", pid: 1 },
+        { id: 202, title: "Notes de réunion - Word", process: "WINWORD.EXE", pid: 2 },
+      ]),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("ferme la fenêtre notes");
+    expect(bridge.closeWindow).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("Plusieurs fenêtres correspondent à « notes »");
+  });
+
+  it("garde « ferme cette fenêtre » pour NEXUS lui-même", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("ferme cette fenêtre");
+    expect(bridge.closeWindow).not.toHaveBeenCalled();
+    expect(events).toContainEqual({ type: "window-command", command: "close-last" });
+  });
+});
 
 describe("recherche et processus", () => {
   it("cherche les PDF téléchargés cette semaine et affiche un tableau", async () => {

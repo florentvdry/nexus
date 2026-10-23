@@ -51,4 +51,8 @@ pub enum AdapterError {
     AgentNotInstalled(String),
     #[error("échec de l'assistant : {0}")]
     AgentFailed(String),
+    #[error("fonction indisponible sur cette plateforme : {0}")]
+    Unsupported(String),
+    #[error("fenêtre introuvable : {0}")]
+    WindowNotFound(String),
 }

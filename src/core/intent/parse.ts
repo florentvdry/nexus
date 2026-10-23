@@ -18,6 +18,9 @@ export type Intent =
   | { type: "FILE_MOVE"; path: string; toDir: string }
   | { type: "FILE_TRASH"; path: string }
   | { type: "PROCESS_LIST" }
+  | { type: "WINDOW_LIST" }
+  | { type: "WINDOW_FOCUS"; name: string }
+  | { type: "WINDOW_CLOSE"; name: string }
   | { type: "AGENT_RUN"; project?: string; prompt?: string }
   | { type: "UNKNOWN"; text: string };
 
@@ -48,7 +51,7 @@ function cleanPath(raw: string): string {
 const ABSOLUTE_PATH = String.raw`"[^"]+"|'[^']+'|[A-Za-z]:[\\/][^\s"]*(?:\s+[^\s"]+)*?(?=\s+(?:en|to|dans|vers|into|et|and)\b|$)|\/[^\s"]+`;
 
 function unquote(value: string): string {
-  return value.trim().replace(/^["']|["']$/g, "").trim();
+  return value.trim().replace(/^["'«]|["'»]$/g, "").trim();
 }
 
 const AGENT_VERB = /\b(lance|lancer|demarre|demarrer|ouvre|ouvrir|demande|envoie|utilise|start|launch|run|ask|use)\b/i;
@@ -62,6 +65,11 @@ const FILE_RENAME = new RegExp(String.raw`\b(?:renomme|renommer|rename)\s+(?:le 
 const FILE_MOVE = new RegExp(String.raw`\b(?:d[ée]place|d[ée]placer|move)\s+(?:le |la |ce |mon )?(?:fichier\s+)?(${ABSOLUTE_PATH})\s+(?:dans|vers|into|to)\s+(.+)$`, "i");
 const FILE_TRASH = new RegExp(String.raw`\b(?:supprime|supprimer|efface|effacer|delete|remove)\s+(?:le |la |ce |mon )?(?:fichier\s+|dossier\s+)?(${ABSOLUTE_PATH})\s*$`, "i");
 const PROCESS_LIST = /\b(processus|processes|applications? (?:actives?|ouvertes?|en cours)|quelles applications|which applications|running apps)\b/i;
+/** Fenêtre désignée par son nom : « ferme la fenêtre Word ». « cette fenêtre » et « toutes les fenêtres » restent des commandes de NEXUS. */
+const WINDOW_CLOSE = /\b(?:ferme|fermer|close)\s+(?:la |le |the )?fen[eê]tre\s+(?!(?:toutes?|cette|ce|this|all|de nexus)\b)(.+?)\s*[.!?]*$/i;
+const WINDOW_FOCUS = /\b(?:passe|bascule|active|activer|affiche|montre|focus|switch)\s+(?:sur\s+|to\s+)?(?:la |le |the )?fen[eê]tre\s+(?!(?:toutes?|cette|ce|this|all)\b)(.+?)\s*[.!?]*$/i;
+const WINDOW_LIST = /\b(?:liste|lister|montre|affiche|quelles?|list|show)\b.*\bfen[eê]tres\b|\bfen[eê]tres\b.*\b(?:ouvertes?|open)\b/i;
+const CLOSE_VERB = /\b(?:ferme|fermer|close)\b/i;
 
 function searchPeriod(raw: string): number | undefined {
   if (/\bcette annee\b|\bthis year\b/i.test(raw)) return 365;
@@ -97,6 +105,12 @@ function classifyNative(raw: string): Intent | null {
   if (trash) return { type: "FILE_TRASH", path: unquote(trash[1]) };
 
   if (PROCESS_LIST.test(raw)) return { type: "PROCESS_LIST" };
+
+  const windowClose = raw.match(WINDOW_CLOSE);
+  if (windowClose) return { type: "WINDOW_CLOSE", name: unquote(windowClose[1]) };
+  const windowFocus = raw.match(WINDOW_FOCUS);
+  if (windowFocus) return { type: "WINDOW_FOCUS", name: unquote(windowFocus[1]) };
+  if (WINDOW_LIST.test(raw) && !CLOSE_VERB.test(raw)) return { type: "WINDOW_LIST" };
 
   const hasPath = /[\\/]/.test(raw);
   if (FILE_SEARCH_VERB.test(raw) && FILE_NOUN.test(raw) && !hasPath) {

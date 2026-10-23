@@ -45,13 +45,24 @@ interface Reply {
 
 // Les permissions « confirmation » sont accordées ici : elles autorisent seulement à demander l'action.
 // Le natif (courtier de permissions) refuse l'exécution tant que l'utilisateur n'a pas répondu.
-const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch", "osint.passive", "file.read", "file.write", "file.delete", "agent.run"];
+const DEFAULT_GRANTED: Permission[] = [
+  "system.read",
+  "process.launch",
+  "osint.passive",
+  "file.read",
+  "file.write",
+  "file.delete",
+  "agent.run",
+  "window.read",
+  "window.control",
+];
 
 /** Titre affiché pour chaque permission demandant une confirmation. */
 const PERMISSION_TITLE: Record<string, MessageKey> = {
   "file.write": "confirm.title.fileWrite",
   "file.delete": "confirm.title.fileDelete",
   "agent.run": "confirm.title.agentRun",
+  "window.control": "confirm.title.windowControl",
 };
 
 /** Libellé de chaque ligne de détail d'une demande de confirmation. */
@@ -61,6 +72,9 @@ const ROW_LABEL: Record<string, MessageKey> = {
   path: "confirm.row.path",
   project: "confirm.row.project",
   prompt: "confirm.row.prompt",
+  window: "confirm.row.window",
+  process: "confirm.row.process",
+  requester: "confirm.row.requester",
 };
 
 function basename(path: string): string {
@@ -199,6 +213,12 @@ export class Engine {
         return this.#runCapability("files.operate", { kind: "trash", path: intent.path }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
       case "PROCESS_LIST":
         return this.#runCapability("system.processes", { limit: "8" }, { labelKey: "task.processes" }, reply);
+      case "WINDOW_LIST":
+        return this.#runCapability("window.list", {}, { labelKey: "task.windows" }, reply);
+      case "WINDOW_FOCUS":
+        return this.#runCapability("window.focus", { name: intent.name }, { labelKey: "task.windowFocus", labelParams: { name: intent.name } }, reply);
+      case "WINDOW_CLOSE":
+        return this.#runCapability("window.close", { name: intent.name }, { labelKey: "task.windowClose", labelParams: { name: intent.name } }, reply);
       case "AGENT_RUN":
         if (!intent.project || !intent.prompt) {
           return this.#reply(reply, reply.t("agent.needsProject"), "error");

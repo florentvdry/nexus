@@ -58,7 +58,20 @@ export interface ConfirmationRequest {
   expiresInSecs: number;
 }
 
+export interface WindowEntry {
+  /** Identifiant natif de la fenêtre. Il n'est valable que tant que la fenêtre existe. */
+  id: number;
+  title: string;
+  process: string;
+  pid: number;
+}
+
 export interface NativeBridge {
+  /** Pont dont les appels sont attribués à un plugin : le natif n'accorde que les permissions de son manifeste. */
+  forPlugin(pluginId: string): NativeBridge;
+  listWindows(): Promise<WindowEntry[]>;
+  focusWindow(id: number): Promise<void>;
+  closeWindow(id: number): Promise<void>;
   listProcesses(limit: number): Promise<ProcessEntry[]>;
   searchFiles(query: FileSearchQuery): Promise<FileEntry[]>;
   operateFile(operation: FileOperation): Promise<string>;
@@ -70,32 +83,61 @@ export interface NativeBridge {
   answerConfirmation(id: string, approved: boolean): Promise<void>;
 }
 
+/** Identité de l'interface principale : elle ne peut que répondre aux confirmations. */
+export const CORE_CALLER = "core";
 const AGENT_CHANNEL = "agents://event";
 const CONFIRMATION_CHANNEL = "permissions://request";
 
 export class TauriNativeBridge implements NativeBridge {
+  readonly #caller: string;
+
+  constructor(caller: string = CORE_CALLER) {
+    this.#caller = caller;
+  }
+
+  forPlugin(pluginId: string): NativeBridge {
+    return new TauriNativeBridge(pluginId);
+  }
+
+  /** Chaque appel transmet l'identité de l'appelant : le natif vérifie la permission correspondante. */
+  #call<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+    return callNative<T>(command, { caller: this.#caller, ...args });
+  }
+
   listProcesses(limit: number): Promise<ProcessEntry[]> {
-    return callNative<ProcessEntry[]>("processes_list", { limit });
+    return this.#call<ProcessEntry[]>("processes_list", { limit });
   }
 
   searchFiles(query: FileSearchQuery): Promise<FileEntry[]> {
-    return callNative<FileEntry[]>("files_search", { query });
+    return this.#call<FileEntry[]>("files_search", { query });
   }
 
   operateFile(operation: FileOperation): Promise<string> {
-    return callNative<string>("files_operate", { operation });
+    return this.#call<string>("files_operate", { operation });
   }
 
   detectAgent(): Promise<AgentDetection> {
-    return callNative<AgentDetection>("agent_detect");
+    return this.#call<AgentDetection>("agent_detect");
   }
 
   runAgent(runId: string, project: string, prompt: string): Promise<void> {
-    return callNative<void>("agent_run", { runId, project, prompt });
+    return this.#call<void>("agent_run", { runId, project, prompt });
   }
 
   cancelAgent(runId: string): Promise<boolean> {
-    return callNative<boolean>("agent_cancel", { runId });
+    return this.#call<boolean>("agent_cancel", { runId });
+  }
+
+  listWindows(): Promise<WindowEntry[]> {
+    return this.#call<WindowEntry[]>("window_list");
+  }
+
+  focusWindow(id: number): Promise<void> {
+    return this.#call<void>("window_focus", { id });
+  }
+
+  closeWindow(id: number): Promise<void> {
+    return this.#call<void>("window_close", { id });
   }
 
   onAgentEvent(listener: (runId: string, event: AgentEvent) => void): () => void {
@@ -112,7 +154,7 @@ export class TauriNativeBridge implements NativeBridge {
   }
 
   answerConfirmation(id: string, approved: boolean): Promise<void> {
-    return callNative<void>("permission_answer", { id, approved });
+    return this.#call<void>("permission_answer", { id, approved });
   }
 }
 
@@ -121,6 +163,10 @@ export class UnavailableNativeBridge implements NativeBridge {
     return Promise.reject(new NativeUnavailableError());
   }
 
+  forPlugin = (): NativeBridge => this;
+  listWindows = () => this.unavailable();
+  focusWindow = () => this.unavailable();
+  closeWindow = () => this.unavailable();
   listProcesses = () => this.unavailable();
   searchFiles = () => this.unavailable();
   operateFile = () => this.unavailable();

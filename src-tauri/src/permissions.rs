@@ -32,7 +32,20 @@ pub enum Permission {
     FileWrite,
     FileDelete,
     AgentRun,
+    WindowRead,
+    WindowControl,
 }
+
+/// Toutes les permissions natives, dans l'ordre d'affichage des réglages.
+pub const ALL: [Permission; 7] = [
+    Permission::SystemRead,
+    Permission::FileRead,
+    Permission::FileWrite,
+    Permission::FileDelete,
+    Permission::AgentRun,
+    Permission::WindowRead,
+    Permission::WindowControl,
+];
 
 impl Permission {
     pub fn id(self) -> &'static str {
@@ -42,13 +55,19 @@ impl Permission {
             Permission::FileWrite => "file.write",
             Permission::FileDelete => "file.delete",
             Permission::AgentRun => "agent.run",
+            Permission::WindowRead => "window.read",
+            Permission::WindowControl => "window.control",
         }
+    }
+
+    pub fn from_id(id: &str) -> Option<Permission> {
+        ALL.into_iter().find(|permission| permission.id() == id)
     }
 
     pub fn tier(self) -> Tier {
         match self {
-            Permission::SystemRead | Permission::FileRead => Tier::Automatic,
-            Permission::FileWrite | Permission::FileDelete | Permission::AgentRun => Tier::Confirmation,
+            Permission::SystemRead | Permission::FileRead | Permission::WindowRead => Tier::Automatic,
+            Permission::FileWrite | Permission::FileDelete | Permission::AgentRun | Permission::WindowControl => Tier::Confirmation,
         }
     }
 }
@@ -164,10 +183,7 @@ pub fn confirm(app: &AppHandle, broker: &Broker, permission: Permission, rows: &
 
 /// Chaque permission et son niveau, pour l'affichage des réglages.
 pub fn status() -> Vec<(&'static str, Tier)> {
-    [Permission::SystemRead, Permission::FileRead, Permission::FileWrite, Permission::FileDelete, Permission::AgentRun]
-        .into_iter()
-        .map(|permission| (permission.id(), permission.tier()))
-        .collect()
+    ALL.into_iter().map(|permission| (permission.id(), permission.tier())).collect()
 }
 
 #[cfg(test)]
@@ -246,7 +262,17 @@ mod tests {
     #[test]
     fn tiers_match_the_documented_policy() {
         assert_eq!(Permission::FileRead.tier(), Tier::Automatic);
+        assert_eq!(Permission::WindowRead.tier(), Tier::Automatic);
         assert_eq!(Permission::FileDelete.tier(), Tier::Confirmation);
         assert_eq!(Permission::AgentRun.tier(), Tier::Confirmation);
+        assert_eq!(Permission::WindowControl.tier(), Tier::Confirmation);
+    }
+
+    #[test]
+    fn every_permission_round_trips_through_its_identifier() {
+        for permission in ALL {
+            assert_eq!(Permission::from_id(permission.id()), Some(permission));
+        }
+        assert_eq!(Permission::from_id("shell.run"), None);
     }
 }

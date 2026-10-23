@@ -13,7 +13,16 @@ export type Locality = "local" | "network";
  */
 export type CostTier = "local" | "internet" | "external-api" | "llm";
 
-export type Permission = "system.read" | "process.launch" | "osint.passive" | "file.read" | "file.write" | "file.delete" | "agent.run";
+export type Permission =
+  | "system.read"
+  | "process.launch"
+  | "osint.passive"
+  | "file.read"
+  | "file.write"
+  | "file.delete"
+  | "agent.run"
+  | "window.read"
+  | "window.control";
 
 /** Niveau d'exécution d'une permission (voir docs/PERMISSIONS.md). */
 export type PermissionTier = "automatic" | "confirmation" | "restricted";
@@ -23,10 +32,12 @@ export const PERMISSION_TIERS: Record<Permission, PermissionTier> = {
   "process.launch": "automatic",
   "osint.passive": "automatic",
   "file.read": "automatic",
+  "window.read": "automatic",
   // Ces actions sont confirmées par le natif (courtier de permissions) avant leur exécution.
   "file.write": "confirmation",
   "file.delete": "confirmation",
   "agent.run": "confirmation",
+  "window.control": "confirmation",
 };
 
 export interface CapabilityManifest {

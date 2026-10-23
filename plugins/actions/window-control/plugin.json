@@ -1,0 +1,29 @@
+{
+  "id": "actions.window-control",
+  "name": "Fenêtres ouvertes",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Liste les fenêtres, les ramène au premier plan ou demande leur fermeture (Windows uniquement). Chaque action demande votre accord.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::windows"
+  ],
+  "capabilities": [
+    "window.list",
+    "window.focus",
+    "window.close"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "window.read",
+    "window.control"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

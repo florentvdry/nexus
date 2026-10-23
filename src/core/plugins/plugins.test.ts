@@ -44,6 +44,7 @@ describe("plugins livrés", () => {
       "actions/file-search",
       "actions/process-list",
       "actions/system-info",
+      "actions/window-control",
       "agents/claude-code",
       "documents/file-inspect",
       "languages/en",
@@ -117,6 +118,20 @@ describe("activation isolée", () => {
     const healthy = activatePlugin({ ...plugin(() => {}), folder: "actions/sain", manifest: manifest({ id: "actions.sain" }) }, api);
     expect(broken).toMatchObject({ state: "failed", error: "bug du plugin" });
     expect(healthy.state).toBe("active");
+  });
+
+  it("donne à chaque capacité un pont attribué à son plugin", async () => {
+    const api = noopApi();
+    const scoped = { marker: "pont attribué" } as never;
+    const forPlugin = vi.fn(() => scoped);
+    const inner = vi.fn(async () => ({ caption: "ok", presentations: [], source: { capabilityId: "demo.liste", locality: "local" as const, collectedAt: 0 } }));
+    const status = activatePlugin(plugin((host) => host.registerCapability({ id: "demo.liste" } as never, inner), { capabilities: ["demo.liste"] }), api);
+    expect(status.state).toBe("active");
+
+    const registered = vi.mocked(api.registerCapability).mock.calls[0][1];
+    await registered({}, { bridge: { forPlugin } } as never);
+    expect(forPlugin).toHaveBeenCalledWith("actions.demo");
+    expect(inner).toHaveBeenCalledWith({}, expect.objectContaining({ bridge: scoped }));
   });
 
   it("refuse un catalogue d'applications non déclaré dans le manifeste", () => {
