@@ -42,6 +42,8 @@ jobs:
           workspaces: src-tauri
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
+      # Le validateur officiel contrôle les exemples livrés : un paquet cassé fait échouer la CI.
+      - run: cargo run --bin nexus-plugin -- validate ../examples/plugins/community.exemple.verbes
 
   desktop:
     name: Windows (build de l'application)

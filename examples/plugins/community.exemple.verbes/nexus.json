@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "community.exemple.verbes",
+  "name": "Verbes supplémentaires",
+  "version": "1.0.0",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "description": "Quelques verbes et noms alternatifs en plus du vocabulaire intégré. Exemple de paquet de données.",
+  "engines": { "nexus": ">=0.1.0 <1.0.0" },
+  "kinds": ["language", "aliases"],
+  "entryPoints": {
+    "language": "language.json",
+    "aliases": "aliases.json"
+  },
+  "permissions": []
+}

@@ -3,6 +3,7 @@ pub mod grants;
 pub mod host;
 pub mod journal;
 pub mod permissions;
+pub mod plugin_store;
 pub mod plugins;
 
 use std::path::PathBuf;
@@ -13,6 +14,8 @@ use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 use error::AdapterError;
 use grants::{require, require_core};
 use journal::{Journal, JournalEntry};
+use plugin_store::{Installed, PackData, Prepared, Store};
+use std::sync::Arc;
 use host::runner;
 use permissions::{Broker, Permission, Row};
 use plugins as connectors;
@@ -236,6 +239,115 @@ fn journal_clear(store: State<'_, JournalStore>, caller: String) -> Result<(), A
     store.get()?.clear()
 }
 
+/// Magasin des plugins ouvert au démarrage. `None` si le dossier de données n'a pas pu être ouvert.
+pub struct PluginStore(Option<Arc<Store>>);
+
+impl PluginStore {
+    fn get(&self) -> Result<Arc<Store>, AdapterError> {
+        self.0.clone().ok_or_else(|| AdapterError::Operation("magasin des plugins indisponible sur cette installation".into()))
+    }
+}
+
+fn plugin_requester_row(caller: &str) -> Row {
+    Row { key: "requester".into(), value: caller.to_string() }
+}
+
+/// Étape 1 : examiner une source. Une adresse Git est téléchargée (sans exécution) seulement après accord.
+#[tauri::command]
+async fn plugin_prepare(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, caller: String, source: String) -> Result<Prepared, AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    let store = store.get()?;
+    let broker = broker.inner().clone_handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let rows = vec![Row { key: "source".into(), value: source.clone() }, plugin_requester_row(&caller)];
+        permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
+        if source.starts_with("https://") {
+            store.prepare_git(&source)
+        } else {
+            store.prepare_folder(std::path::Path::new(&source))
+        }
+    })
+    .await
+    .map_err(blocking_failed)?
+}
+
+/// Étape 2 : installer le plugin examiné. L'accord porte sur l'empreinte affichée : tout changement entre-temps est refusé.
+#[tauri::command]
+async fn plugin_install(
+    app: AppHandle,
+    broker: State<'_, Broker>,
+    store: State<'_, PluginStore>,
+    caller: String,
+    staging_id: String,
+    digest: String,
+) -> Result<Installed, AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    let store = store.get()?;
+    let broker = broker.inner().clone_handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let prepared = store.staged(&staging_id)?;
+        let previous = store.list()?.into_iter().find(|installed| installed.id == prepared.id);
+        let mut rows = vec![
+            Row { key: "plugin".into(), value: format!("{} — {}", prepared.id, prepared.name) },
+            Row { key: "version".into(), value: prepared.version.clone() },
+            Row { key: "source".into(), value: prepared.source.clone() },
+            Row { key: "commit".into(), value: prepared.commit.clone().unwrap_or_else(|| "dossier local".into()) },
+            Row { key: "kinds".into(), value: prepared.kinds.join(", ") },
+            Row { key: "digest".into(), value: prepared.digest.chars().take(23).collect() },
+        ];
+        if let Some(previous) = previous {
+            rows.push(Row { key: "previous".into(), value: previous.version });
+        }
+        rows.push(plugin_requester_row(&caller));
+        permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
+        store.install(&staging_id, &digest)
+    })
+    .await
+    .map_err(blocking_failed)?
+}
+
+#[tauri::command]
+async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, caller: String, id: String) -> Result<(), AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    let store = store.get()?;
+    let broker = broker.inner().clone_handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let installed = store.list()?.into_iter().find(|entry| entry.id == id).ok_or_else(|| AdapterError::InvalidTarget(id.clone()))?;
+        let rows = vec![
+            Row { key: "plugin".into(), value: format!("{} — {}", installed.id, installed.name) },
+            Row { key: "version".into(), value: installed.version },
+            plugin_requester_row(&caller),
+        ];
+        permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
+        store.remove(&id)
+    })
+    .await
+    .map_err(blocking_failed)?
+}
+
+#[tauri::command]
+async fn plugin_list(caller: String, store: State<'_, PluginStore>) -> Result<Vec<Installed>, AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    let store = store.get()?;
+    tauri::async_runtime::spawn_blocking(move || store.list()).await.map_err(blocking_failed)?
+}
+
+/// Paquets actifs, lus par l'interface seule pour enrichir la compréhension des commandes.
+#[tauri::command]
+async fn plugin_packs(caller: String, store: State<'_, PluginStore>) -> Result<Vec<PackData>, AdapterError> {
+    require_core(&caller)?;
+    let store = store.get()?;
+    tauri::async_runtime::spawn_blocking(move || store.packs()).await.map_err(blocking_failed)?
+}
+
+#[tauri::command]
+async fn plugin_index(caller: String) -> Result<Vec<plugin_store::index::IndexEntry>, AdapterError> {
+    require(&caller, Permission::PluginManage)?;
+    let url = plugin_store::index::configured_url()
+        .ok_or_else(|| AdapterError::Operation(format!("aucun catalogue configuré : définis {} avec une adresse HTTPS", plugin_store::index::INDEX_ENV)))?;
+    tauri::async_runtime::spawn_blocking(move || plugin_store::index::fetch(&url)).await.map_err(blocking_failed)?
+}
+
 #[tauri::command]
 fn agent_cancel(runs: State<'_, Runs>, caller: String, run_id: String) -> Result<bool, AdapterError> {
     require(&caller, Permission::AgentRun)?;
@@ -289,6 +401,12 @@ fn open_journal(app: &tauri::App) -> Option<Journal> {
     }
 }
 
+fn open_plugin_store(app: &tauri::App) -> Option<Arc<Store>> {
+    let root = app.path().app_data_dir().ok()?.join("plugins");
+    let known: Vec<&'static str> = plugins::actions::apps::CATALOG.iter().map(|spec| spec.id).collect();
+    Some(Arc::new(Store::new(root, known)))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -298,6 +416,7 @@ pub fn run() {
             app.manage(Broker::default());
             app.manage(Runs::default());
             app.manage(JournalStore(open_journal(app)));
+            app.manage(PluginStore(open_plugin_store(app)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -323,7 +442,13 @@ pub fn run() {
             journal_set_enabled,
             journal_record,
             journal_list,
-            journal_clear
+            journal_clear,
+            plugin_prepare,
+            plugin_install,
+            plugin_remove,
+            plugin_list,
+            plugin_packs,
+            plugin_index
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de NEXUS");

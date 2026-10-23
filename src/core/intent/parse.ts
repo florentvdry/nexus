@@ -21,6 +21,10 @@ export type Intent =
   | { type: "WINDOW_LIST" }
   | { type: "WINDOW_FOCUS"; name: string }
   | { type: "WINDOW_CLOSE"; name: string }
+  | { type: "PLUGIN_CATALOG" }
+  | { type: "PLUGIN_LIST" }
+  | { type: "PLUGIN_INSTALL"; target: string }
+  | { type: "PLUGIN_REMOVE"; id: string }
   | { type: "AGENT_RUN"; project?: string; prompt?: string }
   | { type: "UNKNOWN"; text: string };
 
@@ -70,6 +74,11 @@ const WINDOW_CLOSE = /\b(?:ferme|fermer|close)\s+(?:la |le |the )?fen[eê]tre\s+
 const WINDOW_FOCUS = /\b(?:passe|bascule|active|activer|affiche|montre|focus|switch)\s+(?:sur\s+|to\s+)?(?:la |le |the )?fen[eê]tre\s+(?!(?:toutes?|cette|ce|this|all)\b)(.+?)\s*[.!?]*$/i;
 const WINDOW_LIST = /\b(?:liste|lister|montre|affiche|quelles?|list|show)\b.*\bfen[eê]tres\b|\bfen[eê]tres\b.*\b(?:ouvertes?|open)\b/i;
 const CLOSE_VERB = /\b(?:ferme|fermer|close)\b/i;
+/** Plugins : « installe le plugin <adresse ou identifiant> », « supprime le plugin <identifiant> ». */
+const PLUGIN_INSTALL = /\b(?:installe|installer|install|ajoute|ajouter|add)\s+(?:le |un |the |a )?plugin\s+(.+?)\s*[.!?]*$/i;
+const PLUGIN_REMOVE = /\b(?:supprime|supprimer|desinstalle|desinstaller|remove|uninstall)\s+(?:le |the )?plugin\s+([a-z0-9.-]+)\s*[.!?]*$/i;
+const PLUGIN_CATALOG = /\bplugins?\b.*\b(?:disponibles?|catalogue|available|marketplace)\b|\b(?:catalogue|marketplace)\b.*\bplugins?\b/i;
+const PLUGIN_LIST = /\b(?:liste|lister|list|quels?|mes|installes?)\b.*\bplugins?\b|\bplugins?\s+(?:installes?|installed)\b/i;
 
 function searchPeriod(raw: string): number | undefined {
   if (/\bcette annee\b|\bthis year\b/i.test(raw)) return 365;
@@ -111,6 +120,13 @@ function classifyNative(raw: string): Intent | null {
   const windowFocus = raw.match(WINDOW_FOCUS);
   if (windowFocus) return { type: "WINDOW_FOCUS", name: unquote(windowFocus[1]) };
   if (WINDOW_LIST.test(raw) && !CLOSE_VERB.test(raw)) return { type: "WINDOW_LIST" };
+
+  const pluginRemove = raw.match(PLUGIN_REMOVE);
+  if (pluginRemove) return { type: "PLUGIN_REMOVE", id: pluginRemove[1].toLowerCase() };
+  const pluginInstall = raw.match(PLUGIN_INSTALL);
+  if (pluginInstall) return { type: "PLUGIN_INSTALL", target: unquote(pluginInstall[1]) };
+  if (PLUGIN_CATALOG.test(raw)) return { type: "PLUGIN_CATALOG" };
+  if (PLUGIN_LIST.test(raw)) return { type: "PLUGIN_LIST" };
 
   const hasPath = /[\\/]/.test(raw);
   if (FILE_SEARCH_VERB.test(raw) && FILE_NOUN.test(raw) && !hasPath) {

@@ -19,6 +19,7 @@ const GRANTS: &[(&str, &[Permission])] = &[
     ("actions.file-operations", &[Permission::FileWrite, Permission::FileDelete]),
     ("agents.claude-code", &[Permission::AgentRun]),
     ("actions.window-control", &[Permission::WindowRead, Permission::WindowControl]),
+    ("actions.plugin-manager", &[Permission::PluginManage]),
 ];
 
 /// Refuse l'action si l'appelant n'a pas reçu cette permission dans son manifeste.

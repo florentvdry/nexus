@@ -59,6 +59,7 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | `agent.run` | confirmation | oui (demande à chaque fois) | `agent.claude-code` |
 | `window.read` | automatic | oui | `actions.window-control` : liste des fenêtres visibles (Windows) |
 | `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) |
+| `plugin.manage` | confirmation | oui (demande à chaque fois) | `actions.plugin-manager` : examiner, installer, supprimer un plugin de données |
 
 ### Qui peut appeler quoi : l'identité de l'appelant
 
@@ -74,6 +75,7 @@ déclarée sans être accordée, ou accordée sans être déclarée, fait échou
 | `actions.file-operations` | `file.write`, `file.delete` (chacune confirmée) |
 | `agents.claude-code` | `agent.run` (confirmé) |
 | `actions.window-control` | `window.read`, `window.control` (confirmé) |
+| `actions.plugin-manager` | `plugin.manage` (confirmé à chaque étape) |
 | `core` (interface) | répondre aux confirmations, gérer le journal. Rien d'autre. |
 
 Chaque plugin ne reçoit qu'un pont attribué à son identifiant : il ne peut pas agir au nom d'un autre plugin
@@ -123,6 +125,18 @@ fenêtre dédiée) et une identité que la fenêtre ne peut pas choisir.
 - La fermeture envoie `WM_CLOSE`. L'application décide : elle peut refuser, ou demander d'enregistrer. NEXUS ne termine jamais un processus.
 - NEXUS ne ferme jamais sa propre fenêtre.
 - Identifiant de fenêtre revérifié juste avant chaque action : une fenêtre fermée entre-temps n'est pas remplacée par une autre.
+
+## Plugins de données (phase 5)
+
+- Installer un plugin demande **deux confirmations** : la première avant tout accès réseau (la source), la seconde avant
+  l'installation (identifiant, version, commit, types, empreinte). La seconde porte sur l'empreinte affichée : un contenu
+  modifié entre-temps est refusé.
+- Supprimer un plugin demande une confirmation.
+- Un plugin de données n'a aucune permission native : il ne peut que compléter le vocabulaire et les noms d'applications.
+- Un plugin dont le contenu a changé après approbation n'est plus chargé. Son état apparaît dans « liste mes plugins ».
+- Les paquets sont revérifiés à chaque commande.
+- Seule l'interface lit les paquets actifs (`plugin_packs`).
+- Git : HTTPS seulement, sans identifiants dans l'adresse, clonage superficiel, aucun script exécuté.
 
 ## Journal des commandes (phase 5)
 

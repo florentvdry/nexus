@@ -58,6 +58,11 @@ Les adresses email ne sont pas encore prises en charge.
   `claude` dans ce dossier et affiche sa réponse, les outils utilisés et les refus de permission. Une annulation est possible
   pendant le run. Le CLI doit être installé et connecté (`npm install -g @anthropic-ai/claude-code`).
 
+**Plugins de données** (phase 5) : « installe le plugin <dossier ou adresse HTTPS> » examine le plugin, puis l'installe
+après deux confirmations. « liste mes plugins », « supprime le plugin <identifiant> ». Un plugin de données ajoute du
+vocabulaire et des noms d'applications ; il ne contient aucun code. Spécification : [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md).
+Exemple : `examples/plugins/community.exemple.verbes`.
+
 Les commandes sont conservées dans un journal local seulement si vous l'activez dans les réglages (désactivé par défaut,
 effaçable à tout moment). Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour ce qui est confirmé, et ce qui ne l'est pas.
 

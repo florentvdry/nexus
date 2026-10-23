@@ -26,6 +26,11 @@ describe("pont natif attribué", () => {
     expect(callNative).toHaveBeenCalledWith("journal_record", { caller: "core", kind: "HELP", text: "aide" });
   });
 
+  it("confie l'installation de plugin à l'identité du gestionnaire de plugins uniquement", async () => {
+    await new TauriNativeBridge().forPlugin("actions.plugin-manager").pluginRemove("community.ana.verbes");
+    expect(callNative).toHaveBeenCalledWith("plugin_remove", { caller: "actions.plugin-manager", id: "community.ana.verbes" });
+  });
+
   it("n'altère pas le pont de l'interface quand un plugin en dérive un autre", async () => {
     const core = new TauriNativeBridge();
     core.forPlugin("agents.claude-code");

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { NativeUnavailableError } from "./adapter";
 import { isDesktopRuntime } from "./index";
 import { callNative } from "./tauri-adapter";
+import type { PluginPackData } from "../plugins/packs";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -58,6 +59,43 @@ export interface ConfirmationRequest {
   expiresInSecs: number;
 }
 
+/** Plugin examiné, en attente d'installation. Son empreinte est celle que l'utilisateur approuve. */
+export interface PreparedPlugin {
+  stagingId: string;
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  kinds: string[];
+  source: string;
+  commit: string | null;
+  digest: string;
+}
+
+export type PluginState = "active" | "modified" | "invalid" | "missing";
+
+export interface InstalledPlugin {
+  id: string;
+  name: string;
+  version: string;
+  source: string;
+  commit: string | null;
+  digest: string;
+  state: PluginState;
+  problems: string[];
+}
+
+/** Entrée du catalogue de plugins : où trouver un plugin, sans code ni binaire. */
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  source: string;
+  kinds: string[];
+}
+
 /** Une commande du journal local. Seuls le texte saisi ou dicté et son type sont conservés. */
 export interface JournalEntry {
   id: number;
@@ -81,6 +119,14 @@ export interface NativeBridge {
   listWindows(): Promise<WindowEntry[]>;
   focusWindow(id: number): Promise<void>;
   closeWindow(id: number): Promise<void>;
+  /** Plugins de données : examen, installation, suppression. Chaque étape demande votre accord. */
+  pluginPrepare(source: string): Promise<PreparedPlugin>;
+  pluginInstall(stagingId: string, digest: string): Promise<InstalledPlugin>;
+  pluginRemove(id: string): Promise<void>;
+  pluginList(): Promise<InstalledPlugin[]>;
+  /** Paquets actifs, lus par l'interface seule. */
+  pluginPacks(): Promise<PluginPackData[]>;
+  pluginIndex(): Promise<CatalogEntry[]>;
   /** Journal local : réservé à l'interface, désactivé par défaut. */
   journalStatus(): Promise<boolean>;
   setJournalEnabled(enabled: boolean): Promise<void>;
@@ -155,6 +201,30 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<void>("window_close", { id });
   }
 
+  pluginPrepare(source: string): Promise<PreparedPlugin> {
+    return this.#call<PreparedPlugin>("plugin_prepare", { source });
+  }
+
+  pluginInstall(stagingId: string, digest: string): Promise<InstalledPlugin> {
+    return this.#call<InstalledPlugin>("plugin_install", { stagingId, digest });
+  }
+
+  pluginRemove(id: string): Promise<void> {
+    return this.#call<void>("plugin_remove", { id });
+  }
+
+  pluginList(): Promise<InstalledPlugin[]> {
+    return this.#call<InstalledPlugin[]>("plugin_list");
+  }
+
+  pluginPacks(): Promise<PluginPackData[]> {
+    return this.#call<PluginPackData[]>("plugin_packs");
+  }
+
+  pluginIndex(): Promise<CatalogEntry[]> {
+    return this.#call<CatalogEntry[]>("plugin_index");
+  }
+
   journalStatus(): Promise<boolean> {
     return this.#call<boolean>("journal_status");
   }
@@ -199,6 +269,12 @@ export class UnavailableNativeBridge implements NativeBridge {
   }
 
   forPlugin = (): NativeBridge => this;
+  pluginPrepare = () => this.unavailable();
+  pluginInstall = () => this.unavailable();
+  pluginRemove = () => this.unavailable();
+  pluginList = () => this.unavailable();
+  pluginPacks = () => this.unavailable();
+  pluginIndex = () => this.unavailable();
   journalStatus = () => this.unavailable();
   setJournalEnabled = () => this.unavailable();
   recordJournal = () => this.unavailable();

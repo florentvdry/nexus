@@ -1,0 +1,8 @@
+{
+  "locale": "fr",
+  "phrases": {
+    "openVerbs": ["allume", "mets en route"],
+    "help": ["a l aide"]
+  },
+  "fillers": ["le", "la"]
+}

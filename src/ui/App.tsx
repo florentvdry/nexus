@@ -101,6 +101,9 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const windowsRef = useRef(windows);
   const [answerBridge] = useState(() => createNativeBridge());
+  useEffect(() => {
+    void engine.refreshPacks();
+  }, [engine]);
   const settingsRef = useRef(voiceSettings);
 
   const t = (key: MessageKey, params?: Record<string, string | number>) => translate(locale, key, params);

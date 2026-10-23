@@ -1,0 +1,29 @@
+{
+  "id": "actions.plugin-manager",
+  "name": "Gestionnaire de plugins",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Consulte le catalogue, installe et supprime des plugins de données. Chaque action demande votre accord.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "plugin_store::store"
+  ],
+  "capabilities": [
+    "plugin.catalog",
+    "plugin.list",
+    "plugin.install",
+    "plugin.remove"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "plugin.manage"
+  ],
+  "locality": "network",
+  "cost": "internet",
+  "offline": false
+}

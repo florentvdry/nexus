@@ -34,10 +34,11 @@ pub enum Permission {
     AgentRun,
     WindowRead,
     WindowControl,
+    PluginManage,
 }
 
 /// Toutes les permissions natives, dans l'ordre d'affichage des réglages.
-pub const ALL: [Permission; 7] = [
+pub const ALL: [Permission; 8] = [
     Permission::SystemRead,
     Permission::FileRead,
     Permission::FileWrite,
@@ -45,6 +46,7 @@ pub const ALL: [Permission; 7] = [
     Permission::AgentRun,
     Permission::WindowRead,
     Permission::WindowControl,
+    Permission::PluginManage,
 ];
 
 impl Permission {
@@ -57,6 +59,7 @@ impl Permission {
             Permission::AgentRun => "agent.run",
             Permission::WindowRead => "window.read",
             Permission::WindowControl => "window.control",
+            Permission::PluginManage => "plugin.manage",
         }
     }
 
@@ -67,7 +70,9 @@ impl Permission {
     pub fn tier(self) -> Tier {
         match self {
             Permission::SystemRead | Permission::FileRead | Permission::WindowRead => Tier::Automatic,
-            Permission::FileWrite | Permission::FileDelete | Permission::AgentRun | Permission::WindowControl => Tier::Confirmation,
+            Permission::FileWrite | Permission::FileDelete | Permission::AgentRun | Permission::WindowControl | Permission::PluginManage => {
+                Tier::Confirmation
+            }
         }
     }
 }

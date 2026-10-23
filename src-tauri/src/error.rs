@@ -53,6 +53,8 @@ pub enum AdapterError {
     AgentFailed(String),
     #[error("fonction indisponible sur cette plateforme : {0}")]
     Unsupported(String),
+    #[error("plugin invalide : {0}")]
+    PluginInvalid(String),
     #[error("fenêtre introuvable : {0}")]
     WindowNotFound(String),
 }

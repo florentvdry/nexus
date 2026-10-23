@@ -141,6 +141,23 @@ describe("parseIntent — fenêtres (phase 4)", () => {
   });
 });
 
+describe("parseIntent — plugins de données (phase 5)", () => {
+  it.each([
+    ["installe le plugin https://example.org/ana/verbes.git", { type: "PLUGIN_INSTALL", target: "https://example.org/ana/verbes.git" }],
+    ["Jarvis, installe le plugin community.ana.verbes.", { type: "PLUGIN_INSTALL", target: "community.ana.verbes" }],
+    ["supprime le plugin community.ana.verbes", { type: "PLUGIN_REMOVE", id: "community.ana.verbes" }],
+    ["liste mes plugins", { type: "PLUGIN_LIST" }],
+    ["quels plugins sont installés ?", { type: "PLUGIN_LIST" }],
+    ["montre les plugins disponibles", { type: "PLUGIN_CATALOG" }],
+  ])("« %s » est reconnue", (input, intent) => {
+    expect(parseIntent(input).intent).toEqual(intent);
+  });
+
+  it("ne confond pas la suppression d'un fichier avec celle d'un plugin", () => {
+    expect(parseIntent("supprime /home/ana/Documents/vieux.txt").intent.type).toBe("FILE_TRASH");
+  });
+});
+
 describe("parseIntent — fichiers, processus et agents (phase 4)", () => {
   it("cherche des fichiers par extension, dossier et période", () => {
     expect(parseIntent("Cherche mes fichiers PDF téléchargés cette semaine").intent).toEqual({

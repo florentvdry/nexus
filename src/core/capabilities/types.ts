@@ -22,7 +22,8 @@ export type Permission =
   | "file.delete"
   | "agent.run"
   | "window.read"
-  | "window.control";
+  | "window.control"
+  | "plugin.manage";
 
 /** Niveau d'exécution d'une permission (voir docs/PERMISSIONS.md). */
 export type PermissionTier = "automatic" | "confirmation" | "restricted";
@@ -38,6 +39,7 @@ export const PERMISSION_TIERS: Record<Permission, PermissionTier> = {
   "file.delete": "confirmation",
   "agent.run": "confirmation",
   "window.control": "confirmation",
+  "plugin.manage": "confirmation",
 };
 
 export interface CapabilityManifest {

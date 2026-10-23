@@ -101,6 +101,29 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Exclus** : résultats, contenu des fichiers, réponses de Claude Code.
 - **Conséquence** : la base est créée vide au démarrage, sans aucune donnée personnelle, même si le journal reste désactivé.
 
+## ADR-019 — Plugins de données d'abord, sans code
+
+- **Choix** : la version 1 n'accepte que des paquets de données (`language`, `aliases`). Les types avec code sont refusés.
+- **Pourquoi** : un plugin avec code, exécuté dans la fenêtre principale, aurait les mêmes droits que l'interface. Tant
+  qu'un isolement réel n'existe pas (WebAssembly ou iframe), il ne doit pas exister. Les données seules suffisent à
+  étendre la compréhension, sans risque.
+- **Conséquence** : un paquet ne peut pas ajouter d'action, seulement des mots et des alias vers le catalogue existant.
+
+## ADR-020 — Approbation par empreinte et lock
+
+- **Choix** : l'utilisateur approuve une empreinte SHA-256 de tous les fichiers, pas un nom ou une version. Le natif
+  recalcule l'empreinte juste avant d'installer. Le lock garde le commit, l'empreinte et la date d'approbation.
+- **Pourquoi** : un auteur peut republier une version sous le même numéro. Une empreinte garantit que l'utilisateur
+  valide exactement ce qu'il installe, et qu'une modification ultérieure désactive le plugin.
+- **Limite** : l'empreinte ne prouve pas l'identité de l'auteur. Une signature viendra plus tard.
+
+## ADR-021 — Installation depuis Git : HTTPS, sans script
+
+- **Choix** : seules les adresses HTTPS sans identifiants sont clonées (`--depth 1`, sans invite, délai de 120 s). Aucun
+  hook ni script n'est exécuté. Les dossiers locaux sont copiés, sans lien symbolique.
+- **Pourquoi** : c'est le modèle sûr constaté chez Omarchy, sans son absence de contrôle. Un dépôt ne peut rien exécuter
+  pendant l'installation.
+
 ## ADR-016 — Claude Code via le CLI officiel, en mode non interactif
 
 - **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.

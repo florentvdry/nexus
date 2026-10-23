@@ -42,6 +42,7 @@ describe("plugins livrés", () => {
       "actions/app-launch",
       "actions/file-operations",
       "actions/file-search",
+      "actions/plugin-manager",
       "actions/process-list",
       "actions/system-info",
       "actions/window-control",

@@ -1,3 +1,4 @@
+import { registerPacks } from "../plugins/packs";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
@@ -46,6 +47,7 @@ interface Reply {
 // Les permissions « confirmation » sont accordées ici : elles autorisent seulement à demander l'action.
 // Le natif (courtier de permissions) refuse l'exécution tant que l'utilisateur n'a pas répondu.
 const DEFAULT_GRANTED: Permission[] = [
+  "plugin.manage",
   "system.read",
   "process.launch",
   "osint.passive",
@@ -63,6 +65,7 @@ const PERMISSION_TITLE: Record<string, MessageKey> = {
   "file.delete": "confirm.title.fileDelete",
   "agent.run": "confirm.title.agentRun",
   "window.control": "confirm.title.windowControl",
+  "plugin.manage": "confirm.title.pluginManage",
 };
 
 /** Libellé de chaque ligne de détail d'une demande de confirmation. */
@@ -75,6 +78,13 @@ const ROW_LABEL: Record<string, MessageKey> = {
   window: "confirm.row.window",
   process: "confirm.row.process",
   requester: "confirm.row.requester",
+  plugin: "confirm.row.plugin",
+  version: "confirm.row.version",
+  commit: "confirm.row.commit",
+  kinds: "confirm.row.kinds",
+  digest: "confirm.row.digest",
+  source: "confirm.row.source",
+  previous: "confirm.row.previous",
 };
 
 function basename(path: string): string {
@@ -166,6 +176,8 @@ export class Engine {
   async submit(input: string, options: SubmitOptions = {}): Promise<void> {
     const text = input.trim();
     if (!text) return;
+    // Les paquets sont revérifiés à chaque commande : un plugin modifié après approbation n'influence plus la compréhension.
+    await this.refreshPacks();
 
     const reply = replyFor(options.locale ?? this.#locale);
     this.#emit({ type: "message", role: "user", text, tone: "info", locale: reply.locale });
@@ -214,6 +226,14 @@ export class Engine {
         return this.#runCapability("files.operate", { kind: "trash", path: intent.path }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
       case "PROCESS_LIST":
         return this.#runCapability("system.processes", { limit: "8" }, { labelKey: "task.processes" }, reply);
+      case "PLUGIN_CATALOG":
+        return this.#runCapability("plugin.catalog", {}, { labelKey: "task.pluginCatalog", cancellable: true }, reply);
+      case "PLUGIN_LIST":
+        return this.#runCapability("plugin.list", {}, { labelKey: "task.pluginList" }, reply);
+      case "PLUGIN_INSTALL":
+        return this.#runCapability("plugin.install", { target: intent.target }, { labelKey: "task.pluginInstall", labelParams: { target: intent.target }, cancellable: true }, reply);
+      case "PLUGIN_REMOVE":
+        return this.#runCapability("plugin.remove", { id: intent.id }, { labelKey: "task.pluginRemove", labelParams: { id: intent.id } }, reply);
       case "WINDOW_LIST":
         return this.#runCapability("window.list", {}, { labelKey: "task.windows" }, reply);
       case "WINDOW_FOCUS":
@@ -269,6 +289,20 @@ export class Engine {
       this.#emit({ type: "present", content, source: result.source });
     }
     this.#reply(reply, result.caption);
+    // Un plugin installé ou supprimé change les paquets actifs : la compréhension suit immédiatement.
+    if (capabilityId === "plugin.install" || capabilityId === "plugin.remove") void this.refreshPacks();
+  }
+
+  /**
+   * Recharge les paquets de données actifs. Sans magasin de plugins (navigateur, installation indisponible),
+   * la compréhension reste celle des plugins intégrés.
+   */
+  async refreshPacks(): Promise<void> {
+    try {
+      registerPacks(await this.#bridge.pluginPacks());
+    } catch {
+      // Rien à charger : le moteur continue avec les plugins intégrés.
+    }
   }
 
   #context(signal: AbortSignal, reply: Reply): CapabilityContext {

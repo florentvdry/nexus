@@ -199,8 +199,12 @@ si ses critères sont atteints et vérifiés.
 - [x] Identité des appelants côté natif : chaque plugin ne peut exercer que les permissions de son manifeste, et seule l'interface répond aux confirmations (voir `docs/PERMISSIONS.md`).
 - [x] Journal local des commandes dans SQLite : désactivé par défaut, 500 commandes au plus, vidable, réservé à l'interface.
 - [x] Réglage du journal dans les options, avec les dernières commandes affichées.
-- [ ] Chargement des plugins depuis un dossier utilisateur, avec validation du manifeste à chaque démarrage.
-- [ ] Marketplace : le format de catalogue n'est pas défini. Le site de référence (plugins.omarchy.org) n'est pas joignable depuis cet environnement, donc la forme du catalogue reste à concevoir.
+- [x] Plugins de données chargés depuis un dossier utilisateur : validation, approbation par empreinte, lock, revérification à chaque commande (spécification : `docs/PLUGIN-SPEC.md`).
+- [x] Installation depuis un dépôt Git HTTPS ou un dossier local, avec deux confirmations et suppression confirmée.
+- [x] Validateur officiel `nexus-plugin`, utilisé par la CI sur les exemples.
+- [x] Format de catalogue défini (`index.json`, adresse configurée par `NEXUS_PLUGIN_INDEX`). Aucun catalogue public n'existe encore : le site de référence (plugins.omarchy.org) n'est pas joignable depuis cet environnement.
+- [ ] Plugins avec code : attendent la décision WebAssembly ou iframe (spécification, § 10).
+- [ ] Signature des auteurs, métriques sociales et mises à jour automatiques : hors périmètre de la version 1.
 - [ ] Modèle de langage local ou distant pour les cas que les règles ne couvrent pas.
 
 ### Critère d'acceptation (journal)
@@ -222,5 +226,7 @@ si ses critères sont atteints et vérifiés.
 ### Limites connues
 
 - Le journal conserve le texte des commandes, qui peut contenir des chemins. C'est pourquoi il est désactivé par défaut.
-- Les plugins restent compilés dans l'application.
+- Les plugins avec code restent compilés dans l'application.
+- L'installation depuis une adresse HTTPS n'a été testée qu'avec un dépôt Git local : aucun dépôt HTTPS public de plugin n'existe pour l'instant.
+- Le validateur et l'installation vérifient l'empreinte, pas l'identité de l'auteur.
 - Le modèle de langage n'est pas branché : toute compréhension reste déterministe.

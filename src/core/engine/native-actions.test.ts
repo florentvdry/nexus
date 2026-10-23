@@ -13,6 +13,34 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     emitConfirmation(request: ConfirmationRequest): void;
   } = {
     forPlugin: () => bridge,
+    pluginPrepare: vi.fn(async (source: string) => ({
+      stagingId: "stage-1-0",
+      id: "community.ana.verbes",
+      name: "Verbes",
+      version: "1.0.0",
+      author: "Ana",
+      description: "Vocabulaire",
+      kinds: ["language"],
+      source,
+      commit: null,
+      digest: "sha256:abc",
+    })),
+    pluginInstall: vi.fn(async () => ({
+      id: "community.ana.verbes",
+      name: "Verbes",
+      version: "1.0.0",
+      source: "https://example.org/ana/verbes.git",
+      commit: null,
+      digest: "sha256:abc",
+      state: "active" as const,
+      problems: [],
+    })),
+    pluginRemove: vi.fn(async () => {}),
+    pluginList: vi.fn(async () => []),
+    pluginPacks: vi.fn(async () => []),
+    pluginIndex: vi.fn(async () => [
+      { id: "community.ana.verbes", name: "Verbes", version: "1.0.0", description: "Vocabulaire", source: "https://example.org/ana/verbes.git", kinds: ["language"] },
+    ]),
     journalStatus: vi.fn(async () => false),
     setJournalEnabled: vi.fn(async () => {}),
     recordJournal: vi.fn(async () => false),
@@ -64,6 +92,49 @@ function setup(bridge: NativeBridge) {
 
 const presented = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "present" ? [event.content] : []));
 const assistant = (events: EngineEvent[]) => events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : []));
+
+describe("plugins de données (phase 5)", () => {
+  it("examine puis installe une adresse HTTPS, chaque étape passant par le natif", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("installe le plugin https://example.org/ana/verbes.git");
+    expect(bridge.pluginPrepare).toHaveBeenCalledWith("https://example.org/ana/verbes.git");
+    expect(bridge.pluginInstall).toHaveBeenCalledWith("stage-1-0", "sha256:abc");
+    expect(assistant(events)).toContain("Plugin « community.ana.verbes » installé (version 1.0.0).");
+  });
+
+  it("résout un identifiant du catalogue avant d'examiner la source", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("installe le plugin community.ana.verbes");
+    expect(bridge.pluginIndex).toHaveBeenCalled();
+    expect(bridge.pluginPrepare).toHaveBeenCalledWith("https://example.org/ana/verbes.git");
+  });
+
+  it("n'examine rien quand l'identifiant est absent du catalogue", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("installe le plugin community.inconnu.rien");
+    expect(bridge.pluginPrepare).not.toHaveBeenCalled();
+    expect(assistant(events)).toContain("Aucun plugin « community.inconnu.rien » dans le catalogue.");
+  });
+
+  it("supprime et liste les plugins par leur identifiant", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("supprime le plugin community.ana.verbes");
+    expect(bridge.pluginRemove).toHaveBeenCalledWith("community.ana.verbes");
+    await engine.submit("liste mes plugins");
+    expect(bridge.pluginList).toHaveBeenCalled();
+  });
+
+  it("recharge les paquets après une installation", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("installe le plugin https://example.org/ana/verbes.git");
+    expect(bridge.pluginPacks).toHaveBeenCalled();
+  });
+});
 
 describe("journal des commandes (phase 5)", () => {
   it("transmet chaque commande au journal, qui décide de la conserver", async () => {
