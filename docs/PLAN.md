@@ -98,7 +98,49 @@ si ses critères sont atteints et vérifiés.
 - Le CI Windows compile whisper.cpp (C++) : premier run à surveiller.
 
 ## Phase 3 — Moteur de plugins et premiers outils OSINT
-Non commencée. Dépend de la décision sur l'isolation des processus.
+
+**Statut : implémentée et testée ; le critère « résultats réels sur example.com » n'est pas validé dans cet environnement.**
+
+### Livrables
+
+- [x] Contrat de capacité (manifeste, permissions, délai, localité, coût) appliqué par le registre.
+- [x] Exécution isolée : chaque connecteur tourne dans un processus `nexus-worker` séparé, avec délai (arrêt forcé) et sortie bornée (4 Mo). Une erreur ou un blocage du worker ne fait pas tomber NEXUS.
+- [x] Modèle normalisé : entité, valeur, source avec URL, date de collecte, statut, confiance, détails, note de limite.
+- [x] Statuts : vérifié, correspondance possible, non vérifié, introuvable, source inaccessible, erreur.
+- [x] Connecteurs passifs : DNS A/AAAA (résolveur du système), certificats publics (crt.sh), présence de pseudo (GitHub, GitLab, Codeberg : une requête par plateforme, espacées).
+- [x] Analyse locale de fichier désigné : SHA-256, taille, type détecté, lignes et mots. Le contenu n'est ni copié ni affiché.
+- [x] Résultats partiels : une source en erreur est listée ; le résumé indique le nombre d'erreurs.
+- [x] Intentions : « analyse example.com », « cherche le pseudo X », « analyse le fichier C:\… ». Les adresses email sont refusées explicitement.
+- [x] Affichage en fenêtres : tableau des éléments, détails du fichier, limites de lecture, sources en erreur.
+
+### Critère d'acceptation
+
+« L'utilisateur demande une analyse passive de `example.com`. JARVIS sélectionne les sources adaptées, lance les vérifications et affiche les résultats réellement obtenus avec leurs références. »
+
+| Partie | Résultat | Preuve |
+|---|---|---|
+| Sélection des sources et lancement des vérifications | **Vérifié** : DNS puis crt.sh sont lancés, avec leur propre identifiant de recherche. | Test `osint.test.ts`, E2E Xvfb |
+| Affichage des résultats réellement obtenus | **Vérifié** : les erreurs réelles s'affichent (DNS sans résolveur, crt.sh refusé par le proxy). | Capture `23-final-osint` |
+| Résultats positifs réels pour example.com | **Non validé.** Ce conteneur n'a pas de résolveur DNS et refuse crt.sh. Sur une machine normale, le connecteur doit donner des adresses et des noms de certificats. | À vérifier sous Windows |
+
+### Tests exécutés
+
+- Rust : 38 tests OK, 1 ignoré (transcription Whisper). Les tests de connecteurs couvrent : validation des cibles, DNS sur `localhost` (résolution réelle), analyse d'un fichier réel, rapports de crt.sh et des pseudos contre un **serveur de simulation local** (étiqueté comme tel), délai et arrêt du worker, sortie d'un worker en échec.
+- Worker exécuté seul sur entrée standard : analyse d'un fichier réel OK ; cible invalide, connecteur inconnu et JSON invalide refusés avec code de sortie.
+- Frontend : 123 tests OK, dont les règles OSINT (intentions, agrégation, statuts, email refusé) avec un runner simulé étiqueté.
+- Clippy `-D warnings` OK. Typecheck et build OK.
+- E2E Xvfb : analyse de fichier réussie ; analyse de domaine et de pseudo affichant les sources en erreur réelles.
+
+### Limites connues
+
+- **Réseau de l'environnement de développement** : `crt.sh`, RDAP, DNS-over-HTTPS et `example.com` sont refusés ; la résolution DNS locale ne répond pas. Pour une validation complète, il faut autoriser ces hôtes.
+- Pas de sources d'emails (phase ultérieure, avec garde-fous de finalité et de consentement).
+- Pas de recherche de pseudo sur d'autres plateformes ; la liste est fixe dans le code. Une correspondance n'est jamais une identité.
+- Les enregistrements MX, TXT et NS ne sont pas résolus : le résolveur du système ne les expose pas. Ajout prévu avec un résolveur DNS dédié.
+- Le worker est compilé à côté de l'application en développement. **Avant un installateur**, il faut le déclarer comme binaire externe (`bundle.externalBinaries`) pour chaque cible.
+- Le plugin de connecteurs n'est pas encore chargé depuis un dossier : les connecteurs sont intégrés au binaire. L'API externe viendra avec la phase 5.
+- Pas d'analyse de métadonnées EXIF ni de texte de PDF : seules l'empreinte, le type et les statistiques de texte sont calculées.
+- Les vérifications TLS utilisent le magasin de certificats de l'OS (`platform-verifier`). Sur Linux, un proxy d'inspection peut encore échouer : c'est l'environnement, pas le code.
 
 ## Phase 4 — Automatisation avancée de Windows
 Non commencée.

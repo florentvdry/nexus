@@ -2,11 +2,17 @@ import type { VoiceLanguage } from "./types";
 
 export type VoiceLanguageSetting = "auto" | VoiceLanguage;
 
+/**
+ * Quand les réponses sont lues à voix haute :
+ * `off` jamais · `voice` seulement après une commande vocale · `always` toujours.
+ */
+export type ReplyMode = "off" | "voice" | "always";
+
 export interface VoiceSettings {
   /** Interrupteur général : désactive le micro, la reconnaissance et la synthèse. */
   enabled: boolean;
   language: VoiceLanguageSetting;
-  spokenReplies: boolean;
+  replyMode: ReplyMode;
   volume: number;
   rate: number;
   voiceName: string | null;
@@ -15,7 +21,7 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   enabled: true,
   language: "auto",
-  spokenReplies: false,
+  replyMode: "voice",
   volume: 1,
   rate: 1,
   voiceName: null,
@@ -33,11 +39,18 @@ export function parseVoiceSettings(raw: unknown): VoiceSettings {
   return {
     enabled: typeof value.enabled === "boolean" ? value.enabled : DEFAULT_VOICE_SETTINGS.enabled,
     language,
-    spokenReplies: typeof value.spokenReplies === "boolean" ? value.spokenReplies : DEFAULT_VOICE_SETTINGS.spokenReplies,
+    replyMode: parseReplyMode(value),
     volume: typeof value.volume === "number" ? clamp(value.volume, 0, 1) : DEFAULT_VOICE_SETTINGS.volume,
     rate: typeof value.rate === "number" ? clamp(value.rate, 0.5, 1.5) : DEFAULT_VOICE_SETTINGS.rate,
     voiceName: typeof value.voiceName === "string" ? value.voiceName : null,
   };
+}
+
+/** Accepte le mode actuel, et convertit l'ancien réglage booléen `spokenReplies` (phase 2). */
+function parseReplyMode(value: Record<string, unknown>): ReplyMode {
+  if (value.replyMode === "off" || value.replyMode === "voice" || value.replyMode === "always") return value.replyMode;
+  if (typeof value.spokenReplies === "boolean") return value.spokenReplies ? "always" : "off";
+  return DEFAULT_VOICE_SETTINGS.replyMode;
 }
 
 function clamp(value: number, min: number, max: number): number {

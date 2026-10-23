@@ -5,6 +5,8 @@ import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, 
 import { APPS } from "../intent/dictionaries";
 import { parseIntent, type Intent } from "../intent/parse";
 import { createNativeAdapter, type NativeAdapter } from "../native";
+import { createOsintRunner } from "../osint/runner";
+import type { OsintRunner } from "../osint/types";
 import type { PresentedContent } from "../presentation/types";
 import { type Task, TaskCancelledError, TaskManager } from "../tasks/taskManager";
 import { hasMessage, translate, type Locale, type MessageKey } from "../../i18n/messages";
@@ -19,6 +21,7 @@ export type EngineEvent =
 
 export interface EngineOptions {
   native?: NativeAdapter;
+  osint?: OsintRunner;
   locale: Locale;
   /** Permissions accordées par défaut : elles correspondent au niveau « automatique ». */
   grantedPermissions?: Permission[];
@@ -37,7 +40,7 @@ interface Reply {
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
 }
 
-const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch"];
+const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch", "osint.passive", "file.read"];
 
 function replyFor(locale: Locale): Reply {
   return { locale, t: (key, params) => translate(locale, key, params) };
@@ -49,6 +52,7 @@ function replyFor(locale: Locale): Reply {
  */
 export class Engine {
   readonly #native: NativeAdapter;
+  readonly #osint: OsintRunner;
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
   readonly #listeners = new Set<(event: EngineEvent) => void>();
@@ -58,6 +62,7 @@ export class Engine {
 
   constructor(options: EngineOptions) {
     this.#native = options.native ?? createNativeAdapter();
+    this.#osint = options.osint ?? createOsintRunner();
     this.#locale = options.locale;
     this.#holdMs = options.responseHoldMs ?? 2500;
     this.#registry = new CapabilityRegistry(options.grantedPermissions ?? DEFAULT_GRANTED);
@@ -129,6 +134,14 @@ export class Engine {
       }
       case "SYSTEM_INFO":
         return this.#runCapability("system.info", {}, { labelKey: "task.systemInfo" }, reply);
+      case "OSINT_DOMAIN":
+        return this.#runCapability("osint.domain", { domain: intent.domain }, { labelKey: "task.osintDomain", labelParams: { domain: intent.domain } }, reply);
+      case "OSINT_USERNAME":
+        return this.#runCapability("osint.username", { username: intent.username }, { labelKey: "task.osintUsername", labelParams: { username: intent.username } }, reply);
+      case "DOCUMENT_INSPECT":
+        return this.#runCapability("document.inspect", { path: intent.path }, { labelKey: "task.inspectFile", labelParams: { file: intent.path.split(/[\\/]/).pop() ?? intent.path } }, reply);
+      case "UNSUPPORTED":
+        return this.#reply(reply, reply.t(intent.reason === "email" ? "intent.emailUnsupported" : "intent.unknown", { text: intent.text }), "error");
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -174,7 +187,7 @@ export class Engine {
   }
 
   #context(signal: AbortSignal, reply: Reply): CapabilityContext {
-    return { signal, native: this.#native, locale: reply.locale, t: reply.t };
+    return { signal, native: this.#native, osint: this.#osint, locale: reply.locale, t: reply.t };
   }
 
   #fail(error: CapabilityError, reply: Reply): void {

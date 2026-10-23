@@ -4,7 +4,8 @@ Assistant personnel intelligent pour Windows, open source, inspiré des interfac
 Vous formulez une intention ; NEXUS choisit les outils. Les commandes courantes s'exécutent en
 local, sans modèle de langage et sans abonnement.
 
-> **Statut : phase 1 terminée, phase 2 partiellement livrée** (la transcription attend le modèle Whisper).
+> **Statut : phases 1 et 3 livrées, phase 2 partiellement livrée** (la transcription attend le modèle Whisper, et les
+> résultats OSINT réels attendent l'accès aux sources publiques depuis l'environnement de développement).
 > Voir [docs/PLAN.md](docs/PLAN.md) pour le détail et les limites connues.
 
 ## Ce qui fonctionne aujourd'hui
@@ -24,12 +25,24 @@ local, sans modèle de langage et sans abonnement.
 - Reconnaissance hors ligne avec whisper.cpp et Silero VAD. Aucun audio n'est envoyé à un service externe.
 - Réponses lues à voix haute avec les voix installées sur Windows (option dans les réglages vocaux).
 - Langue : automatique (la réponse suit la langue de la commande), ou français / anglais imposé.
+- Réponses à voix haute : jamais, après une commande vocale (par défaut), ou toujours. Réglable dans les réglages, et par le bouton haut-parleur de la barre de commande.
 
 **Modèle de reconnaissance** : il n'est pas inclus dans NEXUS. Téléchargez `ggml-base.bin` (multilingue, environ 148 Mo)
 depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affiché dans les réglages vocaux :
 
 - Windows : `%APPDATA%\fr.nexus.assistant\models\ggml-base.bin`
 - Autre : valeur de la variable d'environnement `NEXUS_WHISPER_MODEL`, si elle est définie.
+
+## Analyse OSINT (phase 3)
+
+Exemples de demandes :
+
+- « Analyse example.com » : adresses DNS et noms listés dans les journaux publics de certificats.
+- « Recherche le pseudo alice » : présence sur GitHub, GitLab et Codeberg. Une correspondance n'est pas une identité.
+- « Analyse le fichier C:\\Users\\Ana\\contrat.pdf » : empreinte SHA-256, type et statistiques, en local.
+
+Chaque résultat indique sa source, sa référence et son statut. Une source injoignable est signalée, jamais masquée.
+Les adresses email ne sont pas encore prises en charge.
 
 ## Installation pour le développement
 

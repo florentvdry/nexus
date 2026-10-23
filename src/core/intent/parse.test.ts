@@ -51,7 +51,7 @@ describe("parseIntent — informations système", () => {
   });
 
   it("ne confond pas une recherche d'informations avec les ressources de la machine", () => {
-    expect(parseIntent("cherche des informations sur example.com").intent.type).toBe("UNKNOWN");
+    expect(parseIntent("cherche des informations sur Jean Dupont").intent.type).toBe("UNKNOWN");
   });
 });
 
@@ -78,5 +78,37 @@ describe("parseIntent — repli", () => {
 
   it("renvoie UNKNOWN pour une entrée vide", () => {
     expect(parseIntent("   ").intent).toEqual({ type: "UNKNOWN", text: "" });
+  });
+});
+
+describe("parseIntent — analyse OSINT et fichiers", () => {
+  it("extrait le domaine d'une demande d'analyse, sans appel réseau", () => {
+    expect(parseIntent("Analyse example.com").intent).toEqual({ type: "OSINT_DOMAIN", domain: "example.com" });
+    expect(parseIntent("Jarvis, cherche des informations sur Example.COM.").intent).toEqual({ type: "OSINT_DOMAIN", domain: "example.com" });
+    expect(parseIntent("analyse https://www.example.org/page").intent).toEqual({ type: "OSINT_DOMAIN", domain: "www.example.org" });
+  });
+
+  it("n'interprète pas un nom de fichier comme un domaine", () => {
+    expect(parseIntent("analyse rapport.pdf").intent.type).toBe("UNKNOWN");
+  });
+
+  it("extrait le pseudo en gardant sa casse", () => {
+    expect(parseIntent("Recherche le pseudo JeanDupont42 sur internet").intent).toEqual({ type: "OSINT_USERNAME", username: "JeanDupont42" });
+    expect(parseIntent("Recherche ce pseudo sur Internet").intent.type).toBe("UNKNOWN");
+  });
+
+  it("refuse explicitement les adresses email en phase 3", () => {
+    expect(parseIntent("analyse jean.dupont@example.com").intent).toMatchObject({ type: "UNSUPPORTED", reason: "email" });
+  });
+
+  it("garde le chemin de fichier tel quel, avec ses majuscules et ses barres", () => {
+    expect(parseIntent('Analyse le fichier "C:\\Users\\Ana\\Documents\\Contrat.PDF"').intent).toEqual({
+      type: "DOCUMENT_INSPECT",
+      path: "C:\\Users\\Ana\\Documents\\Contrat.PDF",
+    });
+  });
+
+  it("n'attribue pas l'analyse à une simple ouverture d'application", () => {
+    expect(parseIntent("lance discord").intent).toMatchObject({ type: "OPEN_APPLICATION", appId: "discord" });
   });
 });

@@ -17,6 +17,12 @@ registre refuse toute exécution si une permission n'est pas accordée.
 |---|---|---|---|
 | `system.read` | automatic | oui | `system.info` |
 | `process.launch` | automatic | oui | `apps.launch` |
+| `osint.passive` | automatic | oui | `osint.domain`, `osint.username` (sources publiques, sans connexion) |
+| `file.read` | automatic | oui | `document.inspect` (fichier désigné explicitement par l'utilisateur) |
+
+Les connecteurs OSINT de la phase 3 ne font que des lectures publiques et passives. Toute action intrusive
+(scan de ports, tentative de connexion, contournement de protection) relève du niveau `restricted` et reste
+exclue. Une source qui refuse l'accès est signalée ; le connecteur ne cherche pas à la contourner.
 
 Le niveau de chaque permission est défini dans `src/core/capabilities/types.ts` (`PERMISSION_TIERS`).
 Une permission dont le niveau n'est pas `automatic` est refusée tant que le flux de confirmation

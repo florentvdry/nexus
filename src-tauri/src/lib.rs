@@ -1,5 +1,6 @@
 mod apps;
-mod error;
+pub mod connectors;
+pub mod error;
 mod system;
 mod voice;
 
@@ -7,6 +8,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 
 use apps::{AppStatus, LaunchOutcome, OsEnvironment};
+use connectors::{runner, ConnectorReport, ConnectorRequest};
 use error::AdapterError;
 use system::SystemInfo;
 use voice::commands::{self, VoiceState};
@@ -30,6 +32,20 @@ async fn launch_app(app_id: String) -> Result<LaunchOutcome, AdapterError> {
 #[tauri::command]
 async fn list_apps() -> Vec<AppStatus> {
     apps::list(&OsEnvironment)
+}
+
+#[tauri::command]
+async fn osint_run(request: ConnectorRequest) -> Result<ConnectorReport, AdapterError> {
+    if !connectors::CONNECTORS.contains(&request.connector.as_str()) {
+        return Err(AdapterError::UnknownConnector(request.connector));
+    }
+    let timeout = connectors::timeout_for(&request.connector);
+    tauri::async_runtime::spawn_blocking(move || {
+        let worker = runner::worker_path()?;
+        runner::run_isolated(&worker, &request, timeout)
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 /// Un raccourci déjà utilisé par une autre application ne doit pas empêcher NEXUS de démarrer.
@@ -62,7 +78,8 @@ pub fn run() {
             list_apps,
             commands::voice_status,
             commands::voice_start,
-            commands::voice_stop
+            commands::voice_stop,
+            osint_run
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de NEXUS");

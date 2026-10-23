@@ -1,6 +1,7 @@
 import type { NativeAdapter } from "../native/adapter";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import type { PresentedContent } from "../presentation/types";
+import type { OsintRunner } from "../osint/types";
 
 /** local : sans réseau · network : contacte Internet ou un service distant. */
 export type Locality = "local" | "network";
@@ -11,7 +12,7 @@ export type Locality = "local" | "network";
  */
 export type CostTier = "local" | "internet" | "external-api" | "llm";
 
-export type Permission = "system.read" | "process.launch";
+export type Permission = "system.read" | "process.launch" | "osint.passive" | "file.read";
 
 /** Niveau d'exécution d'une permission (voir docs/PERMISSIONS.md). */
 export type PermissionTier = "automatic" | "confirmation" | "restricted";
@@ -19,6 +20,8 @@ export type PermissionTier = "automatic" | "confirmation" | "restricted";
 export const PERMISSION_TIERS: Record<Permission, PermissionTier> = {
   "system.read": "automatic",
   "process.launch": "automatic",
+  "osint.passive": "automatic",
+  "file.read": "automatic",
 };
 
 export interface CapabilityManifest {
@@ -57,6 +60,7 @@ export type Translator = (key: MessageKey, params?: Record<string, string | numb
 export interface CapabilityContext {
   signal: AbortSignal;
   native: NativeAdapter;
+  osint: OsintRunner;
   locale: Locale;
   t: Translator;
 }

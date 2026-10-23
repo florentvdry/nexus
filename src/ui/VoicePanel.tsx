@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listSystemVoices, type SpeechVoice } from "../core/voice/speech-output";
 import { readVoiceModelStatus, type VoiceModelStatus } from "../core/voice/speech-input";
-import type { VoiceSettings, VoiceLanguageSetting } from "../core/voice/settings";
+import type { ReplyMode, VoiceSettings, VoiceLanguageSetting } from "../core/voice/settings";
 import type { MessageKey } from "../i18n/messages";
 
 interface VoicePanelProps {
@@ -47,13 +47,13 @@ export function VoicePanel({ settings, onChange, t, onClose }: VoicePanelProps) 
         </select>
       </label>
 
-      <label className="field toggle">
-        <input
-          type="checkbox"
-          checked={settings.spokenReplies}
-          onChange={(event) => onChange({ spokenReplies: event.target.checked })}
-        />
-        {t("voice.spokenReplies")}
+      <label className="field">
+        <span>{t("voice.spokenReplies")}</span>
+        <select value={settings.replyMode} onChange={(event) => onChange({ replyMode: event.target.value as ReplyMode })}>
+          <option value="off">{t("voice.replies.off")}</option>
+          <option value="voice">{t("voice.replies.voice")}</option>
+          <option value="always">{t("voice.replies.always")}</option>
+        </select>
       </label>
 
       <label className="field">

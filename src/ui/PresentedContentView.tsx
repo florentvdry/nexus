@@ -5,8 +5,9 @@ export function PresentedContentView({ content }: { content: PresentedContent })
     case "information-card":
       return (
         <dl className="info-card">
-          {content.rows.map((row) => (
-            <div key={row.label}>
+          {content.rows.map((row, index) => (
+            // Les valeurs longues (chemins, empreintes, notes) passent sous le libellé pour rester lisibles.
+            <div key={`${index}-${row.label}`} className={row.value.length > 40 ? "stacked" : undefined}>
               <dt>{row.label}</dt>
               <dd>{row.value}</dd>
             </div>

@@ -119,12 +119,23 @@ describe("VoiceController", () => {
     await vi.waitFor(() => expect(assistantTexts(messages)).toContain("Discord is open."));
   });
 
-  it("lit les réponses à voix haute seulement si l'option est active", async () => {
-    const quiet = setup({ spokenReplies: false });
+  it("en mode « après une commande vocale », ne lit que les réponses aux commandes dites", async () => {
+    const { controller, input, output } = setup({ replyMode: "voice" });
+    controller.submitText("affiche les ressources");
+    expect(output.spoken).toHaveLength(0);
+
+    await controller.start();
+    input.emit({ kind: "transcript", text: "lance discord", language: "fr" });
+    await vi.waitFor(() => expect(output.spoken.length).toBeGreaterThan(0));
+    expect(output.spoken[0].options.locale).toBe("fr");
+  });
+
+  it("lit les réponses à voix haute seulement si le mode l'autorise", async () => {
+    const quiet = setup({ replyMode: "off" });
     quiet.engine.say("Bonjour");
     expect(quiet.output.spoken).toHaveLength(0);
 
-    const spoken = setup({ spokenReplies: true, rate: 1.2, volume: 0.5 });
+    const spoken = setup({ replyMode: "always", rate: 1.2, volume: 0.5 });
     spoken.engine.say("Bonjour");
     expect(spoken.output.spoken).toEqual([
       { text: "Bonjour", options: { locale: "fr", rate: 1.2, volume: 0.5, voiceName: null } },
@@ -132,7 +143,7 @@ describe("VoiceController", () => {
   });
 
   it("interrompt la lecture dès que l'utilisateur reprend la parole", async () => {
-    const { controller, input, output } = setup({ spokenReplies: true });
+    const { controller, input, output } = setup({ replyMode: "always" });
     await controller.start();
     const before = output.cancelled;
     input.emit({ kind: "speech-started" });
@@ -140,7 +151,7 @@ describe("VoiceController", () => {
   });
 
   it("interrompt la lecture quand une nouvelle commande texte est envoyée", () => {
-    const { controller, output } = setup({ spokenReplies: true });
+    const { controller, output } = setup({ replyMode: "always" });
     const before = output.cancelled;
     controller.submitText("affiche les ressources");
     expect(output.cancelled).toBeGreaterThan(before);

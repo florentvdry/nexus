@@ -1,5 +1,6 @@
 [package]
 name = "nexus"
+default-run = "nexus"
 version = "0.1.0"
 description = "NEXUS, assistant personnel intelligent pour Windows"
 license = "MIT"
@@ -24,6 +25,8 @@ whisper-rs = "0.16"
 cpal = "0.18"
 hound = "3.5"
 tauri-plugin-global-shortcut = "2"
+ureq = { version = "3", features = ["platform-verifier"] }
+sha2 = "0.10"
 
 [profile.release]
 codegen-units = 1

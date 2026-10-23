@@ -66,6 +66,26 @@ Frontend : VoiceController ──► Engine.submit(texte, langue de réponse) �
 - Langue : Whisper détecte la langue de la voix ; un comptage de mots fréquents sert au texte. Le réglage « automatique » répond dans la langue détectée, les réglages « français » ou « anglais » l'imposent.
 - Le modèle de reconnaissance n'est jamais téléchargé automatiquement. Son emplacement est `<données applicatives>/models/ggml-base.bin`, ou la valeur de `NEXUS_WHISPER_MODEL`.
 
+## Connecteurs OSINT et isolation (phase 3)
+
+```
+Frontend : osint.domain / osint.username / document.inspect (capacités, permissions, délais)
+     │  invoke("osint_run", { request })
+     ▼
+Backend : osint_run ──► liste fermée CONNECTORS ──► spawn `nexus-worker` (processus séparé)
+                                                        │ requête JSON sur stdin
+                                                        ▼
+                                          connectors::run ──► dns | certificates | usernames | document
+                                                        │ rapport JSON sur stdout (4 Mo max)
+     ◄──────────── rapport normalisé (findings, errors, partial) ◄──┘
+Délai dépassé : le worker est arrêté (kill). Sortie invalide ou code d'erreur : erreur explicite.
+```
+
+- Le worker ne reçoit que la requête. Il n'a accès ni à l'état de l'application ni à l'interface.
+- Chaque résultat garde sa source (nom, URL), sa date de collecte et un statut. Les sources ne sont jamais fusionnées :
+  deux profils au même pseudo restent deux résultats distincts, sans attribution.
+- Les limites de lecture (un 404 n'est pas une absence) sont affichées avec les résultats.
+
 ## Niveaux de compréhension et de coût
 
 | Niveau | Mécanisme | Phase | État |
@@ -121,9 +141,10 @@ Le DOM n'est lu que par `src/ui/scene.ts`. Le moteur reste testable sans navigat
 
 ## Ce que la phase 1 n'implémente pas
 
-- Plugins isolés (phase 3), recherche de fichiers et contrôle des fenêtres Windows (phase 4),
-  corrélation et LLM (phase 5).
+- Plugins externes chargés à chaud (phase 5), recherche de fichiers et contrôle des fenêtres
+  Windows (phase 4), corrélation et LLM (phase 5).
 - Icône de zone de notification, démarrage automatique, wake word : non encore livrés.
 - Traduction (Argos), reconnaissance de commandes courtes par modèle dédié : phases suivantes.
+- Analyse d'adresses email, enregistrements MX/TXT/NS, métadonnées EXIF : prévus, non livrés.
 - Le lancement réel n'a été vérifié que sur Linux (voir `docs/PLAN.md`) ; le comportement
   Windows reste à valider sur une machine Windows.

@@ -27,4 +27,12 @@ pub enum AdapterError {
     Inference(String),
     #[error("une session vocale est déjà active")]
     VoiceAlreadyActive,
+    #[error("connecteur inconnu : {0}")]
+    UnknownConnector(String),
+    #[error("cible invalide : {0}")]
+    InvalidTarget(String),
+    #[error("échec du connecteur : {0}")]
+    ConnectorFailed(String),
+    #[error("délai dépassé pour le connecteur : {0}")]
+    ConnectorTimeout(String),
 }

@@ -15,6 +15,12 @@ describe("réglages vocaux", () => {
     expect(readVoiceSettings(memoryStorage({ "nexus.voice": "{pas du json" }))).toEqual(DEFAULT_VOICE_SETTINGS);
   });
 
+  it("convertit l'ancien réglage booléen en mode de réponse", () => {
+    expect(parseVoiceSettings({ spokenReplies: true }).replyMode).toBe("always");
+    expect(parseVoiceSettings({ spokenReplies: false }).replyMode).toBe("off");
+    expect(parseVoiceSettings({}).replyMode).toBe("voice");
+  });
+
   it("rejette les valeurs hors domaine", () => {
     const parsed = parseVoiceSettings({ language: "de", volume: 4, rate: 0.01, enabled: "oui" });
     expect(parsed).toEqual({ ...DEFAULT_VOICE_SETTINGS, volume: 1, rate: 0.5 });
@@ -22,7 +28,7 @@ describe("réglages vocaux", () => {
 
   it("relit ce qui a été écrit", () => {
     const storage = memoryStorage();
-    const settings = { ...DEFAULT_VOICE_SETTINGS, enabled: false, language: "en" as const, spokenReplies: true };
+    const settings = { ...DEFAULT_VOICE_SETTINGS, enabled: false, language: "en" as const, replyMode: "always" as const };
     writeVoiceSettings(settings, storage);
     expect(readVoiceSettings(storage)).toEqual(settings);
   });

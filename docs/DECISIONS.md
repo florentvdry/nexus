@@ -59,3 +59,20 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Choix** : `tauri-plugin-global-shortcut` 2.x, enregistré dans `lib.rs`. Le raccourci émet `voice://toggle` vers l'interface.
 - **Pourquoi** : aucune permission JavaScript à accorder, et un échec d'enregistrement (raccourci déjà pris) est journalisé sans bloquer le démarrage.
 
+## ADR-011 — Connecteurs exécutés dans un processus séparé
+
+- **Choix** : un binaire `nexus-worker` reçoit une requête JSON sur l'entrée standard et renvoie un rapport sur la sortie standard. Le backend l'arrête si le délai est dépassé.
+- **Pourquoi** : un connecteur peut être bloqué, planter, ou produire une sortie énorme. Un processus séparé protège l'application et borne les ressources, sans dépendre d'une technologie de bac à sable par système.
+- **Limite** : ce n'est pas un bac à sable de sécurité complet (pas de restriction des appels système). Le worker n'exécute que du code de NEXUS, et son entrée est validée. Un bac à sable par système (AppContainer sous Windows) viendra si des plugins tiers sont acceptés.
+
+## ADR-012 — Vérification TLS par le magasin de l'OS
+
+- **Choix** : `ureq` avec `platform-verifier` au lieu des racines intégrées de `rustls`.
+- **Pourquoi** : sous Windows, les proxys d'entreprise installent une autorité de certification dans le magasin du système. Les racines intégrées la refuseraient, et l'analyse échouerait sans raison visible pour l'utilisateur.
+
+## ADR-013 — Périmètre OSINT de la phase 3
+
+- **Inclus** : DNS, certificats publics, pseudo sur trois plateformes publiques, analyse locale de fichier.
+- **Exclus** : emails, recherches intrusives, contournement de protections, fusion automatique d'identités. Chaque exclusion est refusée par une réponse explicite.
+- **Statuts** : une correspondance de pseudo reste « possible », jamais « vérifiée ». Un 404 reste « introuvable », jamais « absent ».
+

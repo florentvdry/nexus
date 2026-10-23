@@ -118,6 +118,11 @@ export function App({ engine: injectedEngine }: AppProps) {
     storeLocale(locale);
   }, [engine, locale]);
 
+  // Le panneau des tâches grandit avec les tâches : les fenêtres qui le recouvrent sont replacées.
+  useEffect(() => {
+    dispatch({ type: "reflow", context: readWindowContext() });
+  }, [tasks]);
+
   useEffect(() => {
     const handleEvent = (event: EngineEvent) => {
       switch (event.type) {
@@ -224,6 +229,9 @@ export function App({ engine: injectedEngine }: AppProps) {
                 onToggle: () => void voice.toggle(),
                 startLabel: t("voice.toggle"),
                 stopLabel: t("voice.stop"),
+                speaking: voiceSettings.replyMode !== "off",
+                onToggleSpeaking: () => updateSettings({ replyMode: voiceSettings.replyMode === "off" ? "voice" : "off" }),
+                speakingLabel: t("voice.spokenReplies"),
               }
             : undefined
         }

@@ -26,6 +26,7 @@ function context(signal = new AbortController().signal): CapabilityContext {
   return {
     signal,
     native: {} as CapabilityContext["native"],
+    osint: { run: async () => { throw new Error("non utilisé dans ce test"); } },
     locale: "fr",
     t: (key, params) => translate("fr", key, params),
   };

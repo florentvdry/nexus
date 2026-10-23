@@ -29,6 +29,8 @@ export class VoiceController {
   readonly #listeners = new Set<StatusListener>();
   readonly #unsubscribers: (() => void)[];
   #status: VoiceStatus = "off";
+  /** Vrai si la dernière commande a été dite à l'oral : elle décide de la lecture à voix haute. */
+  #lastCommandFromVoice = false;
 
   constructor(options: VoiceControllerOptions) {
     this.#engine = options.engine;
@@ -87,11 +89,12 @@ export class VoiceController {
 
   /** Saisie au clavier : la langue de réponse est déduite du texte. */
   submitText(text: string): void {
-    this.#submit(text, detectTextLanguage(text));
+    this.#submit(text, detectTextLanguage(text), false);
   }
 
-  #submit(text: string, detected: VoiceLanguage | undefined): void {
+  #submit(text: string, detected: VoiceLanguage | undefined, fromVoice: boolean): void {
     this.#output.cancel();
+    this.#lastCommandFromVoice = fromVoice;
     void this.#engine.submit(text, { locale: this.#replyLocale(detected) });
   }
 
@@ -114,7 +117,7 @@ export class VoiceController {
         return;
       case "transcript":
         this.#setStatus("listening");
-        this.#submit(event.text, event.language === "fr" || event.language === "en" ? event.language : undefined);
+        this.#submit(event.text, event.language === "fr" || event.language === "en" ? event.language : undefined, true);
         return;
       case "error":
         this.#engine.say(this.#errorText(new CapabilityError(event.code, { details: event.message })), "error");
@@ -132,7 +135,8 @@ export class VoiceController {
       return;
     }
     const settings = this.#settings();
-    if (settings.spokenReplies && this.#output.available) {
+    const speak = settings.replyMode === "always" || (settings.replyMode === "voice" && this.#lastCommandFromVoice);
+    if (speak && this.#output.available) {
       this.#output.speak(event.text, {
         locale: event.locale,
         rate: settings.rate,

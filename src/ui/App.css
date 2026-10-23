@@ -332,9 +332,19 @@ input {
 }
 
 .info-card div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   gap: 12px;
+  align-items: baseline;
+}
+
+.info-card div.stacked {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+.info-card div.stacked dd {
+  text-align: left;
 }
 
 .info-card dt {
@@ -343,7 +353,9 @@ input {
 
 .info-card dd {
   margin: 0;
+  min-width: 0;
   text-align: right;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 
