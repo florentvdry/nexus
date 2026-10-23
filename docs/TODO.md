@@ -21,6 +21,28 @@ confirmations, racines autorisées et permissions restent identiques.
 
 Bloquant dans cet environnement : Hugging Face est refusé par le proxy. Le téléchargement et les mesures réelles doivent se faire sur la machine de l'utilisatrice / de l'utilisateur.
 
+### 1bis. Assistant de premier lancement (décidé par l'utilisateur)
+
+Au lancement, un parcours de configuration visible, étape par étape, sans rien faire en cachette :
+
+- [ ] **Profil de la machine** : mémoire, cœurs, carte graphique, affiché tel quel.
+- [ ] **Choix du mode** : automatique (le test décide), ou manuel : « plus rapide » ou « plus précis » (niveau imposé, avec sa taille et son temps estimé).
+- [ ] **Téléchargement** : taille, source, somme de contrôle, avec accord explicite et possibilité de passer.
+- [ ] **Test sur la machine** : chaque phrase de référence et le résultat s'affichent au fil de l'eau (temps, réussite), avec possibilité d'annuler.
+- [ ] **Résumé** : niveau retenu, raison, et réglage modifiable ensuite.
+- [ ] **Passer le parcours** : NEXUS reste utilisable, avec les règles seules, et le parcours reste accessible depuis les réglages.
+
+### 1ter. Question ouverte : la compréhension par règles (à trancher)
+
+Proposition de l'utilisateur : quand le modèle local est présent, retirer la compréhension par règles (`parser`).
+Recommandation : **la garder**, mais en fonction de sécurité et de repli, pas comme compréhension principale :
+
+- Sans modèle (installation refusée, machine trop lente, téléchargement échoué), NEXUS ne doit pas devenir inutilisable.
+- Les commandes simples (« ouvre Discord », « ferme cette fenêtre », « arrête ») restent instantanées et sans risque d'erreur du modèle.
+- Le modèle propose une intention ; les règles la valident (paramètres, chemins, racines autorisées) avant toute exécution.
+
+Décision à prendre : garder les règles comme repli et validateur (recommandé), ou les retirer complètement.
+
 ## 2. Vérifications qui restent à faire sur Windows
 
 - [ ] **CI** : vérifier que le job « Windows (Rust tests) » et le job « Windows (build de l'application) » passent sur le dernier commit (`bf56b58` et suivants). Le job Rust de `cfb4e6f` est vert.
