@@ -77,3 +77,29 @@ Décision à prendre : garder les règles comme repli et validateur (recommandé
 - Plugins avec code : WebAssembly, une seule fonction hôte, permissions approuvées dans le lock (ADR-022).
 - Plugins de données : sans code, empreinte SHA-256 approuvée, deux confirmations à l'installation (ADR-019 à ADR-021).
 - Journal des commandes : SQLite, désactivé par défaut, texte seulement (ADR-018).
+
+## 7. Autorisations mémorisées (« toujours autoriser » par dossier ou par projet) — à reprendre
+
+Demande : ne plus avoir à valider chaque action répétitive, comme Claude Code ou Codex. Garde-fous non négociables :
+rien n'est silencieux, tout est révocable, et la suppression ne peut jamais être mémorisée.
+
+Décisions prises :
+- Mémorisables : écriture de fichiers (renommer, déplacer, copier) **dans un dossier donné**, et lancement de Claude Code **pour un projet donné**.
+- Jamais mémorisables : suppression (corbeille), fermeture de fenêtre, installation ou suppression de plugin.
+- Une règle ne couvre que les chemins situés dans le dossier, sans `..` (un dossier voisin au nom commençant pareil n'est pas couvert).
+- Chaque action approuvée par règle est annoncée dans la conversation et gardée dans un journal visible.
+
+État :
+- [x] **Natif (Rust), commité** : `permissions.rs` réécrit — règles persistées (`permission_rules.json`), portée (`scope_for`, `covers`), `auto_approve`, journal, `answer_with(remember)`. Tests : 17 tests de permissions, dont le refus de la suppression mémorisée et des remontées de chemin. Commandes `permission_rules`, `permission_revoke`, `permission_audit` et `permission_answer(remember)` ajoutées dans `lib.rs`.
+- [ ] **Interface, NON commité** (ébauche incohérente, à refaire) : pont (`bridge.ts` : `answerConfirmation(…, remember)`, `listRules`, `revokeRule`, `listAudit`, `onAutoApproval`), type de présentation (`rememberable`, `scope`), case à cocher sur la carte de confirmation, annonce des autorisations automatiques par le moteur, section « Autorisations mémorisées » dans les réglages.
+  Erreurs TypeScript connues dans l'ébauche : clés i18n absentes (`permissions.*`, `confirm.remember.*`), champ `permission` absent de la présentation, `#announceAutomatic` mal orthographié, tests fictifs à compléter (`emitConfirmation` sans `rememberable`).
+- [ ] **Tests à écrire** : moteur (annonce d'une action automatique), pont (`remember` transmis), carte (case visible seulement si `rememberable` et `scope`).
+- [ ] **Vérification dans l'application** : approuver « toujours » sur un renommage, refaire un renommage dans le même dossier sans question, vérifier la mention et la révocation, vérifier qu'une suppression pose toujours la question.
+
+Documentation à mettre à jour après : `docs/PERMISSIONS.md` (section autorisations mémorisées) et un ADR-024.
+
+## 8. README à refaire, plus soigné
+
+- [ ] Refaire le README : présentation courte, captures d'écran de l'application (orbe, fenêtres, confirmation, réglages), tableau des fonctions, exemples de phrases, installation claire pour Windows.
+- [ ] Séparer le README utilisateur (ce que fait NEXUS) du guide de développement (`CONTRIBUTING.md`, `docs/`).
+- [ ] Ajouter des badges utiles (CI, licence) et un lien vers la spécification des plugins.

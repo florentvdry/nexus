@@ -374,10 +374,31 @@ fn agent_cancel(runs: State<'_, Runs>, caller: String, run_id: String) -> Result
 }
 
 /// Seule l'interface répond aux confirmations : un plugin ne peut pas approuver sa propre demande.
+/// `remember` : « toujours autoriser » pour le dossier ou le projet de la demande (refusé pour les actions non mémorisables).
 #[tauri::command]
-fn permission_answer(broker: State<'_, Broker>, caller: String, id: String, approved: bool) -> Result<(), AdapterError> {
+fn permission_answer(broker: State<'_, Broker>, caller: String, id: String, approved: bool, remember: Option<bool>) -> Result<(), AdapterError> {
     require_core(&caller)?;
-    broker.answer(&id, approved)
+    broker.answer_with(&id, approved, remember.unwrap_or(false))
+}
+
+/// Autorisations mémorisées, lues par les réglages.
+#[tauri::command]
+fn permission_rules(broker: State<'_, Broker>, caller: String) -> Result<Vec<permissions::Rule>, AdapterError> {
+    require_core(&caller)?;
+    Ok(broker.rules())
+}
+
+#[tauri::command]
+fn permission_revoke(broker: State<'_, Broker>, caller: String, id: String) -> Result<bool, AdapterError> {
+    require_core(&caller)?;
+    broker.revoke(&id)
+}
+
+/// Actions approuvées automatiquement, les plus récentes d'abord.
+#[tauri::command]
+fn permission_audit(broker: State<'_, Broker>, caller: String) -> Result<Vec<permissions::AutoEntry>, AdapterError> {
+    require_core(&caller)?;
+    Ok(broker.audit())
 }
 
 #[derive(serde::Serialize)]
@@ -420,6 +441,14 @@ fn open_journal(app: &tauri::App) -> Option<Journal> {
     }
 }
 
+/// Courtier avec les autorisations mémorisées du dossier de données. Sans dossier, les règles restent en mémoire.
+fn open_broker(app: &tauri::App) -> Broker {
+    match app.path().app_data_dir() {
+        Ok(directory) => Broker::load(directory.join("permission_rules.json")),
+        Err(_) => Broker::default(),
+    }
+}
+
 fn open_plugin_store(app: &tauri::App) -> Option<Arc<Store>> {
     let root = app.path().app_data_dir().ok()?.join("plugins");
     let known: Vec<&'static str> = plugins::actions::apps::CATALOG.iter().map(|spec| spec.id).collect();
@@ -432,7 +461,7 @@ pub fn run() {
         .plugin(shortcut_plugin())
         .setup(|app| {
             app.manage(VoiceState::default());
-            app.manage(Broker::default());
+            app.manage(open_broker(app));
             app.manage(Runs::default());
             app.manage(JournalStore(open_journal(app)));
             app.manage(PluginStore(open_plugin_store(app)));
@@ -456,6 +485,9 @@ pub fn run() {
             agent_run,
             agent_cancel,
             permission_answer,
+            permission_rules,
+            permission_revoke,
+            permission_audit,
             permissions_status,
             journal_status,
             journal_set_enabled,
