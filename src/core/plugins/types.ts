@@ -4,7 +4,7 @@ import type { CapabilityHandler, CapabilityManifest } from "../capabilities/type
 /** Version de l'API des plugins. Un plugin déclare la version qu'il vise ; une autre version est refusée. */
 export const API_VERSION = 1;
 
-export const PLUGIN_TYPES = ["actions", "sources", "documents", "speech", "languages"] as const;
+export const PLUGIN_TYPES = ["actions", "sources", "documents", "speech", "languages", "agents"] as const;
 export type PluginType = (typeof PLUGIN_TYPES)[number];
 
 /** Contenu de `plugin.json`. Le même fichier servira de fiche dans une future marketplace. */

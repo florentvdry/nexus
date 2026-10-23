@@ -43,8 +43,8 @@ describe("parseIntent — ouverture d'application", () => {
   });
 
   it("garde le nom demandé quand l'application est inconnue", () => {
-    const { intent } = parseIntent("Lance Claude Code");
-    expect(intent).toEqual({ type: "OPEN_APPLICATION", appId: undefined, appName: "claude code" });
+    const { intent } = parseIntent("Lance Spotify");
+    expect(intent).toEqual({ type: "OPEN_APPLICATION", appId: undefined, appName: "spotify" });
   });
 });
 
@@ -121,3 +121,59 @@ describe("parseIntent — analyse OSINT et fichiers", () => {
     expect(parseIntent("lance discord").intent).toMatchObject({ type: "OPEN_APPLICATION", appId: "discord" });
   });
 });
+
+describe("parseIntent — fichiers, processus et agents (phase 4)", () => {
+  it("cherche des fichiers par extension, dossier et période", () => {
+    expect(parseIntent("Cherche mes fichiers PDF téléchargés cette semaine").intent).toEqual({
+      type: "FILE_SEARCH",
+      extension: "pdf",
+      folderHint: "downloads",
+      withinDays: 7,
+    });
+    expect(parseIntent("trouve mes fichiers txt").intent).toMatchObject({ type: "FILE_SEARCH", extension: "txt" });
+  });
+
+  it("ne prend pas un chemin de fichier pour une recherche", () => {
+    expect(parseIntent("cherche le fichier /tmp/notes.txt").intent.type).not.toBe("FILE_SEARCH");
+  });
+
+  it("renomme, déplace et supprime uniquement des chemins absolus, en gardant leur casse", () => {
+    expect(parseIntent('renomme "C:\\Users\\Ana\\Documents\\Facture.pdf" en Facture-2026.pdf').intent).toEqual({
+      type: "FILE_RENAME",
+      path: "C:\\Users\\Ana\\Documents\\Facture.pdf",
+      newName: "Facture-2026.pdf",
+    });
+    expect(parseIntent("déplace /home/ana/Documents/a.pdf dans /home/ana/Archives").intent).toEqual({
+      type: "FILE_MOVE",
+      path: "/home/ana/Documents/a.pdf",
+      toDir: "/home/ana/Archives",
+    });
+    expect(parseIntent("supprime /home/ana/Documents/vieux.txt").intent).toEqual({
+      type: "FILE_TRASH",
+      path: "/home/ana/Documents/vieux.txt",
+    });
+    expect(parseIntent("supprime mes vieux fichiers").intent.type).not.toBe("FILE_TRASH");
+  });
+
+  it("affiche les processus actifs", () => {
+    expect(parseIntent("Quelles applications sont ouvertes ?").intent).toEqual({ type: "PROCESS_LIST" });
+  });
+
+  it("lance Claude Code dans un projet avec sa demande", () => {
+    expect(parseIntent("lance Claude Code dans /home/ana/projet : corrige le bug de connexion").intent).toEqual({
+      type: "AGENT_RUN",
+      project: "/home/ana/projet",
+      prompt: "corrige le bug de connexion",
+    });
+    expect(parseIntent('Jarvis, lance claude code sur "C:\\Dev\\mon projet" et demande-lui de lister les TODO').intent).toEqual({
+      type: "AGENT_RUN",
+      project: "C:\\Dev\\mon projet",
+      prompt: "lister les TODO",
+    });
+  });
+
+  it("demande le projet quand il manque, au lieu de deviner", () => {
+    expect(parseIntent("lance Claude Code").intent).toEqual({ type: "AGENT_RUN", project: undefined, prompt: undefined });
+  });
+});
+

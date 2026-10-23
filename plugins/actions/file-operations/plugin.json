@@ -1,0 +1,27 @@
+{
+  "id": "actions.file-operations",
+  "name": "Opérations sur fichiers",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Renommer, déplacer, copier et envoyer à la corbeille. Chaque action est confirmée avant exécution.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::files"
+  ],
+  "capabilities": [
+    "files.operate"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "file.write",
+    "file.delete"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

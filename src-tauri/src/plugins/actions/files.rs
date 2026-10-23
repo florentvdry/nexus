@@ -1,0 +1,379 @@
+//! Recherche et opérations sur les fichiers, limitées aux dossiers utilisateur.
+//!
+//! Chaque opération suit trois étapes : `plan` vérifie les chemins et produit un aperçu, la confirmation est
+//! demandée par l'appelant (voir `permissions`), puis `apply` exécute. Les suppressions vont à la corbeille.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
+
+use crate::error::AdapterError;
+
+pub const MAX_RESULTS: usize = 200;
+const MAX_DEPTH: usize = 6;
+const MAX_SCANNED: usize = 50_000;
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub path: String,
+    pub name: String,
+    pub size: u64,
+    pub modified: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchQuery {
+    pub name_contains: Option<String>,
+    pub extension: Option<String>,
+    pub modified_within_days: Option<u64>,
+    /// Dossier précis, qui doit se trouver dans un emplacement autorisé.
+    pub folder: Option<String>,
+    /// Dossier désigné par son nom : `downloads`, `documents`, `desktop` ou `pictures`.
+    pub folder_hint: Option<String>,
+}
+
+/// Résout un nom de dossier connu vers son emplacement réel, s'il existe.
+pub fn hinted_folder(hint: &str) -> Option<PathBuf> {
+    let folder = match hint {
+        "downloads" => dirs::download_dir(),
+        "documents" => dirs::document_dir(),
+        "desktop" => dirs::desktop_dir(),
+        "pictures" => dirs::picture_dir(),
+        _ => None,
+    };
+    folder.filter(|path| path.is_dir())
+}
+
+/// Dossiers utilisateur autorisés : Documents, Téléchargements, Bureau, Images, quand ils existent.
+///
+/// Le dossier personnel lui-même n'est jamais une racine : sans configuration XDG, la bibliothèque `dirs`
+/// renvoie ce dossier pour Documents, ce qui donnerait accès à toute la session. Aucun repli n'est prévu :
+/// sans dossier utilisateur, aucune recherche ni opération n'est possible.
+pub fn allowed_roots() -> Vec<PathBuf> {
+    let Some(home) = dirs::home_dir().and_then(|home| home.canonicalize().ok()) else {
+        return Vec::new();
+    };
+    let candidates = [dirs::document_dir(), dirs::download_dir(), dirs::desktop_dir(), dirs::picture_dir()]
+        .into_iter()
+        .flatten()
+        .chain(["Documents", "Downloads", "Desktop", "Pictures"].into_iter().map(|name| home.join(name)));
+
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for candidate in candidates {
+        if let Ok(real) = candidate.canonicalize() {
+            if real != home && real.is_dir() && !roots.contains(&real) {
+                roots.push(real);
+            }
+        }
+    }
+    roots
+}
+
+/// Vrai si le chemin réel (liens symboliques résolus) se trouve dans un des emplacements autorisés.
+/// Pour un chemin qui n'existe pas encore, c'est son dossier parent qui est vérifié.
+pub fn within(path: &Path, roots: &[PathBuf]) -> bool {
+    let real = path
+        .canonicalize()
+        .or_else(|_| path.parent().ok_or(std::io::ErrorKind::NotFound.into()).and_then(|parent| parent.canonicalize()));
+    let Ok(real) = real else { return false };
+    roots.iter().filter_map(|root| root.canonicalize().ok()).any(|root| real.starts_with(root))
+}
+
+fn require_within(path: &Path, roots: &[PathBuf]) -> Result<(), AdapterError> {
+    if within(path, roots) {
+        Ok(())
+    } else {
+        Err(AdapterError::OutsideAllowedFolders(path.display().to_string()))
+    }
+}
+
+fn unix_seconds(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+pub fn search(roots: &[PathBuf], query: &SearchQuery) -> Result<Vec<FileEntry>, AdapterError> {
+    let hinted = match &query.folder_hint {
+        Some(hint) => Some(hinted_folder(hint).ok_or_else(|| AdapterError::InvalidPath(hint.clone()))?),
+        None => None,
+    };
+    let scope: Vec<PathBuf> = match (hinted, &query.folder) {
+        (Some(folder), _) => {
+            require_within(&folder, roots)?;
+            vec![folder]
+        }
+        (None, Some(folder)) => {
+            let folder = PathBuf::from(folder);
+            if !folder.is_absolute() || !folder.is_dir() {
+                return Err(AdapterError::InvalidPath(folder.display().to_string()));
+            }
+            require_within(&folder, roots)?;
+            vec![folder]
+        }
+        (None, None) => roots.to_vec(),
+    };
+
+    let name = query.name_contains.as_ref().map(|value| value.to_lowercase());
+    let extension = query.extension.as_ref().map(|value| value.trim_start_matches('.').to_lowercase());
+    let cutoff = query.modified_within_days.map(|days| {
+        let now = unix_seconds(SystemTime::now());
+        now.saturating_sub(days * 86_400)
+    });
+
+    let mut results = Vec::new();
+    for root in scope.iter().filter(|root| root.is_dir()) {
+        for entry in WalkDir::new(root).max_depth(MAX_DEPTH).follow_links(false).into_iter().take(MAX_SCANNED).filter_map(Result::ok) {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(name) = &name {
+                if !file_name.to_lowercase().contains(name) {
+                    continue;
+                }
+            }
+            if let Some(extension) = &extension {
+                let matches = Path::new(&file_name).extension().map(|ext| ext.to_string_lossy().to_lowercase() == *extension).unwrap_or(false);
+                if !matches {
+                    continue;
+                }
+            }
+            let Ok(metadata) = entry.metadata() else { continue };
+            let modified = metadata.modified().map(unix_seconds).unwrap_or(0);
+            if cutoff.is_some_and(|cutoff| modified < cutoff) {
+                continue;
+            }
+            results.push(FileEntry {
+                path: entry.path().display().to_string(),
+                name: file_name,
+                size: metadata.len(),
+                modified,
+            });
+            if results.len() >= MAX_RESULTS {
+                break;
+            }
+        }
+    }
+    results.sort_by(|a, b| b.modified.cmp(&a.modified).then(a.path.cmp(&b.path)));
+    Ok(results)
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum Operation {
+    Rename { from: String, new_name: String },
+    Move { from: String, to_dir: String },
+    Copy { from: String, to_dir: String },
+    Trash { path: String },
+}
+
+impl Operation {
+    pub fn is_deletion(&self) -> bool {
+        matches!(self, Operation::Trash { .. })
+    }
+}
+
+/// Aperçu d'une opération : ce qui sera fait, avec les chemins exacts. Rien n'est modifié à cette étape.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plan {
+    pub operation: Operation,
+    pub rows: Vec<(String, String)>,
+    source: PathBuf,
+    target: Option<PathBuf>,
+}
+
+fn valid_file_name(name: &str) -> bool {
+    !name.trim().is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
+}
+
+fn absolute_existing(raw: &str) -> Result<PathBuf, AdapterError> {
+    let path = PathBuf::from(raw.trim().trim_matches('"'));
+    if !path.is_absolute() || !path.exists() {
+        return Err(AdapterError::InvalidPath(raw.to_string()));
+    }
+    Ok(path)
+}
+
+pub fn plan(operation: Operation, roots: &[PathBuf]) -> Result<Plan, AdapterError> {
+    match &operation {
+        Operation::Rename { from, new_name } => {
+            let source = absolute_existing(from)?;
+            require_within(&source, roots)?;
+            if !valid_file_name(new_name) {
+                return Err(AdapterError::InvalidPath(new_name.clone()));
+            }
+            let target = source.parent().ok_or_else(|| AdapterError::InvalidPath(from.clone()))?.join(new_name.trim());
+            ensure_free(&target, roots)?;
+            Ok(two_paths(operation, source, target))
+        }
+        Operation::Move { from, to_dir } | Operation::Copy { from, to_dir } => {
+            let source = absolute_existing(from)?;
+            require_within(&source, roots)?;
+            let directory = absolute_existing(to_dir)?;
+            if !directory.is_dir() {
+                return Err(AdapterError::InvalidPath(to_dir.clone()));
+            }
+            require_within(&directory, roots)?;
+            let name = source.file_name().ok_or_else(|| AdapterError::InvalidPath(from.clone()))?;
+            let target = directory.join(name);
+            ensure_free(&target, roots)?;
+            if matches!(operation, Operation::Copy { .. }) && !source.is_file() {
+                return Err(AdapterError::Operation("seuls les fichiers peuvent être copiés".into()));
+            }
+            Ok(two_paths(operation, source, target))
+        }
+        Operation::Trash { path } => {
+            let source = absolute_existing(path)?;
+            require_within(&source, roots)?;
+            Ok(Plan {
+                rows: vec![("path".into(), source.display().to_string())],
+                operation,
+                source,
+                target: None,
+            })
+        }
+    }
+}
+
+fn two_paths(operation: Operation, source: PathBuf, target: PathBuf) -> Plan {
+    Plan {
+        rows: vec![("from".into(), source.display().to_string()), ("to".into(), target.display().to_string())],
+        operation,
+        source,
+        target: Some(target),
+    }
+}
+
+fn ensure_free(target: &Path, roots: &[PathBuf]) -> Result<(), AdapterError> {
+    require_within(target, roots)?;
+    if target.exists() {
+        return Err(AdapterError::Operation(format!("un élément existe déjà : {}", target.display())));
+    }
+    Ok(())
+}
+
+/// Exécute un plan déjà confirmé. Renvoie le chemin final, ou le chemin supprimé.
+pub fn apply(plan: &Plan) -> Result<String, AdapterError> {
+    let io = |error: std::io::Error| AdapterError::Operation(error.to_string());
+    match (&plan.operation, &plan.target) {
+        (Operation::Rename { .. } | Operation::Move { .. }, Some(target)) => {
+            fs::rename(&plan.source, target).map_err(|error| {
+                if error.raw_os_error().is_some() && plan.source.is_dir() {
+                    AdapterError::Operation("déplacement de dossier entre volumes non pris en charge".into())
+                } else {
+                    io(error)
+                }
+            })?;
+            Ok(target.display().to_string())
+        }
+        (Operation::Copy { .. }, Some(target)) => {
+            fs::copy(&plan.source, target).map_err(io)?;
+            Ok(target.display().to_string())
+        }
+        (Operation::Trash { .. }, None) => {
+            trash::delete(&plan.source).map_err(|error| AdapterError::Operation(error.to_string()))?;
+            Ok(plan.source.display().to_string())
+        }
+        _ => Err(AdapterError::Operation("plan incohérent".into())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Sandbox(PathBuf);
+
+    impl Sandbox {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("nexus-files-{}-{name}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(dir.join("sub")).unwrap();
+            fs::write(dir.join("facture.pdf"), b"%PDF-1.4 test").unwrap();
+            fs::write(dir.join("notes.txt"), b"bonjour").unwrap();
+            fs::write(dir.join("sub").join("contrat.pdf"), b"%PDF").unwrap();
+            Sandbox(dir)
+        }
+        fn path(&self) -> PathBuf {
+            self.0.clone()
+        }
+    }
+
+    impl Drop for Sandbox {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn search_filters_by_extension_recursively_and_sorts() {
+        let sandbox = Sandbox::new("search");
+        let roots = vec![sandbox.path()];
+        let found = search(&roots, &SearchQuery { extension: Some("PDF".into()), ..Default::default() }).unwrap();
+        let names: Vec<&str> = found.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"facture.pdf") && names.contains(&"contrat.pdf"));
+        assert!(!names.contains(&"notes.txt"));
+    }
+
+    #[test]
+    fn search_refuses_a_folder_outside_the_allowed_roots() {
+        let sandbox = Sandbox::new("scope");
+        let other = std::env::temp_dir();
+        let roots = vec![sandbox.path()];
+        let error = search(&roots, &SearchQuery { folder: Some(other.display().to_string()), ..Default::default() }).unwrap_err();
+        assert!(matches!(error, AdapterError::OutsideAllowedFolders(_)));
+    }
+
+    #[test]
+    fn rename_is_planned_then_applied_inside_the_roots() {
+        let sandbox = Sandbox::new("rename");
+        let roots = vec![sandbox.path()];
+        let from = sandbox.path().join("notes.txt").display().to_string();
+        let plan = plan(Operation::Rename { from: from.clone(), new_name: "idees.txt".into() }, &roots).unwrap();
+        assert!(plan.rows.iter().any(|(key, value)| key == "to" && value.ends_with("idees.txt")));
+        assert!(sandbox.path().join("notes.txt").exists(), "le plan ne modifie rien");
+        apply(&plan).unwrap();
+        assert!(sandbox.path().join("idees.txt").exists());
+        assert!(!sandbox.path().join("notes.txt").exists());
+    }
+
+    #[test]
+    fn move_and_copy_refuse_conflicts_and_invalid_names() {
+        let sandbox = Sandbox::new("conflicts");
+        let roots = vec![sandbox.path()];
+        let facture = sandbox.path().join("facture.pdf").display().to_string();
+        let sub = sandbox.path().join("sub").display().to_string();
+        fs::write(sandbox.path().join("sub").join("facture.pdf"), b"deja la").unwrap();
+        assert!(matches!(plan(Operation::Move { from: facture.clone(), to_dir: sub.clone() }, &roots), Err(AdapterError::Operation(_))));
+        assert!(matches!(plan(Operation::Rename { from: facture, new_name: "../evil.pdf".into() }, &roots), Err(AdapterError::InvalidPath(_))));
+    }
+
+    #[test]
+    fn nothing_outside_the_roots_can_be_touched() {
+        let sandbox = Sandbox::new("outside");
+        let roots = vec![sandbox.path()];
+        let outside = std::env::temp_dir().join(format!("nexus-outside-{}.txt", std::process::id()));
+        fs::write(&outside, b"hors zone").unwrap();
+        let result = plan(Operation::Trash { path: outside.display().to_string() }, &roots);
+        let _ = fs::remove_file(&outside);
+        assert!(matches!(result, Err(AdapterError::OutsideAllowedFolders(_))));
+    }
+
+    #[test]
+    fn the_home_directory_itself_is_never_an_allowed_root() {
+        let home = dirs::home_dir().and_then(|home| home.canonicalize().ok());
+        let roots = allowed_roots();
+        assert!(home.map(|home| !roots.contains(&home)).unwrap_or(true));
+    }
+
+    #[test]
+    fn relative_paths_are_refused() {
+        let roots = vec![std::env::temp_dir()];
+        assert!(matches!(plan(Operation::Trash { path: "notes.txt".into() }, &roots), Err(AdapterError::InvalidPath(_))));
+    }
+}

@@ -23,4 +23,13 @@ export interface InformationRow {
 export type PresentedContent =
   | { kind: "information-card"; title: string; rows: InformationRow[] }
   | { kind: "data-table"; title: string; columns: string[]; rows: string[][] }
-  | { kind: "error-card"; title: string; code: string; message: string };
+  | { kind: "error-card"; title: string; code: string; message: string }
+  /** Demande de confirmation : les boutons répondent au natif, qui décide de l'action. */
+  | {
+      kind: "confirmation";
+      requestId: string;
+      title: string;
+      rows: InformationRow[];
+      approve: string;
+      refuse: string;
+    };

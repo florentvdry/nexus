@@ -4,6 +4,7 @@
 //! TypeScript vivent dans `plugins/<type>/<nom>/` à la racine du dépôt. Voir `docs/PLUGINS.md`.
 
 pub mod actions;
+pub mod agents;
 pub mod documents;
 pub mod report;
 pub mod sources;

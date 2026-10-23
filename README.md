@@ -4,8 +4,9 @@ Assistant personnel intelligent pour Windows, open source, inspiré des interfac
 Vous formulez une intention ; NEXUS choisit les outils. Les commandes courantes s'exécutent en
 local, sans modèle de langage et sans abonnement.
 
-> **Statut : phases 1 et 3 livrées, phase 2 partiellement livrée** (la transcription attend le modèle Whisper, et les
+> **Statut : phases 1, 3 et 4 livrées, phase 2 partiellement livrée** (la transcription attend le modèle Whisper, et les
 > résultats OSINT réels attendent l'accès aux sources publiques depuis l'environnement de développement).
+> Le contrôle des fenêtres Windows n'est pas encore implémenté (phase 4 partielle).
 > Voir [docs/PLAN.md](docs/PLAN.md) pour le détail et les limites connues.
 
 ## Ce qui fonctionne aujourd'hui
@@ -43,6 +44,19 @@ Exemples de demandes :
 
 Chaque résultat indique sa source, sa référence et son statut. Une source injoignable est signalée, jamais masquée.
 Les adresses email ne sont pas encore prises en charge.
+
+## Fichiers, processus et Claude Code (phase 4)
+
+- « Cherche mes fichiers PDF téléchargés cette semaine » : recherche dans Documents, Téléchargements, Bureau et Images
+  uniquement. Le dossier personnel lui-même n'est jamais parcouru.
+- « Renomme C:\Users\Ana\Documents\a.pdf en b.pdf », « déplace … dans … », « supprime … » : chaque opération affiche
+  l'aperçu (source, destination) et attend votre autorisation. La suppression envoie à la corbeille.
+- « Quelles applications sont ouvertes ? » : processus actifs, triés par mémoire utilisée (lecture seule).
+- « Lance Claude Code dans C:\Dev\projet : corrige le test en échec » : après votre autorisation, lance le CLI officiel
+  `claude` dans ce dossier et affiche sa réponse, les outils utilisés et les refus de permission. Une annulation est possible
+  pendant le run. Le CLI doit être installé et connecté (`npm install -g @anthropic-ai/claude-code`).
+
+Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour ce qui est confirmé, et ce qui ne l'est pas.
 
 ## Installation pour le développement
 

@@ -27,6 +27,7 @@ import { TaskPanel } from "./TaskPanel";
 import { VoicePanel } from "./VoicePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
+import { createNativeBridge } from "../core/native/bridge";
 import { useVoice } from "./useVoice";
 
 type WindowAction =
@@ -98,6 +99,7 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(readVoiceSettings);
   const [panelOpen, setPanelOpen] = useState(false);
   const windowsRef = useRef(windows);
+  const [answerBridge] = useState(() => createNativeBridge());
   const settingsRef = useRef(voiceSettings);
 
   const t = (key: MessageKey, params?: Record<string, string | number>) => translate(locale, key, params);
@@ -247,6 +249,7 @@ export function App({ engine: injectedEngine }: AppProps) {
             onMove={(id, rect) => dispatch({ type: "move", id, rect, context: readWindowContext() })}
             onFocus={(id) => dispatch({ type: "focus", id })}
             onClose={(id) => dispatch({ type: "close", id, now: Date.now() })}
+            onAnswer={(requestId, approved) => answerBridge.answerConfirmation(requestId, approved)}
           />
         ))}
       </div>

@@ -26,11 +26,12 @@ Chaque dossier de plugin contient :
 
 | Type | Contribue | Exemple |
 |---|---|---|
-| `actions` | capacités sur la machine, et éventuellement un catalogue d'applications | `system-info`, `app-launch` |
+| `actions` | capacités sur la machine, et éventuellement un catalogue d'applications | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations` |
 | `sources` | connecteurs de données passifs, exécutés dans le worker isolé | `domain-analysis` |
 | `documents` | analyse locale de fichiers désignés explicitement | `file-inspect` |
 | `speech` | moteurs vocaux (entrée, sortie) | `whisper-stt`, `system-tts` |
 | `languages` | vocabulaire et expressions pour comprendre les commandes | `fr`, `en` |
+| `agents` | agents externes qui travaillent dans un projet, sous confirmation | `claude-code` |
 
 ## La fiche `plugin.json`
 

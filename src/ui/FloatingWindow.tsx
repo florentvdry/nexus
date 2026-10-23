@@ -3,7 +3,7 @@ import { useRef, type PointerEvent } from "react";
 import type { OpenWindow } from "../core/presentation/windows";
 import type { Rect } from "../core/presentation/types";
 import type { MessageKey } from "../i18n/messages";
-import { PresentedContentView } from "./PresentedContentView";
+import { PresentedContentView, type ConfirmationAnswer } from "./PresentedContentView";
 
 interface FloatingWindowProps {
   item: OpenWindow;
@@ -12,6 +12,7 @@ interface FloatingWindowProps {
   onMove: (id: string, rect: Rect) => void;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
+  onAnswer?: ConfirmationAnswer;
 }
 
 interface DragState {
@@ -21,7 +22,7 @@ interface DragState {
   origin: Rect;
 }
 
-export function FloatingWindow({ item, zIndex, t, onMove, onFocus, onClose }: FloatingWindowProps) {
+export function FloatingWindow({ item, zIndex, t, onMove, onFocus, onClose, onAnswer }: FloatingWindowProps) {
   const drag = useRef<DragState | null>(null);
   const { rect } = item;
 
@@ -65,7 +66,7 @@ export function FloatingWindow({ item, zIndex, t, onMove, onFocus, onClose }: Fl
         </button>
       </header>
       <div className="body">
-        <PresentedContentView content={item.content} />
+        <PresentedContentView content={item.content} onAnswer={onAnswer} t={t} />
       </div>
     </section>
   );

@@ -13,6 +13,12 @@ export type Intent =
   | { type: "OSINT_USERNAME"; username: string }
   | { type: "DOCUMENT_INSPECT"; path: string }
   | { type: "UNSUPPORTED"; reason: "email"; text: string }
+  | { type: "FILE_SEARCH"; extension?: string; folderHint?: string; withinDays?: number }
+  | { type: "FILE_RENAME"; path: string; newName: string }
+  | { type: "FILE_MOVE"; path: string; toDir: string }
+  | { type: "FILE_TRASH"; path: string }
+  | { type: "PROCESS_LIST" }
+  | { type: "AGENT_RUN"; project?: string; prompt?: string }
   | { type: "UNKNOWN"; text: string };
 
 export interface ParseResult {
@@ -38,7 +44,76 @@ function cleanPath(raw: string): string {
 }
 
 /** Extraction des cibles depuis la saisie brute : la casse et les caractères des domaines et chemins sont préservés. */
+/** Chemin absolu (Windows ou POSIX), éventuellement entre guillemets. */
+const ABSOLUTE_PATH = String.raw`"[^"]+"|'[^']+'|[A-Za-z]:[\\/][^\s"]*(?:\s+[^\s"]+)*?(?=\s+(?:en|to|dans|vers|into|et|and)\b|$)|\/[^\s"]+`;
+
+function unquote(value: string): string {
+  return value.trim().replace(/^["']|["']$/g, "").trim();
+}
+
+const AGENT_VERB = /\b(lance|lancer|demarre|demarrer|ouvre|ouvrir|demande|envoie|utilise|start|launch|run|ask|use)\b/i;
+const AGENT_NAME = /\bclaude\s*code\b/i;
+const AGENT_PROMPT = /(?:\s:\s*|\b(?:demande|dis)[- ]lui(?:\s+de)?\s+|\bask (?:it )?to\s+)(.+)$/i;
+const AGENT_PROJECT = new RegExp(String.raw`\b(?:dans|sur|in|on)\s+(${ABSOLUTE_PATH})`, "i");
+const FILE_SEARCH_VERB = /\b(cherche|chercher|recherche|rechercher|trouve|trouver|liste|lister|find|search|list)\b/i;
+const FILE_NOUN = /\bfichiers?\b|\bfiles?\b/i;
+const FILE_EXTENSION = /\b(pdf|docx?|xlsx?|pptx?|txt|md|csv|json|png|jpe?g|gif|zip|mp3|mp4)\b/i;
+const FILE_RENAME = new RegExp(String.raw`\b(?:renomme|renommer|rename)\s+(?:le |la |ce |mon )?(?:fichier\s+)?(${ABSOLUTE_PATH})\s+(?:en|to)\s+(.+)$`, "i");
+const FILE_MOVE = new RegExp(String.raw`\b(?:d[ée]place|d[ée]placer|move)\s+(?:le |la |ce |mon )?(?:fichier\s+)?(${ABSOLUTE_PATH})\s+(?:dans|vers|into|to)\s+(.+)$`, "i");
+const FILE_TRASH = new RegExp(String.raw`\b(?:supprime|supprimer|efface|effacer|delete|remove)\s+(?:le |la |ce |mon )?(?:fichier\s+|dossier\s+)?(${ABSOLUTE_PATH})\s*$`, "i");
+const PROCESS_LIST = /\b(processus|processes|applications? (?:actives?|ouvertes?|en cours)|quelles applications|which applications|running apps)\b/i;
+
+function searchPeriod(raw: string): number | undefined {
+  if (/\bcette annee\b|\bthis year\b/i.test(raw)) return 365;
+  if (/\bce mois\b|\bthis month\b/i.test(raw)) return 30;
+  if (/\bcette semaine\b|\bthis week\b/i.test(raw)) return 7;
+  if (/\baujourd'?hui\b|\btoday\b/i.test(raw)) return 1;
+  return undefined;
+}
+
+function folderHint(raw: string): string | undefined {
+  if (/t[ée]l[ée]charg|download/i.test(raw)) return "downloads";
+  if (/\bdocuments?\b/i.test(raw)) return "documents";
+  if (/\bbureau\b|\bdesktop\b/i.test(raw)) return "desktop";
+  if (/\bimages?\b|\bpictures?\b|\bphotos?\b/i.test(raw)) return "pictures";
+  return undefined;
+}
+
+function classifyNative(raw: string): Intent | null {
+  if (AGENT_NAME.test(raw) && AGENT_VERB.test(raw)) {
+    const prompt = raw.match(AGENT_PROMPT)?.[1]?.trim();
+    const before = prompt ? raw.slice(0, raw.indexOf(prompt)) : raw;
+    const project = before.match(AGENT_PROJECT)?.[1];
+    return { type: "AGENT_RUN", project: project ? unquote(project) : undefined, prompt };
+  }
+
+  const rename = raw.match(FILE_RENAME);
+  if (rename) return { type: "FILE_RENAME", path: unquote(rename[1]), newName: unquote(rename[2]) };
+
+  const move = raw.match(FILE_MOVE);
+  if (move) return { type: "FILE_MOVE", path: unquote(move[1]), toDir: unquote(move[2]) };
+
+  const trash = raw.match(FILE_TRASH);
+  if (trash) return { type: "FILE_TRASH", path: unquote(trash[1]) };
+
+  if (PROCESS_LIST.test(raw)) return { type: "PROCESS_LIST" };
+
+  const hasPath = /[\\/]/.test(raw);
+  if (FILE_SEARCH_VERB.test(raw) && FILE_NOUN.test(raw) && !hasPath) {
+    return {
+      type: "FILE_SEARCH",
+      extension: raw.match(FILE_EXTENSION)?.[1]?.toLowerCase(),
+      folderHint: folderHint(raw),
+      withinDays: searchPeriod(raw),
+    };
+  }
+  return null;
+}
+
 function classifyTarget(raw: string): Intent | null {
+  const native = classifyNative(raw);
+  if (native) return native;
+
   if (EMAIL.test(raw) && ANALYSIS_VERB.test(raw)) {
     return { type: "UNSUPPORTED", reason: "email", text: raw };
   }

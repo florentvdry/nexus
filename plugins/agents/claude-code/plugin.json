@@ -1,0 +1,26 @@
+{
+  "id": "agents.claude-code",
+  "name": "Claude Code",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "agents",
+  "description": "Lance Claude Code (CLI officiel) dans un projet, avec confirmation, budget plafonné et progression. L'authentification est celle du CLI.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "agents::claude_code"
+  ],
+  "capabilities": [
+    "agent.claude-code"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "agent.run"
+  ],
+  "locality": "network",
+  "cost": "llm",
+  "offline": false
+}

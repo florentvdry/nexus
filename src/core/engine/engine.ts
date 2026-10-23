@@ -7,6 +7,7 @@ import type { PluginStatus } from "../plugins/types";
 import { parseIntent, type Intent } from "../intent/parse";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
+import { createNativeBridge, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
 import type { OsintRunner } from "../osint/types";
 import type { PresentedContent } from "../presentation/types";
 import { type Task, TaskCancelledError, TaskManager } from "../tasks/taskManager";
@@ -23,6 +24,7 @@ export type EngineEvent =
 export interface EngineOptions {
   native?: NativeAdapter;
   osint?: OsintRunner;
+  bridge?: NativeBridge;
   locale: Locale;
   /** Permissions accordées par défaut : elles correspondent au niveau « automatique ». */
   grantedPermissions?: Permission[];
@@ -41,7 +43,29 @@ interface Reply {
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
 }
 
-const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch", "osint.passive", "file.read"];
+// Les permissions « confirmation » sont accordées ici : elles autorisent seulement à demander l'action.
+// Le natif (courtier de permissions) refuse l'exécution tant que l'utilisateur n'a pas répondu.
+const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch", "osint.passive", "file.read", "file.write", "file.delete", "agent.run"];
+
+/** Titre affiché pour chaque permission demandant une confirmation. */
+const PERMISSION_TITLE: Record<string, MessageKey> = {
+  "file.write": "confirm.title.fileWrite",
+  "file.delete": "confirm.title.fileDelete",
+  "agent.run": "confirm.title.agentRun",
+};
+
+/** Libellé de chaque ligne de détail d'une demande de confirmation. */
+const ROW_LABEL: Record<string, MessageKey> = {
+  from: "confirm.row.from",
+  to: "confirm.row.to",
+  path: "confirm.row.path",
+  project: "confirm.row.project",
+  prompt: "confirm.row.prompt",
+};
+
+function basename(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
 
 function replyFor(locale: Locale): Reply {
   return { locale, t: (key, params) => translate(locale, key, params) };
@@ -54,6 +78,8 @@ function replyFor(locale: Locale): Reply {
 export class Engine {
   readonly #native: NativeAdapter;
   readonly #osint: OsintRunner;
+  readonly #bridge: NativeBridge;
+  readonly #unsubscribeConfirmations: () => void;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -65,6 +91,8 @@ export class Engine {
   constructor(options: EngineOptions) {
     this.#native = options.native ?? createNativeAdapter();
     this.#osint = options.osint ?? createOsintRunner();
+    this.#bridge = options.bridge ?? createNativeBridge();
+    this.#unsubscribeConfirmations = this.#bridge.onConfirmationRequest((request) => this.#presentConfirmation(request));
     this.#locale = options.locale;
     this.#holdMs = options.responseHoldMs ?? 2500;
     this.#registry = new CapabilityRegistry(options.grantedPermissions ?? DEFAULT_GRANTED);
@@ -74,6 +102,11 @@ export class Engine {
       registerApplications: (entries) => registerApplications(entries),
     });
     this.#tasks = new TaskManager({ concurrency: 3, historySize: 30 });
+  }
+
+  /** Arrête l'écoute des événements natifs. */
+  dispose(): void {
+    this.#unsubscribeConfirmations();
   }
 
   /** État de chaque plugin chargé : un plugin en échec est signalé, il ne bloque pas les autres. */
@@ -151,6 +184,26 @@ export class Engine {
         return this.#runCapability("osint.username", { username: intent.username }, { labelKey: "task.osintUsername", labelParams: { username: intent.username } }, reply);
       case "DOCUMENT_INSPECT":
         return this.#runCapability("document.inspect", { path: intent.path }, { labelKey: "task.inspectFile", labelParams: { file: intent.path.split(/[\\/]/).pop() ?? intent.path } }, reply);
+      case "FILE_SEARCH": {
+        const input: CapabilityInput = {};
+        if (intent.extension) input.extension = intent.extension;
+        if (intent.folderHint) input.folderHint = intent.folderHint;
+        if (intent.withinDays) input.withinDays = String(intent.withinDays);
+        return this.#runCapability("files.search", input, { labelKey: "task.fileSearch" }, reply);
+      }
+      case "FILE_RENAME":
+        return this.#runCapability("files.operate", { kind: "rename", from: intent.path, newName: intent.newName }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
+      case "FILE_MOVE":
+        return this.#runCapability("files.operate", { kind: "move", from: intent.path, toDir: intent.toDir }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
+      case "FILE_TRASH":
+        return this.#runCapability("files.operate", { kind: "trash", path: intent.path }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
+      case "PROCESS_LIST":
+        return this.#runCapability("system.processes", { limit: "8" }, { labelKey: "task.processes" }, reply);
+      case "AGENT_RUN":
+        if (!intent.project || !intent.prompt) {
+          return this.#reply(reply, reply.t("agent.needsProject"), "error");
+        }
+        return this.#runCapability("agent.claude-code", { project: intent.project, prompt: intent.prompt }, { labelKey: "task.agent", labelParams: {} }, reply);
       case "UNSUPPORTED":
         return this.#reply(reply, reply.t(intent.reason === "email" ? "intent.emailUnsupported" : "intent.unknown", { text: intent.text }), "error");
       case "CLOSE_WINDOW":
@@ -198,7 +251,34 @@ export class Engine {
   }
 
   #context(signal: AbortSignal, reply: Reply): CapabilityContext {
-    return { signal, native: this.#native, osint: this.#osint, locale: reply.locale, t: reply.t };
+    return {
+      signal,
+      native: this.#native,
+      osint: this.#osint,
+      bridge: this.#bridge,
+      locale: reply.locale,
+      t: reply.t,
+      progress: (text) => this.#emit({ type: "message", role: "assistant", text, tone: "info", locale: reply.locale }),
+    };
+  }
+
+  /** Une demande de confirmation venue du natif devient une fenêtre visible, avec ses deux réponses. */
+  #presentConfirmation(request: ConfirmationRequest): void {
+    const reply = replyFor(this.#locale);
+    const title = reply.t(PERMISSION_TITLE[request.permission] ?? "confirm.title.generic");
+    this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.asked", { title }), tone: "info", locale: reply.locale });
+    this.#emit({
+      type: "present",
+      content: {
+        kind: "confirmation",
+        requestId: request.id,
+        title,
+        rows: request.rows.map((row) => ({ label: reply.t(ROW_LABEL[row.key] ?? "confirm.row.generic"), value: row.value })),
+        approve: reply.t("confirm.approve"),
+        refuse: reply.t("confirm.refuse"),
+      },
+      source: { capabilityId: "permissions", locality: "local", collectedAt: Date.now() },
+    });
   }
 
   #fail(error: CapabilityError, reply: Reply): void {

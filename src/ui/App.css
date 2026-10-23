@@ -518,3 +518,30 @@ input {
   0%, 100% { box-shadow: 0 0 0 0 rgba(122, 162, 255, 0.35); }
   50% { box-shadow: 0 0 0 6px rgba(122, 162, 255, 0); }
 }
+
+/* Demandes de confirmation */
+.confirmation {
+  display: grid;
+  gap: 12px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.confirm-actions .send:disabled,
+.confirm-actions .chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.confirm-status {
+  margin: 0;
+  font-size: 12px;
+}
+
+.confirm-status.approved { color: var(--ok); }
+.confirm-status.refused { color: var(--muted); }
+.confirm-status.failed { color: var(--error); }

@@ -2,6 +2,7 @@ import type { NativeAdapter } from "../native/adapter";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import type { PresentedContent } from "../presentation/types";
 import type { OsintRunner } from "../osint/types";
+import type { NativeBridge } from "../native/bridge";
 
 /** local : sans réseau · network : contacte Internet ou un service distant. */
 export type Locality = "local" | "network";
@@ -12,7 +13,7 @@ export type Locality = "local" | "network";
  */
 export type CostTier = "local" | "internet" | "external-api" | "llm";
 
-export type Permission = "system.read" | "process.launch" | "osint.passive" | "file.read";
+export type Permission = "system.read" | "process.launch" | "osint.passive" | "file.read" | "file.write" | "file.delete" | "agent.run";
 
 /** Niveau d'exécution d'une permission (voir docs/PERMISSIONS.md). */
 export type PermissionTier = "automatic" | "confirmation" | "restricted";
@@ -22,6 +23,10 @@ export const PERMISSION_TIERS: Record<Permission, PermissionTier> = {
   "process.launch": "automatic",
   "osint.passive": "automatic",
   "file.read": "automatic",
+  // Ces actions sont confirmées par le natif (courtier de permissions) avant leur exécution.
+  "file.write": "confirmation",
+  "file.delete": "confirmation",
+  "agent.run": "confirmation",
 };
 
 export interface CapabilityManifest {
@@ -61,6 +66,9 @@ export interface CapabilityContext {
   signal: AbortSignal;
   native: NativeAdapter;
   osint: OsintRunner;
+  bridge: NativeBridge;
+  /** Message de progression, affiché pendant une tâche longue (p. ex. outil utilisé par un assistant). */
+  progress: (text: string) => void;
   locale: Locale;
   t: Translator;
 }

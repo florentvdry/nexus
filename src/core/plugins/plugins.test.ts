@@ -40,7 +40,11 @@ describe("plugins livrés", () => {
     const folders = discoverBuiltinPlugins().map((plugin) => plugin.folder);
     expect(folders).toEqual([
       "actions/app-launch",
+      "actions/file-operations",
+      "actions/file-search",
+      "actions/process-list",
       "actions/system-info",
+      "agents/claude-code",
       "documents/file-inspect",
       "languages/en",
       "languages/fr",

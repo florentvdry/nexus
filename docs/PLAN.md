@@ -143,7 +143,52 @@ si ses critères sont atteints et vérifiés.
 - Les vérifications TLS utilisent le magasin de certificats de l'OS (`platform-verifier`). Sur Linux, un proxy d'inspection peut encore échouer : c'est l'environnement, pas le code.
 
 ## Phase 4 — Automatisation avancée de Windows
-Non commencée.
+
+**Statut : implémentée et testée sous Linux (Xvfb) ; non validée sous Windows. Le contrôle des fenêtres est reporté.**
+
+### Livrables
+
+- [x] Recherche de fichiers par nom, extension, période et dossier, limitée aux dossiers utilisateur (Documents, Téléchargements, Bureau, Images). Le dossier personnel n'est jamais une racine autorisée.
+- [x] Aperçu puis confirmation pour chaque modification : renommer, déplacer, envoyer à la corbeille. Une suppression définitive n'existe pas.
+- [x] Processus actifs, triés par mémoire utilisée (lecture seule).
+- [x] Permissions natives : la confirmation est exigée par le backend Rust, pas seulement par l'interface. Une demande expire après 120 secondes et une réponse inconnue est refusée.
+- [x] Intégration Claude Code : détection du CLI, exécution non interactive (`-p --output-format stream-json`), demande transmise sur l'entrée standard (jamais dans la ligne de commande), budget plafonné à 0,50 $ par run, annulation, délai de 15 minutes, flux d'événements affiché (outils, réponse, refus, coût, durée).
+- [x] Applications installées : catalogue de lancement avec statut (en cours ou non) ; pas de détection des installations hors catalogue.
+- [ ] Contrôle des fenêtres Windows (lister, activer, fermer) : **non implémenté**, dépend d'API Win32 qui ne peuvent pas être testées ici.
+
+### Critère d'acceptation
+
+« Chercher des fichiers, les renommer ou les déplacer après confirmation, voir les processus actifs, et lancer Claude Code dans un projet en voyant son résultat. Aucune action destructive sans confirmation explicite. »
+
+| Partie | Résultat | Preuve |
+|---|---|---|
+| Recherche limitée aux dossiers utilisateur | **Vérifié** sous Xvfb. Une erreur de conception avait exposé le dossier personnel (113 résultats, dont des fichiers de `~/.claude`) ; corrigée et couverte par un test. | Capture `51-file-search.png` : 2 résultats, tous dans `nexus-e2e` |
+| Renommage après confirmation | **Vérifié** : refus → fichier inchangé ; autorisation → fichier renommé sur le disque. | Captures `52`, `53`, `56`, `57` |
+| Lancement de Claude Code après confirmation | **Vérifié** avec le CLI réel (2.1.309) : réponse affichée, coût 0,0093 $, durée 5 s, 1 outil. | Capture `62-agent-rerun.png` |
+| Contrôle des fenêtres | **Non réalisé.** | — |
+| Comportement sous Windows (corbeille, `.cmd`, chemins) | **Non validé.** | À vérifier sous Windows |
+
+### Tests exécutés
+
+- Rust : 63 tests OK, 2 ignorés (transcription Whisper ; test réel du CLI Claude Code, lancé à part avec `--ignored`). Clippy `-D warnings` OK.
+- Rust, Claude Code : relecture d'une sortie réelle enregistrée du CLI, annulation d'un faux CLI bloquant, CLI en échec, refus de permission, format des événements envoyés à l'interface (noms en camelCase vérifiés).
+- Frontend : typecheck OK, 153 tests OK. Règles d'intention couvertes ; les appels natifs sont simulés dans `native-actions.test.ts` (simulation étiquetée).
+- E2E Xvfb : recherche, renommage refusé, renommage autorisé, lancement de Claude Code avec confirmation et résultat réel.
+
+### Corrections trouvées pendant la validation
+
+- Le dossier personnel apparaissait dans la recherche (repli de la bibliothèque `dirs`). Corrigé : seuls les sous-dossiers canoniques sont des racines.
+- Le coût et la durée de Claude Code affichaient `NaN` : les champs étaient envoyés en `snake_case`. Corrigé et couvert par un test.
+- La confirmation affichait seulement un symbole après réponse. Le texte est maintenant traduit.
+
+### Limites connues
+
+- Pas de contrôle des fenêtres Windows (lister, activer, fermer). Les commandes « ferme cette fenêtre » de la phase 1 restent celles de NEXUS.
+- Le lancement passe par le catalogue ; les applications installées hors catalogue ne sont pas détectées.
+- Le chemin `.cmd` de Claude Code (`cmd /C`) et la corbeille (crate `trash`) ne sont pas testés sous Windows.
+- La tâche « Claude Code en cours » s'affiche avant la confirmation : c'est un libellé à améliorer.
+- Les demandes de permission propres à Claude Code restent actives. Un outil refusé est affiché comme tel, jamais contourné.
+- Le plugin ne peut pas encore demander une permission sous une identité distincte côté natif (voir `docs/PERMISSIONS.md`).
 
 ## Phase 5 — Intelligence et écosystème
 Non commencée.

@@ -18,5 +18,9 @@ export function estimateSize(content: PresentedContent): Size {
       return { width: 420, height: Math.min(MAX_WINDOW_HEIGHT, 72 + (content.rows.length + 1) * 30) };
     case "error-card":
       return { width: 340, height: 130 };
+    case "confirmation": {
+      const height = content.rows.reduce((total, row) => total + rowHeight(row.value), 72 + 56);
+      return { width: 380, height: Math.min(MAX_WINDOW_HEIGHT, height) };
+    }
   }
 }

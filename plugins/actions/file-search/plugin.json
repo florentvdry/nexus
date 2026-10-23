@@ -1,0 +1,26 @@
+{
+  "id": "actions.file-search",
+  "name": "Recherche de fichiers",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Recherche par extension et période, dans les dossiers utilisateur uniquement (lecture seule).",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::files"
+  ],
+  "capabilities": [
+    "files.search"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "file.read"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

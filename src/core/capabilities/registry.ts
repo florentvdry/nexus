@@ -60,8 +60,9 @@ export class CapabilityRegistry {
 
     for (const permission of entry.manifest.permissions) {
       if (!this.#granted.has(permission)) throw new CapabilityError("permission-denied", { permission });
-      if (PERMISSION_TIERS[permission] !== "automatic") {
-        throw new CapabilityError("confirmation-required", { permission });
+      // Une permission « confirmation » est autorisée ici ; c'est le natif qui demande l'accord de l'utilisateur.
+      if (PERMISSION_TIERS[permission] === "restricted") {
+        throw new CapabilityError("permission-refused", { permission });
       }
     }
 

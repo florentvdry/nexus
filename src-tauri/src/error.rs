@@ -35,4 +35,20 @@ pub enum AdapterError {
     ConnectorFailed(String),
     #[error("délai dépassé pour le connecteur : {0}")]
     ConnectorTimeout(String),
+    #[error("action refusée : {0}")]
+    PermissionRefused(String),
+    #[error("demande de confirmation expirée ou inconnue")]
+    ConfirmationExpired,
+    #[error("action refusée par l'utilisateur")]
+    ConfirmationRefused,
+    #[error("chemin refusé : {0}")]
+    InvalidPath(String),
+    #[error("dossier hors des emplacements autorisés : {0}")]
+    OutsideAllowedFolders(String),
+    #[error("opération impossible : {0}")]
+    Operation(String),
+    #[error("assistant non installé : {0}")]
+    AgentNotInstalled(String),
+    #[error("échec de l'assistant : {0}")]
+    AgentFailed(String),
 }

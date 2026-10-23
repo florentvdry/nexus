@@ -76,3 +76,20 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Exclus** : emails, recherches intrusives, contournement de protections, fusion automatique d'identités. Chaque exclusion est refusée par une réponse explicite.
 - **Statuts** : une correspondance de pseudo reste « possible », jamais « vérifiée ». Un 404 reste « introuvable », jamais « absent ».
 
+## ADR-014 — Confirmation exigée par le backend natif
+
+- **Choix** : toute action sensible (écriture, suppression, lancement de Claude Code) appelle `permissions::confirm` dans Rust avant d'agir. Le broker garde les demandes en attente, les expire après 120 secondes et refuse toute réponse inconnue.
+- **Pourquoi** : une confirmation uniquement dans l'interface peut être contournée par un appel direct à la commande, ou par un plugin qui appelle le pont natif. Placer la garantie dans le backend la rend indépendante de l'appelant.
+- **Limite** : le backend ne sait pas encore quel plugin appelle. Voir `docs/PERMISSIONS.md`.
+
+## ADR-015 — Racines de fichiers : dossiers utilisateur, jamais le dossier personnel
+
+- **Choix** : les seules racines sont les sous-dossiers canoniques de Documents, Téléchargements, Bureau et Images. Le dossier personnel n'est jamais une racine.
+- **Pourquoi** : une première version retenait le dossier personnel par repli de la bibliothèque `dirs`, et une recherche remontait des fichiers de configuration (`~/.claude`). Une racine trop large rend la confirmation inutile.
+- **Conséquence** : des fichiers rangés directement dans le dossier personnel ne sont pas accessibles. C'est voulu.
+
+## ADR-016 — Claude Code via le CLI officiel, en mode non interactif
+
+- **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.
+- **Pourquoi** : c'est l'interface officielle. Elle respecte l'authentification locale et les permissions de Claude Code, comme le demande le cahier des charges.
+- **Limite** : le format `stream-json` peut évoluer ; le test sur un enregistrement réel et le test réel (`--ignored`) doivent être relancés à chaque mise à jour du CLI.

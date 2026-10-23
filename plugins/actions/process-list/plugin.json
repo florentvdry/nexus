@@ -1,0 +1,26 @@
+{
+  "id": "actions.process-list",
+  "name": "Processus en cours",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Processus qui occupent le plus de mémoire. Lecture seule.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::processes"
+  ],
+  "capabilities": [
+    "system.processes"
+  ],
+  "connectors": [],
+  "languages": [],
+  "applications": false,
+  "permissions": [
+    "system.read"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

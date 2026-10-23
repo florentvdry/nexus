@@ -4,6 +4,7 @@ import { CapabilityError } from "./errors";
 import { CapabilityRegistry } from "./registry";
 import type { CapabilityContext, CapabilityManifest, CapabilityResult, Permission } from "./types";
 import { translate } from "../../i18n/messages";
+import { UnavailableNativeBridge } from "../native/bridge";
 
 const manifest: CapabilityManifest = {
   id: "test.echo",
@@ -27,6 +28,8 @@ function context(signal = new AbortController().signal): CapabilityContext {
     signal,
     native: {} as CapabilityContext["native"],
     osint: { run: async () => { throw new Error("non utilisé dans ce test"); } },
+    bridge: new UnavailableNativeBridge(),
+    progress: () => {},
     locale: "fr",
     t: (key, params) => translate("fr", key, params),
   };
@@ -107,3 +110,18 @@ describe("CapabilityRegistry", () => {
     expect(() => registry.register({ ...manifest, version: "1.0" }, async () => result("x"))).toThrow();
   });
 });
+
+describe("niveaux de permission côté registre", () => {
+  it("laisse passer une permission « confirmation » : c'est le natif qui demande l'accord", async () => {
+    const registry = new CapabilityRegistry(["file.delete"]);
+    registry.register({ ...manifest, id: "files.delete", permissions: ["file.delete"] }, async () => result("fait"));
+    await expect(registry.invoke("files.delete", {}, context())).resolves.toMatchObject({ caption: "fait" });
+  });
+
+  it("refuse une permission de confirmation qui n'a pas été accordée à l'interface", async () => {
+    const registry = new CapabilityRegistry(["system.read"]);
+    registry.register({ ...manifest, id: "files.delete", permissions: ["file.delete"] }, async () => result("x"));
+    expect(await codeOf(registry.invoke("files.delete", {}, context()))).toBe("permission-denied");
+  });
+});
+
