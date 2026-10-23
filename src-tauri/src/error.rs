@@ -13,4 +13,18 @@ pub enum AdapterError {
     LaunchFailed(String),
     #[error("tâche système interrompue : {0}")]
     TaskFailed(String),
+    #[error("modèle de reconnaissance vocale absent : {0}")]
+    ModelMissing(String),
+    #[error("fichier de modèle invalide : {0}")]
+    ModelInvalid(String),
+    #[error("microphone indisponible : {0}")]
+    AudioDevice(String),
+    /// Décodage de fichiers audio : utilisé par les tests et l'analyse de fichiers (phase 3).
+    #[allow(dead_code)]
+    #[error("fichier audio invalide : {0}")]
+    Audio(String),
+    #[error("échec de l'inférence : {0}")]
+    Inference(String),
+    #[error("une session vocale est déjà active")]
+    VoiceAlreadyActive,
 }

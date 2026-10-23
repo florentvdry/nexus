@@ -4,8 +4,8 @@ Assistant personnel intelligent pour Windows, open source, inspiré des interfac
 Vous formulez une intention ; NEXUS choisit les outils. Les commandes courantes s'exécutent en
 local, sans modèle de langage et sans abonnement.
 
-> **Statut : phase 1 (fondations et interface).** Voir [docs/PLAN.md](docs/PLAN.md) pour le détail
-> et les limites connues.
+> **Statut : phase 1 terminée, phase 2 partiellement livrée** (la transcription attend le modèle Whisper).
+> Voir [docs/PLAN.md](docs/PLAN.md) pour le détail et les limites connues.
 
 ## Ce qui fonctionne aujourd'hui
 
@@ -18,21 +18,35 @@ local, sans modèle de langage et sans abonnement.
   Seules ces applications peuvent être lancées.
 - Informations système réelles : processeur, mémoire, disques, durée de fonctionnement.
 
+## Voix (phase 2)
+
+- Clic sur le bouton micro, ou raccourci global `Ctrl+Alt+Espace`. La saisie texte reste disponible.
+- Reconnaissance hors ligne avec whisper.cpp et Silero VAD. Aucun audio n'est envoyé à un service externe.
+- Réponses lues à voix haute avec les voix installées sur Windows (option dans les réglages vocaux).
+- Langue : automatique (la réponse suit la langue de la commande), ou français / anglais imposé.
+
+**Modèle de reconnaissance** : il n'est pas inclus dans NEXUS. Téléchargez `ggml-base.bin` (multilingue, environ 148 Mo)
+depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affiché dans les réglages vocaux :
+
+- Windows : `%APPDATA%\fr.nexus.assistant\models\ggml-base.bin`
+- Autre : valeur de la variable d'environnement `NEXUS_WHISPER_MODEL`, si elle est définie.
+
 ## Installation pour le développement
 
 Prérequis :
 
 - Node.js 22 et pnpm 10
 - Rust stable (1.77.2 ou plus récent)
-- Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11)
-- Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev`
+- Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11), et Visual Studio Build Tools (charge C++) avec CMake et LLVM/Clang, pour compiler whisper.cpp
+- Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libasound2-dev cmake clang`
 
 ```bash
 pnpm install
 pnpm tauri dev          # application de bureau en développement
 pnpm test               # tests frontend (Vitest)
 pnpm typecheck          # TypeScript strict
-cd src-tauri && cargo test
+cd src-tauri && cargo test                          # tests Rust
+cd src-tauri && cargo test -- --ignored            # transcription réelle, exige NEXUS_WHISPER_MODEL
 pnpm tauri build        # installateur Windows (à partir de Windows)
 ```
 

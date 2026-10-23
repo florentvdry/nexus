@@ -12,7 +12,7 @@ import { hasMessage, translate, type Locale, type MessageKey } from "../../i18n/
 export type OrbState = "idle" | "listening" | "recognizing" | "thinking" | "executing" | "responding" | "error";
 
 export type EngineEvent =
-  | { type: "message"; role: "user" | "assistant"; text: string; tone: "info" | "error" }
+  | { type: "message"; role: "user" | "assistant"; text: string; tone: "info" | "error"; locale: Locale }
   | { type: "orb"; state: OrbState }
   | { type: "present"; content: PresentedContent; source: SourceRef }
   | { type: "window-command"; command: "close-last" | "close-all" };
@@ -26,7 +26,22 @@ export interface EngineOptions {
   responseHoldMs?: number;
 }
 
+export interface SubmitOptions {
+  /** Langue de la réponse pour cette commande. Par défaut, la langue de l'interface. */
+  locale?: Locale;
+}
+
+/** Langue et traducteur utilisés pour une réponse. */
+interface Reply {
+  locale: Locale;
+  t: (key: MessageKey, params?: Record<string, string | number>) => string;
+}
+
 const DEFAULT_GRANTED: Permission[] = ["system.read", "process.launch"];
+
+function replyFor(locale: Locale): Reply {
+  return { locale, t: (key, params) => translate(locale, key, params) };
+}
 
 /**
  * Core Engine : transforme une commande en intention, route l'intention vers une capacité,
@@ -79,42 +94,41 @@ export class Engine {
     return this.#registry.list();
   }
 
-  /** Ajoute une réponse de l'assistant, par exemple après une action de fenêtre décidée par l'interface. */
+  /** Ajoute une réponse de l'assistant, par exemple après une action décidée par l'interface. */
   say(text: string, tone: "info" | "error" = "info"): void {
-    this.#emit({ type: "message", role: "assistant", text, tone });
-    this.#setOrb(tone === "error" ? "error" : "responding");
-    this.#scheduleIdle();
+    this.#reply(replyFor(this.#locale), text, tone);
   }
 
-  async submit(input: string): Promise<void> {
+  /** Exécute une commande texte ou vocale et publie la réponse dans la langue demandée. */
+  async submit(input: string, options: SubmitOptions = {}): Promise<void> {
     const text = input.trim();
     if (!text) return;
 
-    this.#emit({ type: "message", role: "user", text, tone: "info" });
+    const reply = replyFor(options.locale ?? this.#locale);
+    this.#emit({ type: "message", role: "user", text, tone: "info", locale: reply.locale });
     this.#setOrb("thinking");
 
     const { intent } = parseIntent(text);
     try {
-      await this.#route(intent);
+      await this.#route(intent, reply);
     } catch (error) {
-      this.#fail(toCapabilityError(error));
+      this.#fail(toCapabilityError(error), reply);
     }
   }
 
-  #t = (key: MessageKey, params?: Record<string, string | number>): string => translate(this.#locale, key, params);
-
-  async #route(intent: Intent): Promise<void> {
+  async #route(intent: Intent, reply: Reply): Promise<void> {
     switch (intent.type) {
       case "OPEN_APPLICATION": {
         if (!intent.appId) {
-          this.#fail(new CapabilityError("unknown-app", { name: intent.appName }));
+          this.#fail(new CapabilityError("unknown-app", { name: intent.appName }), reply);
           return;
         }
-        const name = this.#t(APPS.find((app) => app.id === intent.appId)?.nameKey ?? "app.Notepad");
-        return this.#runCapability("apps.launch", { appId: intent.appId }, { labelKey: "task.openApp", labelParams: { app: name } });
+        const entry = APPS.find((app) => app.id === intent.appId);
+        const name = reply.t(entry?.nameKey ?? "app.Notepad");
+        return this.#runCapability("apps.launch", { appId: intent.appId }, { labelKey: "task.openApp", labelParams: { app: name } }, reply);
       }
       case "SYSTEM_INFO":
-        return this.#runCapability("system.info", {}, { labelKey: "task.systemInfo" });
+        return this.#runCapability("system.info", {}, { labelKey: "task.systemInfo" }, reply);
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -123,12 +137,12 @@ export class Engine {
         return;
       case "CANCEL_TASKS": {
         const count = this.#tasks.cancelAllCancellable();
-        return this.say(count > 0 ? this.#t("cancel.done", { count }) : this.#t("cancel.none"));
+        return this.#reply(reply, count > 0 ? reply.t("cancel.done", { count }) : reply.t("cancel.none"));
       }
       case "HELP":
-        return this.say(this.#t("intent.help"));
+        return this.#reply(reply, reply.t("intent.help"));
       case "UNKNOWN":
-        return this.say(this.#t("intent.unknown", { text: intent.text }), "error");
+        return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
     }
   }
 
@@ -136,8 +150,9 @@ export class Engine {
     capabilityId: string,
     input: CapabilityInput,
     task: { labelKey: MessageKey; labelParams?: Record<string, string>; cancellable?: boolean },
+    reply: Reply,
   ): Promise<void> {
-    const { done } = this.#tasks.run(task, (signal) => this.#registry.invoke(capabilityId, input, this.#context(signal)));
+    const { done } = this.#tasks.run(task, (signal) => this.#registry.invoke(capabilityId, input, this.#context(signal, reply)));
     this.#setOrb("executing");
 
     let result: CapabilityResult;
@@ -145,39 +160,45 @@ export class Engine {
       result = await done;
     } catch (error) {
       if (error instanceof TaskCancelledError) {
-        this.say(this.#t("error.code.cancelled"));
+        this.#reply(reply, reply.t("error.code.cancelled"));
         return;
       }
-      this.#fail(toCapabilityError(error));
+      this.#fail(toCapabilityError(error), reply);
       return;
     }
 
     for (const content of result.presentations) {
       this.#emit({ type: "present", content, source: result.source });
     }
-    this.say(result.caption);
+    this.#reply(reply, result.caption);
   }
 
-  #context(signal: AbortSignal): CapabilityContext {
-    return { signal, native: this.#native, locale: this.#locale, t: this.#t };
+  #context(signal: AbortSignal, reply: Reply): CapabilityContext {
+    return { signal, native: this.#native, locale: reply.locale, t: reply.t };
   }
 
-  #fail(error: CapabilityError): void {
-    const text = this.#errorText(error);
-    this.#emit({ type: "message", role: "assistant", text, tone: "error" });
+  #fail(error: CapabilityError, reply: Reply): void {
+    const text = this.#errorText(error, reply);
+    this.#emit({ type: "message", role: "assistant", text, tone: "error", locale: reply.locale });
     this.#emit({
       type: "present",
-      content: { kind: "error-card", title: this.#t("error.title"), code: error.code, message: text },
+      content: { kind: "error-card", title: reply.t("error.title"), code: error.code, message: text },
       source: { capabilityId: "engine", locality: "local", collectedAt: Date.now() },
     });
     this.#setOrb("error");
     this.#scheduleIdle();
   }
 
-  #errorText(error: CapabilityError): string {
+  #errorText(error: CapabilityError, reply: Reply): string {
     const key = `error.code.${error.code}`;
     const messageKey = hasMessage(key) ? key : "error.code.plugin-failure";
-    return this.#t(messageKey, error.params);
+    return reply.t(messageKey, error.params);
+  }
+
+  #reply(reply: Reply, text: string, tone: "info" | "error" = "info"): void {
+    this.#emit({ type: "message", role: "assistant", text, tone, locale: reply.locale });
+    this.#setOrb(tone === "error" ? "error" : "responding");
+    this.#scheduleIdle();
   }
 
   #setOrb(state: OrbState): void {

@@ -16,6 +16,7 @@ import {
   type WindowRequest,
   type WindowsState,
 } from "../core/presentation/windows";
+import { readVoiceSettings, writeVoiceSettings, type VoiceSettings } from "../core/voice/settings";
 import type { Task } from "../core/tasks/taskManager";
 import { translate, type Locale, type MessageKey } from "../i18n/messages";
 import { CommandBar } from "./CommandBar";
@@ -23,8 +24,10 @@ import { FloatingWindow } from "./FloatingWindow";
 import { HistoryMenu } from "./HistoryMenu";
 import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
+import { VoicePanel } from "./VoicePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
+import { useVoice } from "./useVoice";
 
 type WindowAction =
   | { type: "open"; request: WindowRequest; context: WindowContext }
@@ -92,13 +95,23 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [tasks, setTasks] = useState<Task[]>(() => engine.tasksSnapshot());
   const [windows, dispatch] = useReducer(windowsReducer, EMPTY_WINDOWS);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(readVoiceSettings);
+  const [panelOpen, setPanelOpen] = useState(false);
   const windowsRef = useRef(windows);
+  const settingsRef = useRef(voiceSettings);
 
   const t = (key: MessageKey, params?: Record<string, string | number>) => translate(locale, key, params);
+  const { controller: voice, status: voiceStatus } = useVoice(engine, () => settingsRef.current);
 
   useEffect(() => {
     windowsRef.current = windows;
   }, [windows]);
+
+  useEffect(() => {
+    settingsRef.current = voiceSettings;
+    writeVoiceSettings(voiceSettings);
+    if (!voiceSettings.enabled) void voice.stop();
+  }, [voice, voiceSettings]);
 
   useEffect(() => {
     engine.setLocale(locale);
@@ -150,11 +163,12 @@ export function App({ engine: injectedEngine }: AppProps) {
     };
   }, [engine, locale]);
 
-  const submit = (text: string) => {
-    void engine.submit(text);
-  };
-
   const toggleLocale = () => setLocale((current) => (current === "fr" ? "en" : "fr"));
+  const updateSettings = (patch: Partial<VoiceSettings>) => setVoiceSettings((current) => ({ ...current, ...patch }));
+
+  // L'orbe suit d'abord les réponses du moteur, puis l'état du micro quand le moteur est au repos.
+  const displayedOrb: OrbState =
+    orbState === "idle" && voiceStatus !== "off" ? (voiceStatus === "recognizing" ? "recognizing" : "listening") : orbState;
 
   return (
     <div className="stage">
@@ -166,15 +180,24 @@ export function App({ engine: injectedEngine }: AppProps) {
           t={t}
           onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
         />
+        {voiceSettings.enabled && (
+          <button type="button" className="chip" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
+            {t("voice.settings")}
+          </button>
+        )}
         <button type="button" className="chip" onClick={toggleLocale} aria-label={t("ui.language")}>
           {locale.toUpperCase()}
         </button>
       </div>
 
+      {panelOpen && (
+        <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)} />
+      )}
+
       <div className="orb-zone">
-        <Orb state={orbState} />
+        <Orb state={displayedOrb} />
         <span className="orb-label" role="status">
-          {t(ORB_LABEL[orbState])}
+          {t(ORB_LABEL[displayedOrb])}
         </span>
       </div>
 
@@ -190,7 +213,21 @@ export function App({ engine: injectedEngine }: AppProps) {
         )}
       </div>
 
-      <CommandBar placeholder={t("ui.placeholder")} sendLabel={t("ui.send")} onSubmit={submit} />
+      <CommandBar
+        placeholder={t("ui.placeholder")}
+        sendLabel={t("ui.send")}
+        onSubmit={(text) => voice.submitText(text)}
+        voice={
+          voiceSettings.enabled
+            ? {
+                status: voiceStatus,
+                onToggle: () => void voice.toggle(),
+                startLabel: t("voice.toggle"),
+                stopLabel: t("voice.stop"),
+              }
+            : undefined
+        }
+      />
 
       <div className="windows-layer">
         {windows.open.map((item, index) => (

@@ -46,6 +46,26 @@ contrat `NativeAdapter`. Le backend Rust ne connaît que des identifiants du cat
 6. Le résultat devient une réponse courte (sous l'orbe) et, si besoin, des `PresentedContent`.
 7. Le moteur de placement choisit un emplacement libre pour chaque fenêtre.
 
+## Pipeline vocal (phase 2)
+
+```
+Micro (cpal) ──► 16 kHz mono ──► Silero VAD (tract) ──► Segmenter ──► whisper.cpp (whisper-rs)
+   src-tauri/src/voice/capture.rs      vad.rs              segmenter.rs        transcribe.rs
+                                                              │
+                                 événements `voice://event` ◄─┘ (session.rs)
+                                                              ▼
+Frontend : VoiceController ──► Engine.submit(texte, langue de réponse) ──► réponse
+                 │                                                          │
+                 └── lecture à voix haute (API Web Speech, voix système) ◄──┘
+```
+
+- Le micro n'est ouvert que pendant une session demandée (bouton, raccourci `Ctrl+Alt+Espace`).
+- Le VAD découpe la parole. Whisper ne reçoit que des énoncés complets, avec 300 ms de silence avant le début.
+- Les événements `listening`, `speech-started`, `transcribing`, `transcript`, `error`, `stopped` pilotent l'orbe et la barre de commande.
+- `VoiceController` (`src/core/voice/controller.ts`) ne connaît ni Tauri ni le DOM. Ses dépendances (entrée, sortie, moteur) sont injectées ; les tests utilisent des doubles nommés.
+- Langue : Whisper détecte la langue de la voix ; un comptage de mots fréquents sert au texte. Le réglage « automatique » répond dans la langue détectée, les réglages « français » ou « anglais » l'imposent.
+- Le modèle de reconnaissance n'est jamais téléchargé automatiquement. Son emplacement est `<données applicatives>/models/ggml-base.bin`, ou la valeur de `NEXUS_WHISPER_MODEL`.
+
 ## Niveaux de compréhension et de coût
 
 | Niveau | Mécanisme | Phase | État |
@@ -101,8 +121,9 @@ Le DOM n'est lu que par `src/ui/scene.ts`. Le moteur reste testable sans navigat
 
 ## Ce que la phase 1 n'implémente pas
 
-- Voix (phase 2), plugins isolés (phase 3), recherche de fichiers et contrôle des fenêtres
-  Windows (phase 4), corrélation et LLM (phase 5).
-- Icône de zone de notification, raccourcis globaux, démarrage automatique : non encore livrés.
+- Plugins isolés (phase 3), recherche de fichiers et contrôle des fenêtres Windows (phase 4),
+  corrélation et LLM (phase 5).
+- Icône de zone de notification, démarrage automatique, wake word : non encore livrés.
+- Traduction (Argos), reconnaissance de commandes courtes par modèle dédié : phases suivantes.
 - Le lancement réel n'a été vérifié que sur Linux (voir `docs/PLAN.md`) ; le comportement
   Windows reste à valider sur une machine Windows.

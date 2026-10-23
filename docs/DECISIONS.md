@@ -32,3 +32,30 @@ explicitement. Les données de démonstration n'existent que dans les tests, et 
 
 Compatible avec les dépendances actuelles (Tauri, React, sysinfo, Vite, Vitest sont MIT ou
 Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés individuellement.
+
+## ADR-007 — Reconnaissance vocale : whisper.cpp et Silero VAD, en local
+
+- **Choix** : whisper.cpp (MIT) via `whisper-rs`, avec Silero VAD v5/v6 (MIT) pour détecter la parole.
+- **Pourquoi** : hors ligne, multilingue, sans clé d'API, et le micro ne quitte jamais la machine.
+- **Écartés** :
+  - API de reconnaissance du navigateur (`webkitSpeechRecognition`) : Chromium envoie l'audio à un service en ligne.
+  - Vosk : son modèle français n'était pas accessible depuis les registres autorisés, et ses modèles ne sont pas sur PyPI ou npm.
+- **Conséquence** : le modèle Whisper doit être téléchargé par l'utilisateur ou par une étape explicite. Il n'est pas embarqué (148 Mo pour `base`).
+
+## ADR-008 — Synthèse vocale : voix du système, Piper plus tard
+
+- **Choix en phase 2** : API Web Speech (`speechSynthesis`). Sous WebView2 sur Windows, elle utilise les voix SAPI installées, hors ligne et sans téléchargement.
+- **Pourquoi pas Piper maintenant** : ses voix sont hébergées sur Hugging Face (inaccessible ici), et sa phonémisation repose sur espeak-ng, sous GPL-3. Intégrer espeak-ng dans l'installateur obligerait à publier le produit sous GPL.
+- **Suite** : Piper reste un fournisseur possible derrière `SpeechOutput`, en option, à installer par l'utilisateur. Sa licence sera revue avant tout ajout.
+
+## ADR-009 — Variante du VAD et renommage des nœuds ONNX
+
+- **Choix** : `silero_vad_openvino_16k.onnx` (Silero VAD v6.2.3), sans opérateur `If`, avec les nœuds renommés pour être acceptés par tract.
+- **Pourquoi** : la variante `silero_vad_op18_ifless` contient encore un `If` que tract ne sait pas planifier. La variante `16k_openvino` s'exécute, et ses probabilités concordent avec onnxruntime sur les fixtures.
+- **Détail** : le modèle est inclus dans le binaire (`include_bytes!`, environ 1,3 Mo), pour éviter de dépendre d'un chemin de ressources à l'exécution.
+
+## ADR-010 — Raccourci global enregistré côté Rust
+
+- **Choix** : `tauri-plugin-global-shortcut` 2.x, enregistré dans `lib.rs`. Le raccourci émet `voice://toggle` vers l'interface.
+- **Pourquoi** : aucune permission JavaScript à accorder, et un échec d'enregistrement (raccourci déjà pris) est journalisé sans bloquer le démarrage.
+

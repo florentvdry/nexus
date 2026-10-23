@@ -30,6 +30,18 @@ n'existe pas : l'erreur `confirmation-required` est alors affichée, jamais masq
 - Le processus lancé est détaché : NEXUS ne le surveille pas et n'injecte rien dans lui.
 - Aucun appel réseau n'est effectué par les capacités de la phase 1.
 
+## Microphone (phase 2)
+
+| Élément | Règle |
+|---|---|
+| Activation | Uniquement sur action : clic sur le micro ou `Ctrl+Alt+Espace`. Jamais au démarrage. |
+| Désactivation | Le réglage « Fonctions vocales activées » arrête l'écoute et bloque toute nouvelle session. |
+| Indication | L'orbe passe en écoute ou en reconnaissance, et le bouton micro reste enfoncé. |
+| Destination | Aucune. Le VAD et Whisper tournent localement. Aucun fichier audio n'est écrit sur le disque. |
+| Matériel | Le micro par défaut du système est utilisé. Aucune sélection de périphérique en phase 2. |
+
+Le micro n'est pas une permission du registre de capacités : c'est une fonction de l'interface, protégée par l'action de l'utilisateur et par l'interrupteur des réglages.
+
 ## Prévu pour les phases suivantes
 
 - Journal local des actions, consultable et supprimable.

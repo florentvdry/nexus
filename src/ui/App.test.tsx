@@ -90,4 +90,17 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Langue" }));
     expect(screen.getByPlaceholderText("Tell me what you want to do…")).toBeTruthy();
   });
+
+  it("affiche le micro et signale honnêtement l'absence du backend vocal", async () => {
+    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer l'écoute" }));
+    await waitFor(() => expect(screen.getByText(/application de bureau NEXUS/)).toBeTruthy());
+  });
+
+  it("ouvre le panneau de réglages vocaux", () => {
+    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Réglages" }));
+    expect(screen.getByRole("heading", { name: "Réglages vocaux" })).toBeTruthy();
+    expect(screen.getByLabelText("Fonctions vocales activées")).toBeTruthy();
+  });
 });

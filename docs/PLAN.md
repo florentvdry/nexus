@@ -52,18 +52,50 @@ si ses critères sont atteints et vérifiés.
 
 ## Phase 2 — Voix et multilingue
 
-**Statut : non commencée. Bloquée par deux points à trancher, voir ci-dessous.**
+**Statut : partiellement livrée. Validation bloquée sur le téléchargement du modèle Whisper.**
 
-Livrables prévus : reconnaissance vocale locale (whisper.cpp + Silero VAD), synthèse locale
-(Piper), détection de langue, raccourci clavier global, interruption des réponses, paramètres vocaux.
+### Livrables
 
-Points bloquants :
-1. **Entrée audio** : l'environnement de développement n'a pas de microphone. Les critères
-   « donner une commande orale » ne peuvent être vérifiés que sur une machine avec micro, ou par
-   lecture de fichiers audio de test.
-2. **Licences et modèles** : il faut vérifier la licence de chaque modèle et de chaque
-   bibliothèque avant intégration (whisper.cpp MIT, Silero VAD MIT, Piper MIT, mais espeak-ng
-   utilisé par Piper est GPL : à examiner). Les modèles seront téléchargés, pas embarqués.
+- [x] Détection de début et de fin de parole : Silero VAD v5/v6 (MIT) exécuté par tract, sans runtime natif.
+- [x] Segmentation des énoncés (pauses courtes tolérées, silence de 600 ms pour clore, 15 s maximum).
+- [x] Pipeline micro → VAD → transcription, avec événements vers l'interface (`voice://event`).
+- [x] Transcription hors ligne par whisper.cpp (`whisper-rs` 0.16), derrière un trait `Transcriber`. Compilée, mais non exécutée (voir limites).
+- [x] Détection de langue : celle de Whisper pour la voix, un comptage de mots fréquents pour le texte.
+- [x] Réponse dans la langue de la commande, ou langue imposée dans les réglages.
+- [x] Raccourci clavier global `Ctrl+Alt+Espace` (plugin Tauri, enregistrement Rust).
+- [x] Interruption : parler ou taper interrompt la lecture en cours.
+- [x] Synthèse vocale : voix du système via l'API Web Speech (WebView2 sur Windows, hors ligne), volume, vitesse, choix de la voix.
+- [x] Réglages vocaux : interrupteur général, langue, réponses à voix haute, état et emplacement du modèle.
+- [x] Saisie texte conservée et équivalente à la voix.
+- [x] États de l'orbe : écoute et reconnaissance pilotées par les événements réels.
+
+### Critères d'acceptation
+
+| Critère | Résultat | Preuve |
+|---|---|---|
+| Commande orale simple en français ou en anglais, exécutée sans API payante | **Non vérifié de bout en bout.** Le VAD détecte la parole des audios FR et EN ; la transcription n'a pas pu être exécutée (modèle Whisper inaccessible). | Tests Rust VAD, test Whisper `--ignored` prêt |
+| Raccourci global démarre l'écoute | **Vérifié** sous Xvfb : `Ctrl+Alt+Espace` → commande native → erreur `model-missing` affichée. | Capture `10-shortcut-no-model` |
+| Modèle invalide signalé distinctement | **Vérifié** sous Xvfb avec un faux fichier : message `model-invalid`. | Capture `14-model-invalid` |
+| Interruption de la réponse vocale | **Vérifié par tests** avec doubles (`controller.test.ts`). Non entendu en réel. | Tests |
+| Réglages vocaux et langue de réponse | **Vérifié** : panneau affiché, réponses FR/EN selon la saisie. | Captures 11, 13 |
+| Aucun flux audio envoyé à un service externe | **Vérifié par conception** : aucun appel réseau dans le chemin vocal ; Whisper et VAD sont locaux. | Revue du code |
+
+### Tests exécutés
+
+- Rust : 20 tests OK (décodage WAV, rééchantillonnage, VAD sur les fixtures FR et EN, segmentation, modèle manquant, modèle invalide), 1 test ignoré (transcription réelle, exige `NEXUS_WHISPER_MODEL`). `cargo clippy -D warnings` OK.
+- Frontend : 106 tests OK (dont 25 nouveaux : détection de langue, réglages, contrôleur vocal avec doubles nommés, interface micro et panneau).
+- `pnpm typecheck` et `pnpm build` OK.
+- Bout en bout sous Xvfb : raccourci, erreurs `model-missing` et `model-invalid`, panneau de réglages, commandes texte en français.
+
+### Limites connues
+
+- **Bloquant : `huggingface.co` est refusé par la politique réseau de l'environnement de développement.** Les poids Whisper (`ggml-base.bin`) et les voix Piper y sont hébergés. Aucun paquet de registre autorisé ne fournit de modèle de reconnaissance français. Pour finir la validation : autoriser `huggingface.co` dans les réglages réseau, puis lancer `NEXUS_WHISPER_MODEL=... cargo test -- --ignored`.
+- Le micro n'a pas pu être testé : aucun périphérique audio dans le conteneur. La capture (cpal) compile mais n'a pas tourné.
+- La synthèse vocale n'a pas été entendue. Sous WebKitGTK, elle n'est pas disponible ; sous WebView2 (Windows), elle dépend des voix installées.
+- Piper n'est pas intégré (ADR-008) : ses voix sont hébergées sur Hugging Face et espeak-ng, sa dépendance phonétique, est sous GPL.
+- Pas de wake word (« Jarvis ») : seules la touche, le raccourci et le clic activent l'écoute. C'est un choix de confidentialité ; un mot d'activation local viendra plus tard.
+- Pendant la transcription d'un énoncé (quelques secondes sur CPU), les nouveaux audios sont mis en file ; aucune perte, mais la réponse est retardée.
+- Le CI Windows compile whisper.cpp (C++) : premier run à surveiller.
 
 ## Phase 3 — Moteur de plugins et premiers outils OSINT
 Non commencée. Dépend de la décision sur l'isolation des processus.
