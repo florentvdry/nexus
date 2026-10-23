@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { PresentedContent } from "../core/presentation/types";
 import type { MessageKey } from "../i18n/messages";
 
-export type ConfirmationAnswer = (id: string, approved: boolean) => Promise<void>;
+export type ConfirmationAnswer = (id: string, approved: boolean, remember?: boolean) => Promise<void>;
 
 function ConfirmationCard({
   content,
@@ -15,11 +15,13 @@ function ConfirmationCard({
   t: (key: MessageKey) => string;
 }) {
   const [state, setState] = useState<"pending" | "sending" | "approved" | "refused" | "failed">("pending");
+  const [remember, setRemember] = useState(false);
 
   const answer = async (approved: boolean) => {
     setState("sending");
     try {
-      await onAnswer(content.requestId, approved);
+      // La règle n'est demandée que pour une approbation : le natif ignore le reste.
+      await onAnswer(content.requestId, approved, approved && remember);
       setState(approved ? "approved" : "refused");
     } catch {
       // Demande expirée ou déjà réglée : le natif refuse, l'interface l'affiche.
@@ -37,6 +39,12 @@ function ConfirmationCard({
           </div>
         ))}
       </dl>
+      {content.remember && (state === "pending" || state === "sending") && (
+        <label className="field toggle">
+          <input type="checkbox" checked={remember} disabled={state === "sending"} onChange={(event) => setRemember(event.target.checked)} />
+          {content.remember.label}
+        </label>
+      )}
       {state === "pending" || state === "sending" ? (
         <div className="confirm-actions">
           <button type="button" className="send" disabled={state === "sending"} onClick={() => void answer(true)}>

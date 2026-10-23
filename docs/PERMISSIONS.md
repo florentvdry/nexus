@@ -140,6 +140,30 @@ fenêtre dédiée) et une identité que la fenêtre ne peut pas choisir.
 - Seule l'interface lit les paquets actifs (`plugin_packs`).
 - Git : HTTPS seulement, sans identifiants dans l'adresse, clonage superficiel, aucun script exécuté.
 
+## Autorisations mémorisées (« toujours autoriser »)
+
+Sur une demande de confirmation, une case « Toujours autoriser » couvre les actions répétitives. Elle n'apparaît que pour
+les permissions qui peuvent être mémorisées, et seulement quand une portée est connue :
+
+- **Écriture de fichier** (renommer, déplacer, copier) : la règle couvre le dossier de la demande, ses sous-dossiers
+  compris. Une opération qui sort de ce dossier (par exemple un déplacement vers un autre dossier) n'est pas couverte et
+  demande de nouveau l'accord.
+- **Lancement de Claude Code** : la règle couvre un projet, identifié par son dossier exact.
+- **Jamais mémorisables** : la suppression (corbeille), la fermeture d'une fenêtre, l'installation ou la suppression d'un
+  plugin. Le natif refuse de créer une règle pour elles, même si la demande le réclame.
+- Une réponse de refus ne crée jamais de règle, même avec la case cochée.
+- Un chemin contenant `..` n'est jamais couvert, et un dossier voisin au nom commençant pareil (`Docs2` pour `Docs`)
+  ne l'est pas.
+
+Rien n'est silencieux :
+
+- Chaque action approuvée par une règle est annoncée dans la conversation, avec la règle utilisée, et gardée dans un
+  journal visible dans les réglages (20 entrées affichées, 200 gardées côté natif, en mémoire pour la session).
+- Les règles sont stockées dans `permission_rules.json`, dans le dossier de données de l'application, et survivent au
+  redémarrage. Elles se révoquent une à une dans les réglages ; la révocation prend effet immédiatement, et la
+  prochaine demande de cette portée est de nouveau posée.
+- Réservé à l'interface : un plugin ne peut ni créer, ni lire, ni révoquer une règle.
+
 ## Journal des commandes (phase 5)
 
 - Désactivé par défaut. Aucune commande n'est conservée tant que l'option n'est pas activée dans les réglages.
@@ -151,7 +175,6 @@ fenêtre dédiée) et une identité que la fenêtre ne peut pas choisir.
 ## Prévu pour les phases suivantes
 
 - Journal local des actions, consultable et supprimable.
-- Révocation d'une permission depuis l'interface.
 - Identité de plugin côté natif (voir ci-dessus).
 - Désactivation du microphone et de chaque module.
 - Arrêt immédiat des opérations en cours (l'annulation existe déjà dans le moteur de tâches).

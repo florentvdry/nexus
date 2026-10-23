@@ -284,6 +284,18 @@ pub fn apply(plan: &Plan) -> Result<String, AdapterError> {
 
 #[cfg(test)]
 mod tests {
+    /// Test sur le vrai bureau : envoie un fichier temporaire à la corbeille. Il y reste ensuite, à vider à la main.
+    /// `cargo test -- --ignored live_` sur Windows.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn live_trash_moves_a_temporary_file_to_the_recycle_bin() {
+        let path = std::env::temp_dir().join(format!("nexus-corbeille-{}.txt", std::process::id()));
+        std::fs::write(&path, "test NEXUS").expect("fichier temporaire");
+        trash::delete(&path).expect("envoi à la corbeille");
+        assert!(!path.exists(), "le fichier est toujours à son emplacement");
+    }
+
     use super::*;
 
     struct Sandbox(PathBuf);

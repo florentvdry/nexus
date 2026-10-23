@@ -144,3 +144,18 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Choix** : NEXUS lance le CLI `claude` installé par l'utilisateur, avec `-p --output-format stream-json`, la demande sur l'entrée standard et un budget plafonné. Il ne lit pas les identifiants, ne modifie pas la configuration et ne passe pas `--dangerously-skip-permissions`.
 - **Pourquoi** : c'est l'interface officielle. Elle respecte l'authentification locale et les permissions de Claude Code, comme le demande le cahier des charges.
 - **Limite** : le format `stream-json` peut évoluer ; le test sur un enregistrement réel et le test réel (`--ignored`) doivent être relancés à chaque mise à jour du CLI.
+
+## ADR-024 — Autorisations mémorisées : par dossier ou projet, jamais pour la suppression
+
+- **Choix** : « toujours autoriser » couvre une portée précise : un dossier (écriture de fichier, sous-dossiers compris) ou un projet (Claude Code). Les règles sont stockées côté natif, révocables une à une, et chaque approbation automatique est annoncée et journalisée.
+- **Pourquoi** : les actions répétitives (renommer des fichiers d'un même dossier) ne doivent pas exiger une question à chaque fois. Mais une règle large, ou une règle sur une action irréversible, retirerait l'essentiel de la protection. La portée bornée et l'exclusion de la suppression, de la fermeture de fenêtres et des plugins gardent la confirmation là où elle compte.
+- **Garanties** : la décision reste dans le natif, comme pour la confirmation (ADR-014). Une règle ne peut pas être créée par un plugin ni lue par lui. Un refus ne crée jamais de règle. Un chemin avec `..` ou un dossier voisin au nom commençant pareil n'est pas couvert.
+- **Conséquence** : la carte de confirmation porte une case et une portée ; les réglages listent les règles avec leur révocation et le journal des approbations automatiques.
+- **Limites** : le journal des approbations automatiques est gardé en mémoire pour la session ; seules les règles survivent au redémarrage. La vérification de bout en bout dans l'application de bureau (Windows) reste à faire.
+
+## ADR-025 — Modèle de langage local : activation explicite, règles conservées
+
+- **Choix** : le modèle n'est téléchargé qu'après une activation explicite de la compréhension avancée, avec accord et taille affichés (recommandation du TODO, retenue). Les règles restent la compréhension principale et le validateur : le modèle n'intervient que quand `parseIntent` renvoie `UNKNOWN`, et sa réponse n'est retenue qu'après validation de sa forme, dans le délai (3 s) et sans jamais produire `UNKNOWN` ni `UNSUPPORTED`.
+- **Pourquoi** : un téléchargement au premier lancement imposerait plusieurs Go sans demande. Garder les règles évite qu'une panne du modèle rende NEXUS inutilisable, et garde les commandes simples instantanées et sans erreur possible du modèle.
+- **Garanties** : rien ne quitte la machine ; le modèle ne fait que classer la demande en intention connue ; les confirmations, racines autorisées et permissions restent appliquées par le moteur et le natif, comme pour les règles.
+- **Limites** : le choix des modèles candidats reste ouvert : licence et support du français à vérifier avant d'en proposer un. Les tailles des niveaux sont des ordres de grandeur. Le runtime llama.cpp et le téléchargement avec somme de contrôle ne sont pas encore implémentés côté natif.

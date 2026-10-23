@@ -18,7 +18,32 @@ describe("pont natif attribué", () => {
 
   it("transmet l'identité de l'interface pour les réponses aux confirmations", async () => {
     await new TauriNativeBridge().answerConfirmation("perm-1", true);
-    expect(callNative).toHaveBeenCalledWith("permission_answer", { caller: "core", id: "perm-1", approved: true });
+    expect(callNative).toHaveBeenCalledWith("permission_answer", { caller: "core", id: "perm-1", approved: true, remember: false });
+  });
+
+  it("transmet « toujours autoriser » au natif quand l'utilisateur coche la case", async () => {
+    await new TauriNativeBridge().answerConfirmation("perm-2", true, true);
+    expect(callNative).toHaveBeenCalledWith("permission_answer", { caller: "core", id: "perm-2", approved: true, remember: true });
+  });
+
+  it("envoie la demande au classement local au nom de l'interface, sans rien d'autre", async () => {
+    await new TauriNativeBridge().classifyIntent("ouvre la calculatrice");
+    expect(callNative).toHaveBeenLastCalledWith("model_classify", { caller: "core", text: "ouvre la calculatrice" });
+  });
+
+  it("lit le profil de la machine au nom de l'interface", async () => {
+    await new TauriNativeBridge().hardwareProfile();
+    expect(callNative).toHaveBeenLastCalledWith("hardware_profile", { caller: "core" });
+  });
+
+  it("lit, révoque et journalise les autorisations mémorisées au nom de l'interface", async () => {
+    const bridge = new TauriNativeBridge();
+    await bridge.listRules();
+    expect(callNative).toHaveBeenLastCalledWith("permission_rules", { caller: "core" });
+    await bridge.revokeRule("rule-1");
+    expect(callNative).toHaveBeenLastCalledWith("permission_revoke", { caller: "core", id: "rule-1" });
+    await bridge.listAudit();
+    expect(callNative).toHaveBeenLastCalledWith("permission_audit", { caller: "core" });
   });
 
   it("réserve le journal à l'interface : ses appels portent l'identité de l'interface", async () => {

@@ -1,32 +1,50 @@
 # NEXUS
 
-Assistant personnel intelligent pour Windows, open source, inspiré des interfaces de type JARVIS.
-Vous formulez une intention ; NEXUS choisit les outils. Les commandes courantes s'exécutent en
-local, sans modèle de langage et sans abonnement.
+[![CI](https://github.com/florentvdry/nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/florentvdry/nexus/actions/workflows/ci.yml)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-> **Statut : phases 1, 3 et 4 livrées, phase 5 commencée (journal des commandes), phase 2 partiellement livrée** (la transcription attend le modèle Whisper, et les
-> résultats OSINT réels attendent l'accès aux sources publiques depuis l'environnement de développement).
-> Le contrôle des fenêtres Windows est implémenté, mais n'a pas encore été exécuté sous Windows.
-> Voir [docs/PLAN.md](docs/PLAN.md) pour le détail et les limites connues.
+**NEXUS** est un assistant personnel pour Windows, open source, inspiré des interfaces de type JARVIS.
+Vous formulez une intention, NEXUS choisit les outils. Les commandes courantes s'exécutent en local, sans modèle de
+langage, sans compte et sans abonnement.
 
-## Ce qui fonctionne aujourd'hui
+> **Statut** : phases 1, 3 et 4 livrées, phase 5 commencée (journal des commandes, plugins). La reconnaissance vocale est
+> implémentée mais attend le modèle Whisper. Le détail et les limites sont dans [docs/PLAN.md](docs/PLAN.md).
+> Le contrôle des fenêtres Windows est implémenté, mais n'a pas encore été vérifié sur Windows.
 
-- Interface sombre avec orbe centrale animée (sept états), zone des tâches, fenêtres flottantes.
-- Commandes en français et en anglais, sans appel réseau :
-  - « Lance le Bloc-notes », « Ouvre Discord », « Open Google Chrome »
-  - « Affiche les informations de mon ordinateur », « Affiche l'utilisation CPU »
-  - « Ferme cette fenêtre », « Ferme toutes les fenêtres », « Annule la recherche », « Aide »
-- Applications lançables : Bloc-notes, Calculatrice, Paint, Explorateur de fichiers, Google Chrome, Discord.
-  Seules ces applications peuvent être lancées.
-- Informations système réelles : processeur, mémoire, disques, durée de fonctionnement.
+## Ce que fait NEXUS
 
-## Voix (phase 2)
+| Domaine | Exemples de demandes | Remarques |
+| --- | --- | --- |
+| Applications | « Lance le Bloc-notes », « Ouvre Discord », « Open Google Chrome » | Seules les applications du catalogue sont lançables : Bloc-notes, Calculatrice, Paint, Explorateur, Chrome, Discord. |
+| Système | « Affiche les informations de mon ordinateur », « Affiche l'utilisation CPU » | Processeur, mémoire, disques, durée de fonctionnement, réels. |
+| Fenêtres | « Liste mes fenêtres », « passe sur la fenêtre Word », « ferme la fenêtre Discord » | Windows uniquement. Chaque action demande votre accord. |
+| Fichiers | « Cherche mes fichiers PDF téléchargés cette semaine », « Renomme a.pdf en b.pdf » | Recherche dans Documents, Téléchargements, Bureau et Images. Renommer, déplacer, copier et supprimer demandent votre accord ; la suppression passe par la corbeille. |
+| Processus | « Quelles applications sont ouvertes ? » | Lecture seule, triée par mémoire utilisée. |
+| OSINT | « Analyse example.com », « Recherche le pseudo alice », « Analyse le fichier C:\\Users\\Ana\\contrat.pdf » | Sources publiques. Chaque résultat indique sa source, sa référence et son statut. Une correspondance n'est pas une identité. |
+| Claude Code | « Lance Claude Code dans C:\\Dev\\projet : corrige le test en échec » | Lance le CLI officiel `claude` dans ce dossier, après votre accord. Le CLI doit être installé et connecté. |
+| Plugins | « installe le plugin <dossier ou adresse HTTPS> », « liste mes plugins » | Plugins de données (vocabulaire, sans code) et plugins WebAssembly (bac à sable). Chaque installation demande deux confirmations. |
+
+Les commandes se formulent en français ou en anglais, et NEXUS retient ce dont on parle : après « cherche mes fichiers txt »,
+« renomme le deuxième en idees.txt » fonctionne. Quand une demande est ambiguë, NEXUS demande lequel. Une action
+destructive passe toujours par une confirmation, y compris après une référence.
+
+## Autorisations mémorisées
+
+Pour les actions répétitives, la case **« Toujours autoriser »** de la carte de confirmation évite de répondre à chaque fois :
+
+- écriture de fichiers dans un dossier donné (sous-dossiers compris) ;
+- lancement de Claude Code pour un projet donné.
+
+Elle n'est jamais proposée pour la suppression, la fermeture de fenêtre ni les plugins. Chaque approbation automatique est
+annoncée dans la conversation, journalisée, et chaque règle se révoque dans les réglages. Détails dans
+[docs/PERMISSIONS.md](docs/PERMISSIONS.md).
+
+## Voix
 
 - Clic sur le bouton micro, ou raccourci global `Ctrl+Alt+Espace`. La saisie texte reste disponible.
-- Reconnaissance hors ligne avec whisper.cpp et Silero VAD. Aucun audio n'est envoyé à un service externe.
-- Réponses lues à voix haute avec les voix installées sur Windows (option dans les réglages vocaux).
-- Langue : automatique (la réponse suit la langue de la commande), ou français / anglais imposé.
-- Réponses à voix haute : jamais, après une commande vocale (par défaut), ou toujours. Réglable dans les réglages, et par le bouton haut-parleur de la barre de commande.
+- Reconnaissance hors ligne avec whisper.cpp et Silero VAD : aucun audio n'est envoyé à un service externe.
+- Réponses lues à voix haute avec les voix installées sur Windows. Langue automatique, ou français ou anglais imposé.
+- Réponses à voix haute : jamais, après une commande vocale (par défaut), ou toujours.
 
 **Modèle de reconnaissance** : il n'est pas inclus dans NEXUS. Téléchargez `ggml-base.bin` (multilingue, environ 148 Mo)
 depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affiché dans les réglages vocaux :
@@ -34,90 +52,47 @@ depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affic
 - Windows : `%APPDATA%\fr.nexus.assistant\models\ggml-base.bin`
 - Autre : valeur de la variable d'environnement `NEXUS_WHISPER_MODEL`, si elle est définie.
 
-## Analyse OSINT (phase 3)
+## Plugins
 
-Exemples de demandes :
+- **Plugins de données** : « installe le plugin … » examine le plugin, puis l'installe après deux confirmations. Un plugin
+  de données ajoute du vocabulaire et des noms d'applications ; il ne contient aucun code.
+  Spécification : [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md). Exemple : `examples/plugins/community.exemple.verbes`.
+- **Plugins WebAssembly** : écrits en Rust (SDK `sdk/nexus-plugin-sdk`), ils ne s'exécutent que dans un bac à sable. Ils ne
+  reçoivent que le stockage et le réseau déclarés dans leur manifeste, approuvés à l'installation.
+  Exemple : `examples/plugins/community.exemple.convertisseur` (« convertis 12 km en miles », « retiens … », « rappelle »).
 
-- « Analyse example.com » : adresses DNS et noms listés dans les journaux publics de certificats.
-- « Recherche le pseudo alice » : présence sur GitHub, GitLab et Codeberg. Une correspondance n'est pas une identité.
-- « Analyse le fichier C:\\Users\\Ana\\contrat.pdf » : empreinte SHA-256, type et statistiques, en local.
+## Journal des commandes
 
-Chaque résultat indique sa source, sa référence et son statut. Une source injoignable est signalée, jamais masquée.
-Les adresses email ne sont pas encore prises en charge.
+Désactivé par défaut. Activé dans les réglages, il garde le texte de vos commandes (500 au plus), jamais les résultats ni le
+contenu des fichiers. Effaçable à tout moment. Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour le détail.
 
-## Fichiers, processus et Claude Code (phase 4)
+## Installation
 
-- « Cherche mes fichiers PDF téléchargés cette semaine » : recherche dans Documents, Téléchargements, Bureau et Images
-  uniquement. Le dossier personnel lui-même n'est jamais parcouru.
-- « Renomme C:\Users\Ana\Documents\a.pdf en b.pdf », « déplace … dans … », « supprime … » : chaque opération affiche
-  l'aperçu (source, destination) et attend votre autorisation. La suppression envoie à la corbeille.
-- « Quelles applications sont ouvertes ? » : processus actifs, triés par mémoire utilisée (lecture seule).
-- « Liste mes fenêtres », « passe sur la fenêtre Word », « ferme la fenêtre Discord » (Windows uniquement) : chaque action
-  active ou ferme une fenêtre après votre accord. L'application peut refuser la fermeture ou demander d'enregistrer.
-- « Lance Claude Code dans C:\Dev\projet : corrige le test en échec » : après votre autorisation, lance le CLI officiel
-  `claude` dans ce dossier et affiche sa réponse, les outils utilisés et les refus de permission. Une annulation est possible
-  pendant le run. Le CLI doit être installé et connecté (`npm install -g @anthropic-ai/claude-code`).
+NEXUS n'a pas encore d'installateur public. Pour le lancer depuis le code source, suivez le guide de développement :
+[CONTRIBUTING.md](CONTRIBUTING.md#mise-en-place).
 
-**Plugins de données** (phase 5) : « installe le plugin <dossier ou adresse HTTPS> » examine le plugin, puis l'installe
-après deux confirmations. « liste mes plugins », « supprime le plugin <identifiant> ». Un plugin de données ajoute du
-vocabulaire et des noms d'applications ; il ne contient aucun code. Spécification : [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md).
-Exemple : `examples/plugins/community.exemple.verbes`.
-
-**Conversation** : NEXUS comprend mieux les formulations naturelles et retient ce dont on parle :
-
-- « peux-tu ouvrir Discord ? », « lance Discrd » (il propose Discord), « ouvre Discord puis montre le CPU ».
-- après « cherche mes fichiers txt » : « renomme le deuxième en idees.txt », « supprime-le ». Quand c'est ambigu, NEXUS
-  demande « Lequel ? 1) … 2) … » et la réponse (« 2 », « le premier », « non ») suit.
-- Une demande ambiguë, comme plusieurs fenêtres du même nom, pose la question au lieu de deviner.
-- Toute action destructive passe toujours par la confirmation, y compris après une référence.
-
-**Plugins WebAssembly** : un plugin peut être écrit en Rust (SDK `sdk/nexus-plugin-sdk`) et compilé en WebAssembly.
-Il ne s'exécute que dans un bac à sable : il ne reçoit que le stockage et le réseau déclarés dans son manifeste, approuvés
-à l'installation. Exemple : `examples/plugins/community.exemple.convertisseur` (« convertis 12 km en miles », « retiens … »,
-« rappelle »).
-
-Les commandes sont conservées dans un journal local seulement si vous l'activez dans les réglages (désactivé par défaut,
-effaçable à tout moment). Voir [docs/PERMISSIONS.md](docs/PERMISSIONS.md) pour ce qui est confirmé, et ce qui ne l'est pas.
-
-## Installation pour le développement
-
-Prérequis :
-
-- Node.js 22 et pnpm 10
-- Rust 1.97 ou plus récent
-- Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11), et Visual Studio Build Tools (charge C++) avec CMake et LLVM/Clang, pour compiler whisper.cpp
-- Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libasound2-dev cmake clang`
+En résumé : Node.js 22, pnpm 10, Rust 1.97 ou plus récent, et sous Windows les Outils de build Visual Studio (charge C++)
+et WebView2 (présent sur Windows 11).
 
 ```bash
 pnpm install
-pnpm tauri dev          # application de bureau en développement
-pnpm test               # tests frontend (Vitest)
-pnpm typecheck          # TypeScript strict
-cd src-tauri && cargo test                          # tests Rust
-cd src-tauri && cargo test -- --ignored            # transcription réelle, exige NEXUS_WHISPER_MODEL
-pnpm tauri build        # installateur Windows (à partir de Windows)
+pnpm tauri dev
 ```
-
-Dans un navigateur (`pnpm dev`), l'interface s'affiche, mais le lancement d'applications et les
-informations système répondent explicitement qu'ils exigent l'application de bureau.
-
-## Architecture
-
-- `src/ui` : interface React (orbe, fenêtres, barre de commande). Aucune logique métier.
-- `src/core` : moteur en TypeScript pur — intentions, capacités, tâches, placement, plugins.
-- `plugins/<type>/<nom>/` : **un dossier par plugin**, rangé par type (`actions`, `sources`, `documents`, `speech`, `languages`), avec sa fiche `plugin.json`.
-- `src-tauri/src` : noyau natif Rust ; le code natif des plugins est dans `src-tauri/src/plugins/<type>/`.
-
-La convention des plugins et la piste d'une marketplace sont décrites dans [docs/PLUGINS.md](docs/PLUGINS.md).
-
-Documentation complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/PERMISSIONS.md](docs/PERMISSIONS.md), [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Confidentialité
 
-- Aucune donnée n'est envoyée à un service externe en phase 1.
-- Aucun micro n'est utilisé en phase 1.
+- Aucune donnée n'est envoyée à un service externe pour les commandes locales. Les recherches OSINT interrogent les
+  sources publiques que leur résultat cite.
+- Aucun micro n'est utilisé sans que vous l'activiez.
 - Aucune élévation de privilèges n'est demandée.
+- Le détail de ce qui est confirmé, et de ce qui ne l'est pas : [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : structure du code et flux de données.
+- [docs/PERMISSIONS.md](docs/PERMISSIONS.md) : permissions, confirmations, autorisations mémorisées.
+- [docs/DECISIONS.md](docs/DECISIONS.md) : décisions d'architecture (ADR).
+- [docs/PLAN.md](docs/PLAN.md) : état des phases et limites connues.
 
 ## Contribuer
 

@@ -32,4 +32,6 @@ export type PresentedContent =
       rows: InformationRow[];
       approve: string;
       refuse: string;
+      /** Case « toujours autoriser », présente seulement si l'action peut être mémorisée. */
+      remember?: { label: string };
     };

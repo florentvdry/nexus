@@ -96,7 +96,9 @@ mod tests {
         let samples = read_wav_mono_16k(std::fs::File::open(path).expect("fixture présente")).unwrap();
         let mut vad = SileroVad::load().expect("modèle VAD chargé");
         samples
-            .chunks_exact(CHUNK_SAMPLES)
+            .as_chunks::<CHUNK_SAMPLES>()
+            .0
+            .iter()
             .map(|chunk| vad.speech_probability(chunk).expect("inférence"))
             .collect()
     }
@@ -119,7 +121,7 @@ mod tests {
     fn silence_stays_below_the_speech_threshold() {
         let silence = vec![0.0_f32; CHUNK_SAMPLES * 20];
         let mut vad = SileroVad::load().unwrap();
-        for chunk in silence.chunks_exact(CHUNK_SAMPLES) {
+        for chunk in silence.as_chunks::<CHUNK_SAMPLES>().0 {
             assert!(vad.speech_probability(chunk).unwrap() < 0.5);
         }
     }

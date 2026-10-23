@@ -38,11 +38,26 @@ function send(text: string) {
 beforeAll(() => {
   // jsdom ne fournit pas de contexte 2D : l'orbe reste inactive dans les tests.
   HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
+  // Le parcours de premier lancement déjà vu : il ne masque pas les autres tests.
+  window.localStorage.setItem("nexus.modelSetup.seen", "1");
 });
 
 afterEach(() => cleanup());
 
 describe("App", () => {
+  it("ouvre le parcours de premier lancement une seule fois, puis le retient", async () => {
+    window.localStorage.removeItem("nexus.modelSetup.seen");
+    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+
+    expect(screen.getByRole("dialog", { name: "Configuration du modèle local" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+
+    expect(window.localStorage.getItem("nexus.modelSetup.seen")).toBe("1");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    window.localStorage.setItem("nexus.modelSetup.seen", "1");
+  });
+
   it("lance une application depuis la barre de commande et affiche la réponse courte", async () => {
     const native = simulatedNative();
     render(<App engine={createEngine({ native, locale: "fr", responseHoldMs: 0 })} />);

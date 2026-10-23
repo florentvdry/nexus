@@ -8,10 +8,14 @@ import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, 
 import { registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
 import { loadBuiltinPlugins } from "../plugins/builtin";
 import type { PluginStatus } from "../plugins/types";
-import { parseIntent, type Intent } from "../intent/parse";
+import type { Intent } from "../intent/parse";
+import type { Classifier } from "../language-model/benchmark";
+import { understandWithModel } from "../language-model/branch";
+import { nativeClassifier } from "../language-model/classifier";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
-import { createNativeBridge, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
+import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
+import { RULE_ACTION } from "../native/rules";
 import type { OsintRunner } from "../osint/types";
 import type { PresentedContent } from "../presentation/types";
 import { type Task, TaskCancelledError, TaskManager } from "../tasks/taskManager";
@@ -110,6 +114,9 @@ export class Engine {
   readonly #bridge: NativeBridge;
   readonly #conversation = new Conversation();
   readonly #unsubscribeConfirmations: () => void;
+  readonly #unsubscribeAutoApprovals: () => void;
+  /** Modèle local, interrogé seulement quand les règles ne comprennent pas (TODO §1). */
+  readonly #classifier: Classifier;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -122,7 +129,9 @@ export class Engine {
     this.#native = options.native ?? createNativeAdapter();
     this.#osint = options.osint ?? createOsintRunner();
     this.#bridge = options.bridge ?? createNativeBridge();
+    this.#classifier = nativeClassifier(this.#bridge);
     this.#unsubscribeConfirmations = this.#bridge.onConfirmationRequest((request) => this.#presentConfirmation(request));
+    this.#unsubscribeAutoApprovals = this.#bridge.onAutoApproval((approval) => this.#announceAutomatic(approval));
     this.#locale = options.locale;
     this.#holdMs = options.responseHoldMs ?? 2500;
     this.#registry = new CapabilityRegistry(options.grantedPermissions ?? DEFAULT_GRANTED);
@@ -137,6 +146,7 @@ export class Engine {
   /** Arrête l'écoute des événements natifs. */
   dispose(): void {
     this.#unsubscribeConfirmations();
+    this.#unsubscribeAutoApprovals();
   }
 
   /** État de chaque plugin chargé : un plugin en échec est signalé, il ne bloque pas les autres. */
@@ -222,7 +232,8 @@ export class Engine {
     const resolution = this.#conversation.resolve(text);
     if (resolution.clarification) return this.#ask(resolution.clarification, reply);
 
-    const { intent } = parseIntent(resolution.text);
+    // Les règles d'abord ; le modèle local ne intervient que sur `UNKNOWN`, et sa réponse est validée avant usage.
+    const { intent } = await understandWithModel(resolution.text, this.#classifier);
     this.#journal(text, intent.type);
     await this.#route(intent, reply);
   }
@@ -395,9 +406,27 @@ export class Engine {
         rows: request.rows.map((row) => ({ label: reply.t(ROW_LABEL[row.key] ?? "confirm.row.generic"), value: row.value })),
         approve: reply.t("confirm.approve"),
         refuse: reply.t("confirm.refuse"),
+        ...(request.rememberable && request.scope
+          ? {
+              remember: {
+                label: reply.t(request.permission === "agent.run" ? "confirm.remember.project" : "confirm.remember.folder", {
+                  scope: request.scope,
+                }),
+              },
+            }
+          : {}),
       },
       source: { capabilityId: "permissions", locality: "local", collectedAt: Date.now() },
     });
+  }
+
+  /** Une règle mémorisée a approuvé une action sans question : la conversation le dit, le natif le journalise. */
+  #announceAutomatic(approval: AutoApproval): void {
+    const key = RULE_ACTION[approval.permission];
+    if (!key) return;
+    const reply = replyFor(this.#locale);
+    const action = reply.t(key);
+    this.#emit({ type: "message", role: "assistant", text: reply.t("rule.announced", { action, scope: approval.scope }), tone: "info", locale: reply.locale });
   }
 
   #fail(error: CapabilityError, reply: Reply): void {

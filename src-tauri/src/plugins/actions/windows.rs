@@ -187,4 +187,52 @@ mod tests {
     fn an_unknown_window_is_reported_not_guessed() {
         assert!(matches!(close(1), Err(AdapterError::Unsupported(_))));
     }
+
+    /// Test sur le vrai bureau : ouvre le Bloc-notes, le retrouve, l'active puis demande sa fermeture.
+    /// Sous Windows 11, le Bloc-notes est une application empaquetée : le processus lancé passe la main à un autre
+    /// processus. La fenêtre est donc cherchée parmi les Bloc-notes absents avant le lancement, et suivie par son
+    /// identifiant : une fenêtre déjà ouverte par l'utilisateur n'est jamais visée.
+    /// `cargo test -- --ignored live_` sur Windows.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn live_notepad_is_listed_focused_and_closed() {
+        use std::collections::HashSet;
+        use std::time::{Duration, Instant};
+
+        let notepads = || -> Vec<WindowEntry> {
+            list().expect("liste des fenêtres").into_iter().filter(|entry| entry.process.eq_ignore_ascii_case("notepad.exe")).collect()
+        };
+        let before: HashSet<usize> = notepads().iter().map(|entry| entry.id).collect();
+
+        let mut child = std::process::Command::new("notepad.exe").spawn().expect("notepad.exe doit se lancer");
+        let started = Instant::now();
+        let window = loop {
+            if let Some(entry) = notepads().into_iter().find(|entry| !before.contains(&entry.id)) {
+                break entry;
+            }
+            assert!(started.elapsed() < Duration::from_secs(10), "la fenêtre du Bloc-notes n'apparaît pas dans la liste");
+            std::thread::sleep(Duration::from_millis(200));
+        };
+
+        let focused = focus(window.id);
+        let closed = close(window.id);
+        let waiting_since = Instant::now();
+        let gone = loop {
+            let still_open = list().expect("liste des fenêtres").iter().any(|entry| entry.id == window.id);
+            if !still_open {
+                break true;
+            }
+            if waiting_since.elapsed() > Duration::from_secs(5) {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+
+        focused.expect("Windows doit autoriser l'activation de la fenêtre");
+        closed.expect("WM_CLOSE doit être accepté");
+        assert!(gone, "la fenêtre est restée ouverte (l'application a peut-être demandé d'enregistrer)");
+    }
 }

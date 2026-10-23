@@ -4,6 +4,7 @@ import { NativeUnavailableError } from "./adapter";
 import { isDesktopRuntime } from "./index";
 import { callNative } from "./tauri-adapter";
 import type { PluginPackData } from "../plugins/packs";
+import type { HardwareProfile } from "../language-model/hardware";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -57,6 +58,26 @@ export interface ConfirmationRequest {
   permission: string;
   rows: { key: string; value: string }[];
   expiresInSecs: number;
+  /** « Toujours autoriser » est proposé : action réversible et bornée (écriture, Claude Code). */
+  rememberable: boolean;
+  /** Dossier ou projet que la règle couvrirait, si l'utilisateur la mémorise. */
+  scope: string | null;
+}
+
+/** Autorisation mémorisée : une permission, bornée à un dossier (écriture) ou un projet (Claude Code). */
+export interface PermissionRule {
+  id: string;
+  permission: string;
+  scope: string;
+  createdAt: number;
+}
+
+/** Action approuvée sans question grâce à une règle mémorisée. Journalisée côté natif. */
+export interface AutoApproval {
+  /** Instant de l'approbation, en secondes depuis l'époque Unix. */
+  at: number;
+  permission: string;
+  scope: string;
 }
 
 /** Plugin examiné, en attente d'installation. Son empreinte est celle que l'utilisateur approuve. */
@@ -149,13 +170,24 @@ export interface NativeBridge {
   cancelAgent(runId: string): Promise<boolean>;
   onAgentEvent(listener: (runId: string, event: AgentEvent) => void): () => void;
   onConfirmationRequest(listener: (request: ConfirmationRequest) => void): () => void;
-  answerConfirmation(id: string, approved: boolean): Promise<void>;
+  /** `remember` : « toujours autoriser » pour le dossier ou le projet proposé. Ignoré si l'action ne peut pas être mémorisée. */
+  answerConfirmation(id: string, approved: boolean, remember?: boolean): Promise<void>;
+  /** Autorisations mémorisées et leur révocation. Réservé à l'interface. */
+  listRules(): Promise<PermissionRule[]>;
+  revokeRule(id: string): Promise<boolean>;
+  listAudit(): Promise<AutoApproval[]>;
+  onAutoApproval(listener: (approval: AutoApproval) => void): () => void;
+  /** Profil de la machine pour le choix du modèle local. Lecture seule, réservée à l'interface. */
+  hardwareProfile(): Promise<HardwareProfile>;
+  /** Classement d'une demande par le modèle local : JSON brut, validé ensuite. Échoue tant que le modèle n'est pas installé. */
+  classifyIntent(text: string): Promise<unknown>;
 }
 
 /** Identité de l'interface principale : elle ne peut que répondre aux confirmations. */
 export const CORE_CALLER = "core";
 const AGENT_CHANNEL = "agents://event";
 const CONFIRMATION_CHANNEL = "permissions://request";
+const AUTO_APPROVAL_CHANNEL = "permissions://auto";
 
 export class TauriNativeBridge implements NativeBridge {
   readonly #caller: string;
@@ -270,8 +302,33 @@ export class TauriNativeBridge implements NativeBridge {
     return () => void unlisten.then((stop) => stop());
   }
 
-  answerConfirmation(id: string, approved: boolean): Promise<void> {
-    return this.#call<void>("permission_answer", { id, approved });
+  answerConfirmation(id: string, approved: boolean, remember = false): Promise<void> {
+    return this.#call<void>("permission_answer", { id, approved, remember });
+  }
+
+  listRules(): Promise<PermissionRule[]> {
+    return this.#call<PermissionRule[]>("permission_rules");
+  }
+
+  revokeRule(id: string): Promise<boolean> {
+    return this.#call<boolean>("permission_revoke", { id });
+  }
+
+  listAudit(): Promise<AutoApproval[]> {
+    return this.#call<AutoApproval[]>("permission_audit");
+  }
+
+  onAutoApproval(listener: (approval: AutoApproval) => void): () => void {
+    const unlisten = listen<AutoApproval>(AUTO_APPROVAL_CHANNEL, (message) => listener(message.payload));
+    return () => void unlisten.then((stop) => stop());
+  }
+
+  hardwareProfile(): Promise<HardwareProfile> {
+    return this.#call<HardwareProfile>("hardware_profile");
+  }
+
+  classifyIntent(text: string): Promise<unknown> {
+    return this.#call<unknown>("model_classify", { text });
   }
 }
 
@@ -303,8 +360,14 @@ export class UnavailableNativeBridge implements NativeBridge {
   runAgent = () => this.unavailable();
   cancelAgent = () => this.unavailable();
   answerConfirmation = () => this.unavailable();
+  listRules = () => this.unavailable();
+  revokeRule = () => this.unavailable();
+  listAudit = () => this.unavailable();
+  hardwareProfile = () => this.unavailable();
+  classifyIntent = () => this.unavailable();
   onAgentEvent = () => () => {};
   onConfirmationRequest = () => () => {};
+  onAutoApproval = () => () => {};
 }
 
 export function createNativeBridge(): NativeBridge {

@@ -14,11 +14,37 @@ Merci de votre intérêt. Quelques règles pour garder le projet stable et compr
 
 ## Mise en place
 
+Prérequis :
+
+- Node.js 22 et pnpm 10
+- Rust 1.97 ou plus récent
+- Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11), et Visual Studio Build Tools (charge C++) avec CMake et
+  LLVM/Clang, pour compiler whisper.cpp
+- Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libasound2-dev cmake clang`
+
 ```bash
 pnpm install
-pnpm test && pnpm typecheck
-cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
+pnpm tauri dev          # application de bureau en développement
+pnpm test               # tests frontend (Vitest)
+pnpm typecheck          # TypeScript strict
+cd src-tauri && cargo test                          # tests Rust
+cd src-tauri && cargo test -- --ignored            # transcription réelle, exige NEXUS_WHISPER_MODEL
+pnpm tauri build        # installateur Windows (à partir de Windows)
 ```
+
+Dans un navigateur (`pnpm dev`), l'interface s'affiche, mais le lancement d'applications et les informations système
+répondent explicitement qu'ils exigent l'application de bureau.
+
+## Architecture
+
+- `src/ui` : interface React (orbe, fenêtres, barre de commande). Aucune logique métier.
+- `src/core` : moteur en TypeScript pur — intentions, capacités, tâches, placement, plugins.
+- `plugins/<type>/<nom>/` : **un dossier par plugin**, rangé par type (`actions`, `sources`, `documents`, `speech`, `languages`), avec sa fiche `plugin.json`.
+- `src-tauri/src` : noyau natif Rust ; le code natif des plugins est dans `src-tauri/src/plugins/<type>/`.
+
+La convention des plugins et la piste d'une marketplace sont décrites dans [docs/PLUGINS.md](docs/PLUGINS.md).
+Documentation complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERMISSIONS.md](docs/PERMISSIONS.md),
+[docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Ajouter une application lançable
 

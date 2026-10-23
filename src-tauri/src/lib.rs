@@ -1,6 +1,8 @@
 pub mod error;
 pub mod grants;
+pub mod hardware;
 pub mod host;
+pub mod model_download;
 pub mod journal;
 pub mod permissions;
 pub mod plugin_store;
@@ -9,7 +11,7 @@ pub mod plugins;
 use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
+use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, GlobalShortcutExt, ShortcutState};
 
 use error::AdapterError;
 use grants::{require, require_core};
@@ -35,6 +37,26 @@ pub const VOICE_TOGGLE_EVENT: &str = "voice://toggle";
 #[tauri::command]
 async fn system_info() -> Result<SystemInfo, AdapterError> {
     tauri::async_runtime::spawn_blocking(system::read_system_info)
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))
+}
+
+/// Classement d'une demande par le modèle local. Pas encore de runtime : la réponse dit clairement que le modèle
+/// n'est pas installé, et l'interface retombe sur les règles (TODO §1, « Branchement »).
+#[tauri::command]
+fn model_classify(caller: String, text: String) -> Result<serde_json::Value, AdapterError> {
+    require_core(&caller)?;
+    if text.trim().is_empty() {
+        return Err(AdapterError::InvalidTarget("demande vide".into()));
+    }
+    Err(AdapterError::ModelMissing("modèle de langage local non installé".into()))
+}
+
+/// Profil pour le choix du modèle local : réservé à l'interface, lecture seule.
+#[tauri::command]
+async fn hardware_profile(caller: String) -> Result<hardware::HardwareProfile, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(hardware::read_profile)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
 }
@@ -420,12 +442,14 @@ fn shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
             let _ = app.emit(VOICE_TOGGLE_EVENT, ());
         }
     };
-    match ShortcutBuilder::new().with_shortcut(VOICE_SHORTCUT) {
-        Ok(builder) => builder.with_handler(handler).build(),
-        Err(error) => {
-            eprintln!("NEXUS : raccourci {VOICE_SHORTCUT} indisponible : {error}");
-            ShortcutBuilder::new().build()
-        }
+    ShortcutBuilder::new().with_handler(handler).build()
+}
+
+/// L'enregistrement se fait après l'initialisation du plugin : un raccourci déjà pris par une autre application
+/// (Windows le refuse) doit seulement être signalé, jamais empêcher NEXUS de démarrer.
+fn register_voice_shortcut(app: &tauri::App) {
+    if let Err(error) = app.global_shortcut().register(VOICE_SHORTCUT) {
+        eprintln!("NEXUS : raccourci {VOICE_SHORTCUT} indisponible : {error}");
     }
 }
 
@@ -460,6 +484,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(shortcut_plugin())
         .setup(|app| {
+            register_voice_shortcut(app);
             app.manage(VoiceState::default());
             app.manage(open_broker(app));
             app.manage(Runs::default());
@@ -469,6 +494,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             system_info,
+            hardware_profile,
+            model_classify,
             launch_app,
             list_apps,
             commands::voice_status,

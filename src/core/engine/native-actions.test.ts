@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { NativeCallError, type NativeAdapter } from "../native/adapter";
-import type { AgentEvent, ConfirmationRequest, NativeBridge } from "../native/bridge";
+import type { AgentEvent, AutoApproval, ConfirmationRequest, NativeBridge } from "../native/bridge";
 import { createEngine, type EngineEvent } from "./engine";
 
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
 function fakeBridge(overrides: Partial<NativeBridge> = {}) {
   const agentListeners = new Set<(runId: string, event: AgentEvent) => void>();
   const confirmationListeners = new Set<(request: ConfirmationRequest) => void>();
+  const autoApprovalListeners = new Set<(approval: AutoApproval) => void>();
   const bridge: NativeBridge & {
     emitAgent(runId: string, event: AgentEvent): void;
     emitConfirmation(request: ConfirmationRequest): void;
+    emitAutoApproval(approval: AutoApproval): void;
   } = {
     forPlugin: () => bridge,
     pluginPrepare: vi.fn(async (source: string) => ({
@@ -71,11 +73,25 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
       return () => confirmationListeners.delete(listener);
     },
     answerConfirmation: vi.fn(async () => {}),
+    listRules: vi.fn(async () => []),
+    revokeRule: vi.fn(async () => true),
+    listAudit: vi.fn(async () => []),
+    hardwareProfile: vi.fn(async () => ({ memoryGiB: 16, cores: 8, avx2: true, gpu: null })),
+    classifyIntent: vi.fn(async () => {
+      throw new Error("modèle non installé");
+    }),
+    onAutoApproval: (listener) => {
+      autoApprovalListeners.add(listener);
+      return () => autoApprovalListeners.delete(listener);
+    },
     emitAgent(runId, event) {
       for (const listener of agentListeners) listener(runId, event);
     },
     emitConfirmation(request) {
       for (const listener of confirmationListeners) listener(request);
+    },
+    emitAutoApproval(approval) {
+      for (const listener of autoApprovalListeners) listener(approval);
     },
     ...overrides,
   };
@@ -260,6 +276,8 @@ describe("opérations sur fichiers : confirmation présentée, action native", (
       permission: "file.delete",
       rows: [{ key: "path", value: "/home/ana/Documents/vieux.txt" }],
       expiresInSecs: 120,
+      rememberable: false,
+      scope: null,
     });
     const card = presented(events).find((content) => content.kind === "confirmation");
     expect(card).toEqual({
@@ -271,6 +289,53 @@ describe("opérations sur fichiers : confirmation présentée, action native", (
       refuse: "Refuser",
     });
     expect(assistant(events)).toContain("Confirmation demandée : Envoyer à la corbeille ?");
+  });
+
+  it("propose « toujours autoriser » pour une écriture, avec le dossier que la règle couvrirait", () => {
+    const bridge = fakeBridge();
+    const { events } = setup(bridge);
+    bridge.emitConfirmation({
+      id: "perm-2",
+      permission: "file.write",
+      rows: [{ key: "from", value: "/home/ana/Documents/a.pdf" }],
+      expiresInSecs: 120,
+      rememberable: true,
+      scope: "/home/ana/Documents",
+    });
+    const card = presented(events).find((content) => content.kind === "confirmation");
+    expect(card).toMatchObject({ remember: { label: "Toujours autoriser dans ce dossier : /home/ana/Documents" } });
+  });
+
+  it("propose « toujours autoriser » pour un projet Claude Code, et jamais pour une suppression", () => {
+    const bridge = fakeBridge();
+    const { events } = setup(bridge);
+    bridge.emitConfirmation({
+      id: "perm-3",
+      permission: "agent.run",
+      rows: [{ key: "project", value: "/home/ana/projet" }],
+      expiresInSecs: 120,
+      rememberable: true,
+      scope: "/home/ana/projet",
+    });
+    bridge.emitConfirmation({
+      id: "perm-4",
+      permission: "file.delete",
+      rows: [{ key: "path", value: "/home/ana/a.txt" }],
+      expiresInSecs: 120,
+      rememberable: false,
+      scope: "/home/ana",
+    });
+    const cards = presented(events).filter((content) => content.kind === "confirmation");
+    expect(cards[0]).toMatchObject({ remember: { label: "Toujours autoriser pour ce projet : /home/ana/projet" } });
+    expect(cards[1]).not.toHaveProperty("remember");
+  });
+
+  it("annonce dans la conversation une action approuvée par une règle, sans question", () => {
+    const bridge = fakeBridge();
+    const { events } = setup(bridge);
+    bridge.emitAutoApproval({ at: 1_780_000_000, permission: "file.write", scope: "/home/ana/Documents" });
+    expect(assistant(events)).toEqual(["Autorisé par une règle mémorisée, sans question : modifier un fichier (/home/ana/Documents)."]);
+    expect(presented(events)).toEqual([]);
   });
 });
 

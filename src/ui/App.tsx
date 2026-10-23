@@ -25,6 +25,9 @@ import { HistoryMenu } from "./HistoryMenu";
 import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
+import { FirstRunSetup } from "./FirstRunSetup";
+import { hasSeenModelSetup, markModelSetupSeen } from "./setupMemory";
+import { PermissionsSection } from "./PermissionsSection";
 import { VoicePanel } from "./VoicePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
@@ -101,6 +104,12 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const windowsRef = useRef(windows);
   const [answerBridge] = useState(() => createNativeBridge());
+  // Premier lancement : le parcours s'ouvre une seule fois, puis reste accessible depuis les réglages.
+  const [setupOpen, setSetupOpen] = useState(() => !hasSeenModelSetup());
+  const closeSetup = () => {
+    markModelSetupSeen();
+    setSetupOpen(false);
+  };
   useEffect(() => {
     void engine.refreshPacks();
   }, [engine]);
@@ -203,6 +212,10 @@ export function App({ engine: injectedEngine }: AppProps) {
 
       {panelOpen && (
         <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>
+          <PermissionsSection bridge={answerBridge} locale={locale} t={t} />
+          <button type="button" className="chip" onClick={() => setSetupOpen(true)}>
+            {t("setup.open")}
+          </button>
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}
@@ -255,10 +268,12 @@ export function App({ engine: injectedEngine }: AppProps) {
             onMove={(id, rect) => dispatch({ type: "move", id, rect, context: readWindowContext() })}
             onFocus={(id) => dispatch({ type: "focus", id })}
             onClose={(id) => dispatch({ type: "close", id, now: Date.now() })}
-            onAnswer={(requestId, approved) => answerBridge.answerConfirmation(requestId, approved)}
+            onAnswer={(requestId, approved, remember) => answerBridge.answerConfirmation(requestId, approved, remember)}
           />
         ))}
       </div>
+
+      {setupOpen && <FirstRunSetup bridge={answerBridge} t={t} onClose={closeSetup} />}
     </div>
   );
 }
