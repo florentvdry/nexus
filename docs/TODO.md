@@ -13,7 +13,7 @@ Ordre, sans commit ni test sur le PC :
 3. [x] **Date et heure dans le contexte du modèle**, pour comprendre « demain », « lundi », « ce soir ».
 4. [x] **Mémoire des routines** (ADR-033) : proposition après trois jours à la même heure, programmée seulement après « oui ». Désactivable dans les réglages (section Mémoire).
 
-Accessibilité : réglage « texte plus grand » (section Accessibilité des réglages), mouvement réduit déjà géré. Clavier : Échap ferme la dernière fenêtre ordinaire (jamais une confirmation). Reste : contraste des couleurs à auditer.
+Accessibilité : réglage « texte plus grand » (section Accessibilité des réglages), mouvement réduit déjà géré. Clavier : Échap ferme la dernière fenêtre ordinaire (jamais une confirmation). Contraste audité : tous les textes passent WCAG AA (4,5) sur le fond sombre, à vérifier à l'écran.
 
 État au 24/10 : tâches programmées, photo, fiche sujet, actualités du jour, retour immédiat et messages d'aide sont faits et testés (voir `docs/JOURNAL-NUIT.md`). Rien n'est vérifié dans l'application lancée : à faire avec ton accord.
 
