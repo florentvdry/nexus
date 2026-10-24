@@ -659,6 +659,11 @@ input {
   accent-color: var(--accent);
 }
 
+/* Taille du texte choisie dans les réglages (accessibilité). */
+html[data-text-scale="large"] {
+  zoom: 1.2;
+}
+
 /* Fenêtres « une demande, une fenêtre » : photo libre et résumé d'un sujet. */
 .image-card {
   margin: 0;

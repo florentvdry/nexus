@@ -26,6 +26,8 @@ import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
 import { MemorySection } from "./MemorySection";
+import { AccessibilitySection } from "./AccessibilitySection";
+import { applyLargeText, readLargeText } from "./textScale";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
 import { ModelSection } from "./ModelSection";
@@ -125,6 +127,10 @@ export function App({ engine: injectedEngine }: AppProps) {
   useEffect(() => {
     void engine.refreshPacks();
   }, [engine]);
+  // La taille du texte choisie est rétablie à chaque lancement.
+  useEffect(() => {
+    applyLargeText(readLargeText());
+  }, []);
   // Les tâches programmées tournent tant que NEXUS est ouvert.
   useEffect(() => {
     engine.startScheduler();
@@ -236,6 +242,7 @@ export function App({ engine: injectedEngine }: AppProps) {
             {t("setup.open")}
           </button>
           <MemorySection bridge={answerBridge} locale={locale} t={t} />
+          <AccessibilitySection t={t} />
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}
