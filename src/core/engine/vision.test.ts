@@ -47,3 +47,14 @@ describe("question sur l'écran : confirmation, une capture, lecture locale", ()
     expect(assistant().at(-1)).toContain("Enregistrer");
   });
 });
+
+describe("réponse du modèle : la question peut arriver sous « query »", () => {
+  it("SCREEN_VIEW avec « query » est reconnu", async () => {
+    const bridge = scriptedBridge({ "regarde mon écran": { type: "SCREEN_VIEW", query: "Que vois-tu ?" } }, { ollamaStatus: vi.fn(async () => ({ reachable: true, models: [] })) });
+    const engine = createEngine({ native: NATIVE, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0, routineStorage: undefined });
+    const events: EngineEvent[] = [];
+    engine.subscribe((event) => events.push(event));
+    await engine.submit("regarde mon écran");
+    expect(events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : [])).join(" ")).toContain("qwen2.5vl");
+  });
+});

@@ -161,7 +161,7 @@ export function validateModelIntent(raw: unknown): Intent | null {
       return query ? { type, query } : null;
     }
     case "SCREEN_VIEW": {
-      const question = text(candidate.question, 300) ?? text(candidate.text, 300);
+      const question = text(candidate.question, 300) ?? text(candidate.query, 300) ?? text(candidate.text, 300);
       return question ? { type, question } : null;
     }
     case "DRAFT_MESSAGE": {

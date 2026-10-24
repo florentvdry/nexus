@@ -538,7 +538,10 @@ export class Engine {
    */
   async #askScreen(question: string, reply: Reply): Promise<void> {
     const status = await this.#bridge.ollamaStatus().catch(() => null);
-    const model = status?.models.map((installed) => installed.name).find((name) => VISION_MODEL.test(name));
+    // Parmi les modèles de vision installés, le plus gros : il lit mieux un écran chargé.
+    const model = status?.models
+      .filter((installed) => VISION_MODEL.test(installed.name))
+      .sort((left, right) => right.sizeBytes - left.sizeBytes)[0]?.name;
     if (!model) return this.#reply(reply, reply.t("vision.noModel"), "error");
     this.#visionPending = { question, model };
     this.#reply(reply, reply.t("vision.confirm", { model }));
