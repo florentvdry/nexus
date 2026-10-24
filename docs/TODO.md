@@ -23,7 +23,7 @@ Chaque point : état, et ce qu'il faut pour le faire. « Accord » = ton accord 
 
 1. [ ] **Écoute permanente avec mot de réveil** : répondre à « Jarvis » sans geste. Demande un micro ouvert en continu et une détection de mot de réveil locale. Accord (micro) requis.
 2. [ ] **Voix naturelle** : répondre à voix haute, et interrompre quand c'est utile. Base : synthèse vocale Windows. Accord pour la sortie audio.
-3. [ ] **Vision de l'écran** : comprendre ce qui est affiché. Demande un modèle multimodal local, à évaluer sur ta machine. Accord (capture d'écran) requis.
+3. [~] **Vision de l'écran** (ADR-039) : question confirmée, capture de l'écran principal, lecture par un modèle de vision local. Reste : installer un modèle de vision (« ollama pull qwen2.5vl:3b », à lancer par toi) et tester la réponse.
 4. [ ] **Contrôle des applications** : remplir et enchaîner des actions dans les logiciels, sans API. Demande une automatisation d'interface, étape par étape, avec confirmation.
 5. [~] **Alertes proactives** : disque presque plein, mémoire saturée. **Fait en partie** (ADR-036, ADR-037) : disque, mémoire, batterie. Mises à jour Windows restent à faire.
 6. [~] **Agenda et messages** : **fait en partie** (ADR-038) : agenda du jour depuis un fichier .ics désigné, brouillons à copier (rien n'est envoyé). Reste : comptes de messagerie et d'agenda en ligne, avec accord.

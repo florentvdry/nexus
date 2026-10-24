@@ -49,6 +49,8 @@ export type Intent =
   | { type: "AGENDA_TODAY" }
   /** Un brouillon de message : affiché pour être copié, jamais envoyé. */
   | { type: "DRAFT_MESSAGE"; recipient?: string; text: string }
+  /** Une question sur ce qui est affiché à l'écran : une capture, sur confirmation, lue par le modèle de vision local. */
+  | { type: "SCREEN_VIEW"; question: string }
   /** Réponse en langage naturel du modèle, pour ce qui n'est pas une commande. */
   | { type: "CHAT"; text: string }
   | { type: "UNKNOWN"; text: string };

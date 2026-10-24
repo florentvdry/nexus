@@ -56,6 +56,7 @@ const INTENT_TYPES: &[&str] = &[
     "LIST_SCHEDULES",
     "AGENDA_TODAY",
     "DRAFT_MESSAGE",
+    "SCREEN_VIEW",
     "SHOW_IMAGE",
     "SHOW_TOPIC",
     "NEWS_SUMMARY",
@@ -137,7 +138,7 @@ fn base_prompt() -> String {
          Exemples : « ouvre le bloc-notes » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"bloc-notes\"}} ; « aide-moi » -> {{\"type\": \"HELP\"}} ; \
          « montre les processus lancés » -> {{\"type\": \"PROCESS_LIST\"}} ; « arrête la recherche en cours » -> {{\"type\": \"CANCEL_TASKS\"}} ; \
          « retiens que je préfère Firefox » -> {{\"type\": \"REMEMBER\", \"text\": \"je préfère Firefox\"}} ; « qu'est-ce que tu retiens de moi ? » -> {{\"type\": \"MEMORY_LIST\"}} ; \
-         « rappelle-moi demain à 9 h de appeler Anthony » -> {{\"type\": \"SCHEDULE\", \"request\": \"rappelle Anthony d'appeler\", \"kind\": \"once\", \"day\": \"tomorrow\", \"time\": \"09:00\"}} ; « chaque lundi à 8 h, résume mes actus » -> {{\"type\": \"SCHEDULE\", \"request\": \"résume mes actus\", \"kind\": \"weekly\", \"weekday\": 1, \"time\": \"08:00\"}} ; « annule la tâche des actus » -> {{\"type\": \"CANCEL_SCHEDULE\", \"query\": \"actus\"}} ; « quelles tâches sont programmées ? » -> {{\"type\": \"LIST_SCHEDULES\"}} ; « qu'est-ce que j'ai aujourd'hui ? » -> {{\"type\": \"AGENDA_TODAY\"}} ; « écris à Anthony que je serai en retard » -> {{\"type\": \"DRAFT_MESSAGE\", \"recipient\": \"Anthony\", \"text\": \"Je serai en retard.\"}} ; « affiche une photo de Macron » -> {{\"type\": \"SHOW_IMAGE\", \"query\": \"Emmanuel Macron\"}} ; « qui est Marie Curie ? » -> {{\"type\": \"SHOW_TOPIC\", \"query\": \"Marie Curie\"}} ; « fais un résumé des actus du jour » -> {{\"type\": \"NEWS_SUMMARY\"}} ; \
+         « rappelle-moi demain à 9 h de appeler Anthony » -> {{\"type\": \"SCHEDULE\", \"request\": \"rappelle Anthony d'appeler\", \"kind\": \"once\", \"day\": \"tomorrow\", \"time\": \"09:00\"}} ; « chaque lundi à 8 h, résume mes actus » -> {{\"type\": \"SCHEDULE\", \"request\": \"résume mes actus\", \"kind\": \"weekly\", \"weekday\": 1, \"time\": \"08:00\"}} ; « annule la tâche des actus » -> {{\"type\": \"CANCEL_SCHEDULE\", \"query\": \"actus\"}} ; « quelles tâches sont programmées ? » -> {{\"type\": \"LIST_SCHEDULES\"}} ; « qu'est-ce que j'ai aujourd'hui ? » -> {{\"type\": \"AGENDA_TODAY\"}} ; « qu'est-ce qui est affiché à l'écran ? » -> {{\"type\": \"SCREEN_VIEW\", \"question\": \"Que vois-tu à l'écran ?\"}} ; « écris à Anthony que je serai en retard » -> {{\"type\": \"DRAFT_MESSAGE\", \"recipient\": \"Anthony\", \"text\": \"Je serai en retard.\"}} ; « affiche une photo de Macron » -> {{\"type\": \"SHOW_IMAGE\", \"query\": \"Emmanuel Macron\"}} ; « qui est Marie Curie ? » -> {{\"type\": \"SHOW_TOPIC\", \"query\": \"Marie Curie\"}} ; « fais un résumé des actus du jour » -> {{\"type\": \"NEWS_SUMMARY\"}} ; \
          « mets le fichier brouillon.doc à la corbeille » ->{{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; \
          « quelle est l'utilisation de la mémoire ? » -> {{\"type\": \"SYSTEM_INFO\"}} ; « renomme photo.jpg en vacances.jpg » -> {{\"type\": \"FILE_RENAME\", \"path\": \"photo.jpg\", \"newName\": \"vacances.jpg\"}} ; \
          « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}} ; \
@@ -250,6 +251,42 @@ fn chat_json(endpoint: &str, model: &str, format: Value, system: &str, user: &st
         .and_then(Value::as_str)
         .ok_or_else(|| AdapterError::Inference("réponse du modèle sans contenu".into()))?;
     serde_json::from_str(content).map_err(|_| AdapterError::Inference("le modèle n'a pas répondu en JSON".into()))
+}
+
+/// Taille maximale de l'image encodée envoyée au modèle de vision (une capture réduite tient largement).
+const MAX_IMAGE_BASE64: usize = 8 * 1024 * 1024;
+
+/// Question sur une image (capture d'écran) : le modèle de vision choisi répond en texte, sur ce poste.
+pub fn vision_at(endpoint: &str, model: &str, question: &str, image_base64: &str) -> Result<String, AdapterError> {
+    if !valid_model_name(model) {
+        return Err(AdapterError::InvalidTarget("nom de modèle invalide".into()));
+    }
+    if image_base64.is_empty() || image_base64.len() > MAX_IMAGE_BASE64 {
+        return Err(AdapterError::InvalidTarget("image absente ou trop grande".into()));
+    }
+    let body = json!({
+        "model": model,
+        "stream": false,
+        "options": { "temperature": 0 },
+        "messages": [
+            { "role": "system", "content": "Tu décris ce qui est visible sur l'écran, en français, en répondant précisément à la question. Si un texte est illisible, dis-le au lieu de le deviner." },
+            { "role": "user", "content": question, "images": [image_base64] }
+        ]
+    });
+    let mut response = agent(None)
+        .post(&format!("{endpoint}/api/chat"))
+        .header("Content-Type", "application/json")
+        .send(body.to_string())
+        .map_err(unreachable)?;
+    if response.status().as_u16() != 200 {
+        return Err(AdapterError::Inference(format!("le modèle de vision a refusé la demande (statut HTTP {})", response.status().as_u16())));
+    }
+    let reply: Value = serde_json::from_str(&read_body(&mut response)?).map_err(|error| AdapterError::Inference(error.to_string()))?;
+    reply
+        .pointer("/message/content")
+        .and_then(Value::as_str)
+        .map(|content| content.trim().to_string())
+        .ok_or_else(|| AdapterError::Inference("réponse du modèle de vision sans texte".into()))
 }
 
 /// Une étape du téléchargement, telle qu'Ollama la décrit (une ligne JSON par étape).

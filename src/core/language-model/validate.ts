@@ -160,6 +160,10 @@ export function validateModelIntent(raw: unknown): Intent | null {
       const query = text(candidate.query, 200);
       return query ? { type, query } : null;
     }
+    case "SCREEN_VIEW": {
+      const question = text(candidate.question, 300) ?? text(candidate.text, 300);
+      return question ? { type, question } : null;
+    }
     case "DRAFT_MESSAGE": {
       const body = text(candidate.text, 1000);
       const recipient = optionalText(candidate.recipient, 100);

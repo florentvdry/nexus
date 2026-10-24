@@ -218,6 +218,10 @@ export interface NativeBridge {
   batteryStatus(): Promise<{ percent: number; charging: boolean } | null>;
   /** Contenu du fichier d'agenda (.ics) désigné par l'utilisateur, en lecture seule. */
   agendaRead(path: string): Promise<string>;
+  /** Capture de l'écran principal, en PNG base64. Réservé à une demande confirmée. */
+  screenCapture(): Promise<string>;
+  /** Question sur une capture, par le modèle de vision choisi (local). */
+  visionAsk(model: string, question: string, image: string): Promise<string>;
   startupSet(enabled: boolean): Promise<void>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
@@ -430,6 +434,14 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<boolean>("startup_status");
   }
 
+  screenCapture(): Promise<string> {
+    return this.#call<string>("screen_capture");
+  }
+
+  visionAsk(model: string, question: string, image: string): Promise<string> {
+    return this.#call<string>("vision_ask", { model, question, image });
+  }
+
   agendaRead(path: string): Promise<string> {
     return this.#call<string>("agenda_read", { path });
   }
@@ -543,6 +555,8 @@ export class UnavailableNativeBridge implements NativeBridge {
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();
   agendaRead = () => this.unavailable();
+  screenCapture = () => this.unavailable();
+  visionAsk = () => this.unavailable();
   startupSet = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();

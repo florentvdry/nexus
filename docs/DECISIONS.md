@@ -256,3 +256,12 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Brouillons** : « écris à X que… » ouvre une fenêtre avec le texte et un bouton « Copier ». NEXUS n'envoie jamais un message : c'est toujours toi qui l'envoies.
 - **Accès direct** : un bouton « Planning » dans la barre ouvre la liste des tâches programmées.
 - **Limites** : pas de compte de messagerie ni d'agenda en ligne (il faudra un accord et une source) ; pas de récurrence d'agenda ; le modèle léger peut se tromper sur l'intention.
+
+## ADR-039 — Vision de l'écran : sur demande, confirmée, une seule capture, lue par un modèle local
+
+- **Déclencheur** : une question sur l'écran (« qu'est-ce qui est affiché ? »). Jamais de capture en arrière-plan.
+- **Confirmation** : NEXUS dit ce qu'il va faire et demande « oui » ou « non ». Une autre réponse abandonne la question.
+- **Capture** : écran principal, GDI, réduit à 1024 px de large, encodé en PNG en mémoire. Rien n'est enregistré sur le disque. La capture est affichée dans une fenêtre « Ce que NEXUS a vu », pour que tu voies exactement ce qui a été lu.
+- **Lecture** : un modèle de vision installé sur ce poste (noms reconnus : qwen2.5vl, llava, minicpm-v, moondream, gemma3). Aucun modèle de vision n'est installé sur cette machine : NEXUS l'indique et donne la commande, sans télécharger lui-même.
+- **Limites** : vérifiée par une capture réelle (PNG décodé), mais la réponse du modèle de vision n'a pas été testée faute de modèle. Pas de capture multi-écrans ; l'écran principal seulement.
+- **Écoute permanente (mot de réveil)** : non construite. Elle devra demander ton consentement explicite avant d'être activée ; elle n'est pas en place.

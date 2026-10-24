@@ -35,6 +35,7 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "LIST_SCHEDULES",
   "AGENDA_TODAY",
   "DRAFT_MESSAGE",
+  "SCREEN_VIEW",
   "SHOW_IMAGE",
   "SHOW_TOPIC",
   "NEWS_SUMMARY",

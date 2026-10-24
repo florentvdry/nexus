@@ -149,6 +149,8 @@ export class Engine {
   /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
   readonly #monitor = new AlertMonitor();
   readonly #agendaPath: () => string | null;
+  /** Question sur l'écran en attente de la confirmation de l'utilisateur. */
+  #visionPending: { question: string; model: string } | undefined;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -318,6 +320,7 @@ export class Engine {
     if (await this.#memory.consume(text)) return;
     if (await this.#onboarding.consume(text)) return;
     if (await this.#consumeRoutine(text)) return;
+    if (await this.#consumeVision(text)) return;
     const pending = this.#conversation.pending();
     if (pending) {
       this.#conversation.clearPending();
@@ -466,6 +469,8 @@ export class Engine {
         return this.#showSchedules(reply);
       case "AGENDA_TODAY":
         return this.#showAgenda(reply);
+      case "SCREEN_VIEW":
+        return this.#askScreen(intent.question, reply);
       case "DRAFT_MESSAGE":
         return this.#showDraft(intent.recipient, intent.text, reply);
       case "CANCEL_SCHEDULE":
@@ -525,6 +530,45 @@ export class Engine {
     } catch (error) {
       this.#fail(toCapabilityError(error), reply);
     }
+  }
+
+  /**
+   * Question sur l'écran : d'abord la confirmation, puis une seule capture, lue par le modèle de vision local.
+   * Sans modèle de vision installé, NEXUS le dit et ne capture rien.
+   */
+  async #askScreen(question: string, reply: Reply): Promise<void> {
+    const status = await this.#bridge.ollamaStatus().catch(() => null);
+    const model = status?.models.map((installed) => installed.name).find((name) => VISION_MODEL.test(name));
+    if (!model) return this.#reply(reply, reply.t("vision.noModel"), "error");
+    this.#visionPending = { question, model };
+    this.#reply(reply, reply.t("vision.confirm", { model }));
+  }
+
+  /** Réponse à la confirmation : « oui » fait une seule capture ; « non » annule. Une autre saisie abandonne la question. */
+  async #consumeVision(text: string): Promise<boolean> {
+    const pending = this.#visionPending;
+    if (!pending) return false;
+    this.#visionPending = undefined;
+    const reply = replyFor(this.#locale);
+    const answer = text.trim().toLowerCase();
+    if (/^(?:non|no)$/.test(answer)) {
+      this.#reply(reply, reply.t("vision.cancelled"));
+      return true;
+    }
+    if (!/^(?:oui|yes|ok|d'accord|vas-y|go)$/.test(answer)) return false;
+    try {
+      const image = await this.#bridge.screenCapture();
+      this.#emit({
+        type: "present",
+        content: { kind: "image-card", title: reply.t("vision.captured"), imageUrl: `data:image/png;base64,${image}`, credit: reply.t("vision.localOnly"), license: "", page: "" },
+        source: { capabilityId: "vision", locality: "local", collectedAt: Date.now() },
+      });
+      const description = await this.#bridge.visionAsk(pending.model, pending.question, image);
+      this.#reply(reply, description || reply.t("vision.empty"));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
+    }
+    return true;
   }
 
   /** Un brouillon de message, à copier. Rien n'est envoyé : c'est toujours l'utilisateur qui envoie. */
@@ -759,6 +803,9 @@ function localDateTime(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** Modèles capables de lire une image (noms usuels : qwen2.5vl, llava, minicpm-v, moondream, gemma3…). */
+const VISION_MODEL = /vl|llava|vision|minicpm-v|moondream|gemma3/i;
 
 /** Vérification des alertes système : toutes les cinq minutes tant que NEXUS tourne. */
 const ALERT_INTERVAL_MS = 300_000;

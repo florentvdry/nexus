@@ -9,6 +9,7 @@ pub mod mcp;
 pub mod memory;
 pub mod permissions;
 pub mod schedule;
+pub mod screen;
 pub mod agenda;
 pub mod power;
 pub mod startup;
@@ -58,6 +59,15 @@ async fn model_classify(caller: String, text: String, model: String, memories: V
         return Err(AdapterError::InvalidTarget("demande vide".into()));
     }
     tauri::async_runtime::spawn_blocking(move || ollama::classify_at(ollama::ENDPOINT, &model, &text, &memories))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Question sur une capture d'écran, par le modèle de vision choisi. Seul ce poste reçoit l'image.
+#[tauri::command]
+async fn vision_ask(caller: String, model: String, question: String, image: String) -> Result<String, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || ollama::vision_at(ollama::ENDPOINT, &model, &question, &image))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
@@ -582,6 +592,8 @@ pub fn run() {
             startup::startup_set,
             power::battery_status,
             agenda::agenda_read,
+            screen::screen_capture,
+            vision_ask,
             ollama_status,
             ollama_pull,
             ollama_install,
