@@ -40,6 +40,7 @@ import { ModelSection } from "./ModelSection";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { PermissionsSection } from "./PermissionsSection";
 import { VoicePanel } from "./VoicePanel";
+import { SchedulePanel } from "./SchedulePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
 import { createNativeBridge } from "../core/native/bridge";
@@ -113,6 +114,7 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [windows, dispatch] = useReducer(windowsReducer, EMPTY_WINDOWS);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(readVoiceSettings);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [planningOpen, setPlanningOpen] = useState(false);
   const windowsRef = useRef(windows);
   const [answerBridge] = useState(() => createNativeBridge());
   // Premier lancement : le parcours s'ouvre une seule fois, puis reste accessible depuis les réglages.
@@ -238,7 +240,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           t={t}
           onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
         />
-        <button type="button" className="chip" onClick={() => void engine.showSchedules()}>
+        <button type="button" className="chip" onClick={() => setPlanningOpen((open) => !open)} aria-expanded={planningOpen}>
           {t("schedule.open")}
         </button>
         {voiceSettings.enabled && (
@@ -250,6 +252,8 @@ export function App({ engine: injectedEngine }: AppProps) {
           {locale.toUpperCase()}
         </button>
       </div>
+
+      {planningOpen && <SchedulePanel source={engine} locale={locale} t={t} onClose={() => setPlanningOpen(false)} />}
 
       {panelOpen && (
         <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>

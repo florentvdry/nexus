@@ -15,7 +15,7 @@ import { fallbackClassifier, nativeClassifier, nimClassifier } from "../language
 import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
 import { MemoryController } from "../memory/memory";
-import { ScheduleController } from "../schedule/controller";
+import { ScheduleController, type ScheduledTask } from "../schedule/controller";
 import { describeRecurrence } from "../schedule/recurrence";
 import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
 import { AlertMonitor } from "../alerts/monitor";
@@ -394,6 +394,16 @@ export class Engine {
   /** Ouvre la liste des tâches programmées (bouton de la barre). */
   showSchedules(): Promise<void> {
     return this.#showSchedules(replyFor(this.#locale));
+  }
+
+  /** Les tâches programmées, pour le panneau Planning. */
+  scheduledTasks(): Promise<ScheduledTask[]> {
+    return this.#schedule.snapshot();
+  }
+
+  /** Annule une tâche programmée depuis le panneau Planning. */
+  cancelScheduledTask(id: number): Promise<void> {
+    return this.#schedule.removeById(id);
   }
 
   /** Première conversation, après le setup : NEXUS pose ses questions et garde les réponses en souvenirs. */

@@ -83,6 +83,15 @@ export class ScheduleController {
     }
   }
 
+  /** Annule une tâche par son identifiant : le bouton du panneau Planning. Une tâche absente ne fait rien. */
+  async removeById(id: number): Promise<void> {
+    const tasks = await this.#load();
+    const kept = tasks.filter((task) => task.id !== id);
+    if (kept.length === tasks.length) return;
+    this.#tasks = kept;
+    await this.#options.bridge.scheduleSave(kept);
+  }
+
   /**
    * Lance les tâches échues, une à une. Une tâche ponctuelle disparaît après son exécution ; une tâche récurrente
    * prend sa prochaine date. Une tâche manquée (NEXUS fermé) s'exécute une seule fois à la réouverture.

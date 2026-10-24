@@ -121,6 +121,18 @@ describe("tâches programmées", () => {
     expect(saved()).toHaveLength(0);
   });
 
+  it("annule une tâche par son identifiant, depuis le panneau Planning", async () => {
+    const { bridge, saved } = fakeBridge([
+      { id: 1, request: "résume mes actus", recurrence: { kind: "daily", time: "08:00" }, nextRunAt: 1, createdAt: 0 },
+      { id: 2, request: "rappelle Anthony", recurrence: { kind: "daily", time: "09:00" }, nextRunAt: 1, createdAt: 0 },
+    ]);
+    const { controller } = setup(bridge, () => TUESDAY_10H);
+    await controller.removeById(1);
+    expect(saved().map((task) => task.id)).toEqual([2]);
+    await controller.removeById(99);
+    expect(saved().map((task) => task.id)).toEqual([2]);
+  });
+
   it("annule par mot-clé, et dit s'il n'y a rien à annuler", async () => {
     const { bridge, saved } = fakeBridge([
       { id: 1, request: "résume mes actus", recurrence: { kind: "daily", time: "08:00" }, nextRunAt: 1, createdAt: 0 },

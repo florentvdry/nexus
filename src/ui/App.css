@@ -442,7 +442,8 @@ input {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.voice-panel {
+.voice-panel,
+.schedule-panel {
   position: absolute;
   top: 56px;
   right: 16px;
@@ -458,18 +459,44 @@ input {
   font-size: 13px;
 }
 
-.voice-panel header {
+.voice-panel header,
+.schedule-panel header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.voice-panel h2 {
+.voice-panel h2,
+.schedule-panel h2 {
   margin: 0;
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.schedule-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.schedule-list li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .voice-panel .field {
