@@ -43,6 +43,8 @@ export type Intent =
   | { type: "SHOW_IMAGE"; query: string }
   /** Un résumé d'un sujet, depuis Wikipédia. */
   | { type: "SHOW_TOPIC"; query: string }
+  /** Question ouverte sur le web (recherche, puis lecture des pages) : la réponse cite ses sources. */
+  | { type: "ASK_WEB"; question: string }
   /** Un résumé de l'actualité du jour : pas encore de source d'actualités vérifiée. */
   | { type: "NEWS_SUMMARY"; topic?: string }
   /** Les rendez-vous du jour, lus dans le fichier d'agenda désigné par l'utilisateur. */

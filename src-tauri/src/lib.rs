@@ -589,6 +589,8 @@ pub fn run() {
             web::web_news,
             web::web_headlines,
             web::web_news_search,
+            web::web_search,
+            web::web_read,
             startup::startup_status,
             startup::startup_set,
             power::battery_status,

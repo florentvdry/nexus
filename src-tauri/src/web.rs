@@ -1,7 +1,9 @@
 //! Sources publiques des fenêtres « une demande = une fenêtre » : Wikipédia (résumé d'un sujet) et Wikimedia Commons
-//! (photo, avec son auteur et sa licence). Seuls ces hôtes sont interrogés, en HTTPS, sans compte ni clé. L'image est
-//! téléchargée ici, bornée en taille, et renvoyée en data URL : la politique de l'interface n'autorise que les images
-//! locales, et elle ne doit pas être élargie.
+//! (photo, avec son auteur et sa licence). L'image est téléchargée ici, bornée en taille, et renvoyée en data URL : la
+//! politique de l'interface n'autorise que les images locales, et elle ne doit pas être élargie.
+//!
+//! Recherche générale : DuckDuckGo (version HTML, sans clé), puis lecture des pages trouvées, en HTTP(S), bornée, sans
+//! suivre les adresses locales ou privées écrites dans la demande. Aucun compte, aucune clé.
 
 use std::time::Duration;
 
@@ -17,6 +19,7 @@ pub const COMMONS: &str = "https://commons.wikimedia.org";
 pub const GOOGLE_NEWS: &str = "https://news.google.com";
 /// Flux RSS de France 24 (version française), vérifié le 24/10/2026 : 24 éléments datés.
 pub const FRANCE24_RSS: &str = "https://www.france24.com/fr/rss";
+pub const DUCKDUCKGO: &str = "https://html.duckduckgo.com";
 const MAX_RSS_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_HEADLINES: usize = 8;
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
@@ -24,6 +27,10 @@ const MAX_JSON_BYTES: u64 = 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 3 * 1024 * 1024;
 const MAX_QUERY_CHARS: usize = 100;
 const MAX_NEWS: usize = 10;
+const MAX_SEARCH_HITS: usize = 5;
+const MAX_QUESTION_CHARS: usize = 200;
+const MAX_PAGE_BYTES: u64 = 1024 * 1024;
+const MAX_PAGE_CHARS: usize = 6000;
 const USER_AGENT: &str = "NEXUS/0.1 (assistant personnel ; requêtes publiques)";
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -342,9 +349,245 @@ pub async fn web_photo(caller: String, query: String) -> Result<Photo, AdapterEr
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
+/// Un résultat de recherche : titre, adresse de la page, extrait.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SearchHit {
+    pub title: String,
+    pub url: String,
+    pub snippet: String,
+}
+
+/// Texte lisible d'une page web, avec son adresse.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PageText {
+    pub url: String,
+    pub text: String,
+}
+
+/// Texte d'un fragment HTML : balises remplacées par des espaces, entités décodées, espaces réduits.
+fn html_text(fragment: &str) -> String {
+    let mut spaced = String::with_capacity(fragment.len());
+    let mut inside = false;
+    for character in fragment.chars() {
+        match character {
+            '<' => {
+                inside = true;
+                spaced.push(' ');
+            }
+            '>' if inside => {
+                inside = false;
+                spaced.push(' ');
+            }
+            _ if !inside => spaced.push(character),
+            _ => {}
+        }
+    }
+    // « &amp; » en dernier : « &amp;lt; » doit donner « &lt; », pas « < ».
+    let decoded = spaced
+        .replace("&nbsp;", " ")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#039;", "'")
+        .replace("&#x27;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Décodage des séquences %XX d'une adresse de redirection.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let decoded = (bytes[index] == b'%' && index + 2 < bytes.len())
+            .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok().and_then(|hex| u8::from_str_radix(hex, 16).ok()))
+            .flatten();
+        match decoded {
+            Some(value) => {
+                out.push(value);
+                index += 3;
+            }
+            None => {
+                out.push(bytes[index]);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Adresse réelle d'un résultat : DuckDuckGo l'enveloppe dans un paramètre `uddg`.
+fn destination(href: &str) -> String {
+    let raw = match href.find("uddg=") {
+        Some(at) => percent_decode(href[at + 5..].split('&').next().unwrap_or_default()),
+        None => href.to_string(),
+    };
+    if raw.starts_with("//") {
+        format!("https:{raw}")
+    } else {
+        raw
+    }
+}
+
+/// Résultats d'une page de recherche DuckDuckGo (version HTML). Un résultat sans titre ou sans adresse web est ignoré.
+pub fn search_hits(html: &str) -> Vec<SearchHit> {
+    html.split("class=\"result__a\"")
+        .skip(1)
+        .filter_map(|part| {
+            let href_start = part.find("href=\"")? + 6;
+            let href_end = part[href_start..].find('"')? + href_start;
+            let url = destination(&part[href_start..href_end]);
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                return None;
+            }
+            let title_start = part[href_end..].find('>')? + href_end + 1;
+            let title_end = part[title_start..].find("</a>")? + title_start;
+            let title = html_text(&part[title_start..title_end]);
+            let snippet = part
+                .find("result__snippet")
+                .and_then(|at| {
+                    let rest = &part[at..];
+                    let start = rest.find('>')? + 1;
+                    let end = rest[start..].find("</a>")? + start;
+                    Some(html_text(&rest[start..end]))
+                })
+                .unwrap_or_default();
+            (!title.is_empty()).then_some(SearchHit { title, url, snippet })
+        })
+        .take(MAX_SEARCH_HITS)
+        .collect()
+}
+
+/// Recherche web générale, sans clé : DuckDuckGo (version HTML). La question est transmise telle quelle, bornée.
+pub fn search_at(endpoint: &str, question: &str) -> Result<Vec<SearchHit>, AdapterError> {
+    let question = question.trim();
+    if question.is_empty() || question.chars().count() > MAX_QUESTION_CHARS || question.contains(['\n', '\r']) {
+        return Err(AdapterError::InvalidTarget("question trop longue ou vide".into()));
+    }
+    let (status, _, bytes) = fetch(&format!("{endpoint}/html/?q={}", percent_encode(question)), MAX_PAGE_BYTES)?;
+    if status != 200 {
+        return Err(AdapterError::Operation(format!("recherche : réponse HTTP {status}")));
+    }
+    Ok(search_hits(&String::from_utf8_lossy(&bytes)))
+}
+
+/// Adresse acceptable pour la lecture : http(s), sans identifiants ni port, hors machines locales et réseaux privés.
+/// La vérification porte sur l'adresse écrite : une redirection vers une adresse privée n'est pas suivie par ce contrôle.
+pub fn public_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")) else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() || authority.contains(['@', ':', '[', ' ']) {
+        return false;
+    }
+    let host = authority.to_ascii_lowercase();
+    if let Ok(address) = host.parse::<std::net::Ipv4Addr>() {
+        return !(address.is_private() || address.is_loopback() || address.is_link_local() || address.is_unspecified() || address.is_broadcast());
+    }
+    let blocked = ["localhost", ".localhost", ".local", ".internal", ".lan"].iter().any(|suffix| host == *suffix || host.ends_with(suffix));
+    host.contains('.') && !blocked && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+}
+
+/// Retire le contenu d'un élément (scripts, styles) avant d'extraire le texte.
+fn remove_elements(html: &str, tag: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
+    let mut out = String::with_capacity(html.len());
+    let mut cursor = 0;
+    while let Some(start) = lower[cursor..].find(&open).map(|at| at + cursor) {
+        out.push_str(&html[cursor..start]);
+        match lower[start..].find(&close) {
+            Some(end) => cursor = start + end + close.len(),
+            None => {
+                cursor = html.len();
+                break;
+            }
+        }
+    }
+    out.push_str(&html[cursor..]);
+    out
+}
+
+/// Texte lisible d'une page HTML, borné en longueur.
+pub fn page_text(html: &str) -> String {
+    let visible = ["script", "style", "noscript"].iter().fold(html.to_string(), |text, tag| remove_elements(&text, tag));
+    html_text(&visible).chars().take(MAX_PAGE_CHARS).collect()
+}
+
+/// Lecture d'une page publique : son texte, borné. Seuls les textes HTML ou brut sont acceptés.
+pub fn read_page_at(url: &str) -> Result<PageText, AdapterError> {
+    if !public_url(url) {
+        return Err(AdapterError::InvalidTarget("adresse refusée : seules les pages publiques sont lues".into()));
+    }
+    let (status, content_type, bytes) = fetch(url, MAX_PAGE_BYTES)?;
+    if status != 200 {
+        return Err(AdapterError::Operation(format!("page : réponse HTTP {status}")));
+    }
+    if !(content_type.starts_with("text/html") || content_type.starts_with("text/plain")) {
+        return Err(AdapterError::Operation("page non textuelle".into()));
+    }
+    let text = page_text(&String::from_utf8_lossy(&bytes));
+    if text.is_empty() {
+        return Err(AdapterError::Operation("page sans texte lisible".into()));
+    }
+    Ok(PageText { url: url.to_string(), text })
+}
+
+#[tauri::command]
+pub async fn web_search(caller: String, question: String) -> Result<Vec<SearchHit>, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || search_at(DUCKDUCKGO, &question))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn web_read(caller: String, url: String) -> Result<PageText, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || read_page_at(&url))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_results_are_read_from_the_redirect_and_cleaned() {
+        let html = r#"<div class="result"><h2><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Ffr.wikipedia.org%2Fwiki%2FGTA_RP&amp;rut=abc">GTA <b>RP</b> &amp; co</a></h2><a class="result__snippet" href="x">Un serveur <b>RP</b> de GTA.</a></div>
+<div class="result"><a class="result__a" href="https://example.org/page">Autre</a><a class="result__snippet" href="y">Texte.</a></div>"#;
+        let hits = search_hits(html);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "GTA RP & co");
+        assert_eq!(hits[0].url, "https://fr.wikipedia.org/wiki/GTA_RP");
+        assert_eq!(hits[0].snippet, "Un serveur RP de GTA.");
+        assert_eq!(hits[1].url, "https://example.org/page");
+    }
+
+    #[test]
+    fn only_public_web_addresses_are_read() {
+        assert!(public_url("https://example.org/page"));
+        assert!(public_url("http://fr.wikipedia.org/wiki/GTA"));
+        assert!(!public_url("ftp://example.org/file"));
+        assert!(!public_url("http://localhost/admin"));
+        assert!(!public_url("http://intranet/page"));
+        assert!(!public_url("http://192.168.1.1/"));
+        assert!(!public_url("https://10.0.0.5/"));
+        assert!(!public_url("http://127.0.0.1:8080/"));
+        assert!(!public_url("https://user@example.org/"));
+        assert!(!public_url("https://example.org:8443/"));
+    }
+
+    #[test]
+    fn page_text_drops_scripts_and_markup() {
+        let html = "<html><script>var x = 1;</script><p>Bonjour&nbsp;<b>le</b> monde &amp;lt; toi</p><style>p{}</style></html>";
+        assert_eq!(page_text(html), "Bonjour le monde &lt; toi");
+    }
 
     #[test]
     fn base64_matches_the_standard_encoding() {

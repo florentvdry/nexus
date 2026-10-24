@@ -14,6 +14,7 @@ Exemples :
 - « aide-moi » -> {"type": "HELP"}
 - « affiche une photo de Macron » -> {"type": "SHOW_IMAGE", "query": "Emmanuel Macron"}
 - « qui est Marie Curie ? » -> {"type": "SHOW_TOPIC", "query": "Marie Curie"}
+- Une question ouverte qui demande un fait, un avis ou une information récente (« tu connais GTA RP ? », « ça famille tient des commerces ? », « quand sort le prochain film de X ? ») -> {"type": "ASK_WEB", "question": "la question reformulée en quelques mots"}. SHOW_TOPIC ne sert qu'à afficher le résumé d'un sujet, pas à répondre à une question.
 - « résume les actus » -> {"type": "NEWS_SUMMARY"}
 - « ouvre le bloc-notes » -> {"type": "OPEN_APPLICATION", "appName": "bloc-notes"}
 - « rappelle-moi demain à 9 h de appeler Anthony » -> {"type": "SCHEDULE", "request": "appeler Anthony", "kind": "once", "day": "tomorrow", "time": "09:00"}

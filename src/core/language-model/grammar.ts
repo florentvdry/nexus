@@ -38,6 +38,7 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "SCREEN_VIEW",
   "SHOW_IMAGE",
   "SHOW_TOPIC",
+  "ASK_WEB",
   "NEWS_SUMMARY",
   "FORGET",
 ];

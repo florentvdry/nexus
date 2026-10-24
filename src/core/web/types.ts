@@ -11,6 +11,19 @@ export interface WebNewsItem {
   page: string;
 }
 
+/** Un résultat de recherche web : titre, adresse de la page, extrait. */
+export interface WebSearchHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** Texte lisible d'une page web, borné, avec son adresse. */
+export interface WebPage {
+  url: string;
+  text: string;
+}
+
 /** Photo libre d'une source publique. L'image est déjà téléchargée, en data URL. */
 export interface WebPhoto {
   title: string;

@@ -14,6 +14,7 @@ import { understandWithModel } from "../language-model/branch";
 import { fallbackClassifier, nativeClassifier, nimClassifier } from "../language-model/classifier";
 import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
+import { ASK_PAGES, ASK_SYSTEM, parseWebAnswer, webSources } from "../web/ask";
 import { MemoryController } from "../memory/memory";
 import { ScheduleController, type ScheduledTask } from "../schedule/controller";
 import { describeRecurrence } from "../schedule/recurrence";
@@ -151,6 +152,8 @@ export class Engine {
   /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
   readonly #monitor = new AlertMonitor();
   readonly #agendaPath: () => string | null;
+  /** Modèle local qui rédige les réponses aux questions ouvertes sur le web. */
+  readonly #model: () => string | null;
   /** Échange récent, borné : le modèle s'y réfère pour les demandes qui parlent de ce qui précède. */
   readonly #history: { role: "user" | "assistant"; text: string }[] = [];
   /** Question sur l'écran en attente de la confirmation de l'utilisateur. */
@@ -179,6 +182,7 @@ export class Engine {
     });
     this.#routines = new RoutineDetector(options.routineStorage ?? (typeof window === "undefined" ? undefined : window.localStorage));
     this.#agendaPath = options.agendaPath ?? (() => null);
+    this.#model = options.model ?? readSelectedModel;
     this.#schedule = new ScheduleController({
       bridge: this.#bridge,
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
@@ -501,6 +505,8 @@ export class Engine {
         return this.#showPhoto(intent.query, reply);
       case "SHOW_TOPIC":
         return this.#showTopic(intent.query, reply);
+      case "ASK_WEB":
+        return this.#askWeb(intent.question, reply);
       case "NEWS_SUMMARY":
         return this.#showNews(intent.topic, reply);
       case "CLOSE_WINDOW":
@@ -672,6 +678,29 @@ export class Engine {
         source: { capabilityId: "web.summary", locality: "network", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("web.topic", { title: summary.title }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
+    }
+  }
+
+  /**
+   * Question ouverte : recherche, lecture des premières pages, puis réponse du modèle à partir de ces sources seules.
+   * Sans source exploitable, NEXUS le dit plutôt que d'inventer.
+   */
+  async #askWeb(question: string, reply: Reply): Promise<void> {
+    this.#reply(reply, reply.t("web.askSearching", { question }));
+    try {
+      const hits = await this.#bridge.webSearch(question);
+      const pages = await Promise.all(hits.slice(0, ASK_PAGES).map((hit) => this.#bridge.webRead(hit.url).catch(() => null)));
+      const sources = webSources(hits, pages);
+      if (sources.length === 0) return this.#reply(reply, reply.t("web.askNone", { question }), "error");
+
+      const model = this.#model();
+      if (!model) return this.#reply(reply, reply.t("web.askNoModel"), "error");
+      const raw = await this.#bridge.modelJson(model, ASK_SYSTEM, JSON.stringify({ question, sources }));
+      const answer = parseWebAnswer(raw);
+      if (!answer) return this.#reply(reply, reply.t("web.askUnclear"), "error");
+      this.#reply(reply, `${answer}\n${reply.t("web.askSources", { sources: sources.map((source) => source.url).join(" · ") })}`);
     } catch (error) {
       this.#fail(toCapabilityError(error), reply);
     }

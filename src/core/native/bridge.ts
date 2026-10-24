@@ -9,7 +9,7 @@ import type { OllamaStatus, PullProgress } from "../language-model/ollama";
 import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
 import type { Memory } from "../memory/types";
 import type { ScheduledTask } from "../schedule/controller";
-import type { WebNewsItem, WebPhoto, WebSummary } from "../web/types";
+import type { WebNewsItem, WebPage, WebPhoto, WebSearchHit, WebSummary } from "../web/types";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -212,6 +212,9 @@ export interface NativeBridge {
   webHeadlines(): Promise<WebNewsItem[]>;
   /** Actualités sur un sujet, ou du moment, par recherche sur le web (Google Actualités). */
   webNewsSearch(topic?: string): Promise<WebNewsItem[]>;
+  /** Recherche web générale (DuckDuckGo, sans clé), puis lecture d'une page publique. Réservées au cœur. */
+  webSearch(question: string): Promise<WebSearchHit[]>;
+  webRead(url: string): Promise<WebPage>;
   /** Démarrage avec Windows : lecture et réglage (clé de démarrage de l'utilisateur). */
   startupStatus(): Promise<boolean>;
   /** Batterie, en lecture seule. `null` pour un poste sans batterie. */
@@ -432,6 +435,14 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebNewsItem[]>("web_news_search", { topic });
   }
 
+  webSearch(question: string): Promise<WebSearchHit[]> {
+    return this.#call<WebSearchHit[]>("web_search", { question });
+  }
+
+  webRead(url: string): Promise<WebPage> {
+    return this.#call<WebPage>("web_read", { url });
+  }
+
   startupStatus(): Promise<boolean> {
     return this.#call<boolean>("startup_status");
   }
@@ -558,6 +569,8 @@ export class UnavailableNativeBridge implements NativeBridge {
   webNews = () => this.unavailable();
   webHeadlines = () => this.unavailable();
   webNewsSearch = () => this.unavailable();
+  webSearch = () => this.unavailable();
+  webRead = () => this.unavailable();
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();
   agendaRead = () => this.unavailable();

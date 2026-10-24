@@ -152,6 +152,11 @@ export function validateModelIntent(raw: unknown): Intent | null {
       const query = text(candidate.query, 100);
       return query ? { type, query } : null;
     }
+    case "ASK_WEB": {
+      // La question peut arriver dans « query » ou « text » : les petits modèles ne suivent pas toujours le schéma.
+      const question = text(candidate.question ?? candidate.query ?? candidate.text, 200);
+      return question ? { type, question } : null;
+    }
     case "NEWS_SUMMARY": {
       const topic = optionalText(candidate.topic, 100);
       return topic === null ? null : { type, ...(topic !== undefined ? { topic } : {}) };
