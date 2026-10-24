@@ -303,7 +303,8 @@ export function App({ engine: injectedEngine }: AppProps) {
                 startLabel: t("voice.toggle"),
                 stopLabel: t("voice.stop"),
                 speaking: voiceSettings.replyMode !== "off",
-                onToggleSpeaking: () => updateSettings({ replyMode: voiceSettings.replyMode === "off" ? "voice" : "off" }),
+                // Activer la lecture lit toutes les réponses, tapées comprises : « voice » ne lit que les commandes vocales.
+                onToggleSpeaking: () => updateSettings({ replyMode: voiceSettings.replyMode === "off" ? "always" : "off" }),
                 speakingLabel: t("voice.spokenReplies"),
               }
             : undefined
