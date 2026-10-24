@@ -18,6 +18,10 @@ export function estimateSize(content: PresentedContent): Size {
       return { width: 420, height: Math.min(MAX_WINDOW_HEIGHT, 72 + (content.rows.length + 1) * 30) };
     case "error-card":
       return { width: 340, height: 130 };
+    case "image-card":
+      return { width: 420, height: 380 };
+    case "article-card":
+      return { width: 400, height: Math.min(MAX_WINDOW_HEIGHT, 120 + Math.ceil(content.extract.length / 60) * 22) };
     case "confirmation": {
       // Au moins de quoi afficher les deux boutons, même pour une demande courte : jamais de bouton hors de la fenêtre.
       const checkbox = content.remember ? 32 : 0;

@@ -34,6 +34,9 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "xyzzy plugh": { type: "UNKNOWN", text: "xyzzy plugh" },
   "retiens que je préfère Firefox": { type: "REMEMBER", text: "je préfère Firefox" },
   "qu'est-ce que tu retiens de moi ?": { type: "MEMORY_LIST" },
+  "affiche une photo de Macron": { type: "SHOW_IMAGE", query: "Emmanuel Macron" },
+  "qui est Marie Curie ?": { type: "SHOW_TOPIC", query: "Marie Curie" },
+  "fais un résumé des actus du jour": { type: "NEWS_SUMMARY" },
 };
 
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
@@ -134,6 +137,8 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     memoryClear: vi.fn(async () => 0),
     scheduleList: vi.fn(async () => []),
     scheduleSave: vi.fn(async () => {}),
+    webSummary: vi.fn(async () => ({ title: "Emmanuel Macron", extract: "Homme d'État français.", page: "https://fr.wikipedia.org/wiki/Emmanuel_Macron" })),
+    webPhoto: vi.fn(async () => ({ title: "Macron.jpg", dataUrl: "data:image/jpeg;base64,AAAA", credit: "Simon Dawson", license: "CC BY 2.0", page: "https://commons.wikimedia.org/wiki/File:Macron.jpg" })),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
       return () => autoApprovalListeners.delete(listener);
@@ -561,5 +566,40 @@ describe("mémoire : l'utilisateur demande de retenir, oublier, lister", () => {
     expect(memoryAdd).toHaveBeenCalledWith("je préfère Firefox", "model");
     await engine.submit("qu'est-ce que tu retiens de moi ?");
     expect(assistant(events).some((text) => text.includes("1) je préfère Firefox"))).toBe(true);
+  });
+});
+
+describe("fenêtres par demande : une demande, une fenêtre", () => {
+  it("« affiche une photo de Macron » ouvre une fenêtre image, avec son auteur et sa licence", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("affiche une photo de Macron");
+    expect(bridge.webPhoto).toHaveBeenCalledWith("Emmanuel Macron");
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "image-card", credit: "Simon Dawson", license: "CC BY 2.0" }));
+    expect(assistant(events)).toContain("Photo : Macron.jpg");
+  });
+
+  it("« qui est Marie Curie ? » ouvre une fenêtre résumé, avec la page d'origine", async () => {
+    const bridge = fakeBridge({ webSummary: vi.fn(async () => ({ title: "Marie Curie", extract: "Physicienne et chimiste.", page: "https://fr.wikipedia.org/wiki/Marie_Curie" })) });
+    const { engine, events } = setup(bridge);
+    await engine.submit("qui est Marie Curie ?");
+    expect(bridge.webSummary).toHaveBeenCalledWith("Marie Curie");
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "article-card", extract: "Physicienne et chimiste." }));
+  });
+
+  it("« résume les actus » n'invente pas de liste : il dit qu'aucune source n'est encore vérifiée", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("fais un résumé des actus du jour");
+    expect(presented(events).some((content) => content.kind === "image-card" || content.kind === "article-card")).toBe(false);
+    expect(assistant(events).join(" ")).toContain("source d'actualités vérifiée");
+  });
+
+  it("une source injoignable devient une carte d'erreur, pas une fenêtre vide", async () => {
+    const bridge = fakeBridge({ webPhoto: vi.fn(async () => { throw new Error("source injoignable (timeout)"); }) });
+    const { engine, events } = setup(bridge);
+    await engine.submit("affiche une photo de Macron");
+    expect(presented(events).some((content) => content.kind === "image-card")).toBe(false);
+    expect(events.some((event) => event.type === "present" && event.content.kind === "error-card")).toBe(true);
   });
 });

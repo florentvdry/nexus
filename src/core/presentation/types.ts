@@ -24,6 +24,10 @@ export type PresentedContent =
   | { kind: "information-card"; title: string; rows: InformationRow[] }
   | { kind: "data-table"; title: string; columns: string[]; rows: string[][] }
   | { kind: "error-card"; title: string; code: string; message: string }
+  /** Photo d'une source publique, avec son auteur et sa licence. L'image est déjà téléchargée (data URL). */
+  | { kind: "image-card"; title: string; imageUrl: string; credit: string; license: string; page: string }
+  /** Résumé d'un sujet (Wikipédia), avec la page d'origine. */
+  | { kind: "article-card"; title: string; extract: string; page: string }
   /** Demande de confirmation : les boutons répondent au natif, qui décide de l'action. */
   | {
       kind: "confirmation";

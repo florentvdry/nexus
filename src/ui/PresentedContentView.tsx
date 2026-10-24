@@ -117,6 +117,23 @@ export function PresentedContentView({
           <span>{content.message}</span>
         </p>
       );
+    case "image-card":
+      return (
+        <figure className="image-card">
+          <img src={content.imageUrl} alt={content.title} />
+          <figcaption>
+            <span>{content.credit}</span> · <span>{content.license}</span>
+          </figcaption>
+          <p className="field-hint">{content.page}</p>
+        </figure>
+      );
+    case "article-card":
+      return (
+        <article className="article-card">
+          <p>{content.extract}</p>
+          <p className="field-hint">{content.page}</p>
+        </article>
+      );
     case "confirmation":
       return <ConfirmationCard content={content} onAnswer={onAnswer ?? (async () => {})} t={t} />;
   }

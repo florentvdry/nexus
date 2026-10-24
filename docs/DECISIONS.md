@@ -201,3 +201,10 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Garde-fou** (règle relevée chez Hermes) : une tâche en cours d'exécution ne peut pas en créer d'autres.
 - **Stockage** : `dossier de données/schedule/tasks.json`, écriture atomique, 100 tâches au plus, demande de 500 caractères au plus. Une liste invalide n'est jamais écrite.
 - **Limites** : une tâche ne tourne que si NEXUS est ouvert. Une tâche manquée pendant la fermeture s'exécute une seule fois à la réouverture. Pas encore de démarrage avec Windows.
+
+## ADR-031 — Fenêtres par demande : Wikipédia et Wikimedia Commons, images téléchargées côté natif, pas d'actualités sans source vérifiée
+
+- **Choix** : « affiche une photo de X » ouvre une fenêtre image ; « qui est X ? » ouvre une fenêtre résumé. Sources : Wikimedia Commons (photos libres, avec auteur et licence) et Wikipédia fr (résumé, page d'origine). Vérifiées le 24/10/2026 par lecture réelle des réponses.
+- **Images** : le natif télécharge la miniature (3 Mo au plus, hôtes `upload.wikimedia.org` et `thumb.wikimedia.org` seulement) et la renvoie en data URL. La politique de l'interface (`img-src 'self' data:`) n'est pas élargie.
+- **Actualités** : aucun flux d'actualités n'a pu être vérifié (Le Monde, Radio France et France Info refusent la lecture depuis cet environnement). La demande « résume les actus » répond donc qu'il n'existe pas encore de source vérifiée, au lieu d'inventer une liste. À faire : que l'utilisateur choisisse ses médias, puis vérifier chaque flux avant de l'ajouter.
+- **Limites** : résultat de la première page Commons seulement ; pas de cache ; pas encore de résumé produit par le modèle à partir de plusieurs sources.

@@ -9,6 +9,7 @@ import type { OllamaStatus, PullProgress } from "../language-model/ollama";
 import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
 import type { Memory } from "../memory/types";
 import type { ScheduledTask } from "../schedule/controller";
+import type { WebPhoto, WebSummary } from "../web/types";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -202,6 +203,9 @@ export interface NativeBridge {
   /** Tâches programmées : lecture et écriture de la liste complète, réservées au cœur. */
   scheduleList(): Promise<ScheduledTask[]>;
   scheduleSave(tasks: ScheduledTask[]): Promise<void>;
+  /** Sources publiques : résumé d'un sujet (Wikipédia) et photo libre (Wikimedia Commons). Aucun compte. */
+  webSummary(query: string): Promise<WebSummary>;
+  webPhoto(query: string): Promise<WebPhoto>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
   mcpInstalled(): Promise<InstalledConnector[]>;
@@ -389,6 +393,14 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<void>("schedule_save", { tasks });
   }
 
+  webSummary(query: string): Promise<WebSummary> {
+    return this.#call<WebSummary>("web_summary", { query });
+  }
+
+  webPhoto(query: string): Promise<WebPhoto> {
+    return this.#call<WebPhoto>("web_photo", { query });
+  }
+
   modelJson(model: string, system: string, user: string): Promise<unknown> {
     return this.#call<unknown>("model_json", { model, system, user });
   }
@@ -482,6 +494,8 @@ export class UnavailableNativeBridge implements NativeBridge {
   memoryClear = () => this.unavailable();
   scheduleList = () => this.unavailable();
   scheduleSave = () => this.unavailable();
+  webSummary = () => this.unavailable();
+  webPhoto = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();

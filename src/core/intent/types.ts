@@ -39,6 +39,12 @@ export type Intent =
   | { type: "SCHEDULE"; request: string; recurrence: Recurrence }
   | { type: "LIST_SCHEDULES" }
   | { type: "CANCEL_SCHEDULE"; query: string }
+  /** Une photo d'un sujet, depuis une source publique libre (Wikimedia Commons). */
+  | { type: "SHOW_IMAGE"; query: string }
+  /** Un résumé d'un sujet, depuis Wikipédia. */
+  | { type: "SHOW_TOPIC"; query: string }
+  /** Un résumé de l'actualité du jour : pas encore de source d'actualités vérifiée. */
+  | { type: "NEWS_SUMMARY"; topic?: string }
   /** Réponse en langage naturel du modèle, pour ce qui n'est pas une commande. */
   | { type: "CHAT"; text: string }
   | { type: "UNKNOWN"; text: string };

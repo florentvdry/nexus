@@ -389,6 +389,13 @@ export class Engine {
       case "NEEDS_CONNECTOR":
         // Le modèle a reconnu un service extérieur : on cherche un connecteur de confiance et on propose de l'installer.
         return this.#connectors.start(intent.task, intent.service);
+      case "SHOW_IMAGE":
+        return this.#showPhoto(intent.query, reply);
+      case "SHOW_TOPIC":
+        return this.#showTopic(intent.query, reply);
+      case "NEWS_SUMMARY":
+        // Pas de source d'actualités vérifiée : NEXUS le dit plutôt que d'inventer une liste.
+        return this.#reply(reply, reply.t("web.news"), "error");
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -407,6 +414,36 @@ export class Engine {
       case "UNKNOWN":
         // Le modèle n'a rien reconnu et n'a rien répondu : c'est une vraie incompréhension.
         return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
+    }
+  }
+
+  /** Une photo libre du sujet, dans sa fenêtre, avec son auteur et sa licence. */
+  async #showPhoto(query: string, reply: Reply): Promise<void> {
+    try {
+      const photo = await this.#bridge.webPhoto(query);
+      this.#emit({
+        type: "present",
+        content: { kind: "image-card", title: photo.title, imageUrl: photo.dataUrl, credit: photo.credit, license: photo.license, page: photo.page },
+        source: { capabilityId: "web.photo", locality: "network", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("web.photo", { title: photo.title }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
+    }
+  }
+
+  /** Le résumé d'un sujet (Wikipédia), dans sa fenêtre, avec la page d'origine. */
+  async #showTopic(query: string, reply: Reply): Promise<void> {
+    try {
+      const summary = await this.#bridge.webSummary(query);
+      this.#emit({
+        type: "present",
+        content: { kind: "article-card", title: summary.title, extract: summary.extract, page: summary.page },
+        source: { capabilityId: "web.summary", locality: "network", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("web.topic", { title: summary.title }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
     }
   }
 

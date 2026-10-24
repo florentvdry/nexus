@@ -146,6 +146,15 @@ export function validateModelIntent(raw: unknown): Intent | null {
       const recurrence = recurrenceFrom(candidate);
       return request && recurrence ? { type, request, recurrence } : null;
     }
+    case "SHOW_IMAGE":
+    case "SHOW_TOPIC": {
+      const query = text(candidate.query, 100);
+      return query ? { type, query } : null;
+    }
+    case "NEWS_SUMMARY": {
+      const topic = optionalText(candidate.topic, 100);
+      return topic === null ? null : { type, ...(topic !== undefined ? { topic } : {}) };
+    }
     case "CANCEL_SCHEDULE": {
       const query = text(candidate.query, 200);
       return query ? { type, query } : null;
