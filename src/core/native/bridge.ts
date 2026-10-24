@@ -215,6 +215,9 @@ export interface NativeBridge {
   /** Recherche web générale (DuckDuckGo, sans clé), puis lecture d'une page publique. Réservées au cœur. */
   webSearch(question: string): Promise<WebSearchHit[]>;
   webRead(url: string): Promise<WebPage>;
+  /** Voix naturelle locale (Piper, installée dans le dossier de données) : présence, puis synthèse en WAV (base64). */
+  speechNeuralAvailable(): Promise<boolean>;
+  speechNeuralSpeak(text: string, rate: number): Promise<string>;
   /** Démarrage avec Windows : lecture et réglage (clé de démarrage de l'utilisateur). */
   startupStatus(): Promise<boolean>;
   /** Batterie, en lecture seule. `null` pour un poste sans batterie. */
@@ -443,6 +446,14 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebPage>("web_read", { url });
   }
 
+  speechNeuralAvailable(): Promise<boolean> {
+    return this.#call<boolean>("speech_neural_available");
+  }
+
+  speechNeuralSpeak(text: string, rate: number): Promise<string> {
+    return this.#call<string>("speech_neural_speak", { text, rate });
+  }
+
   startupStatus(): Promise<boolean> {
     return this.#call<boolean>("startup_status");
   }
@@ -571,6 +582,8 @@ export class UnavailableNativeBridge implements NativeBridge {
   webNewsSearch = () => this.unavailable();
   webSearch = () => this.unavailable();
   webRead = () => this.unavailable();
+  speechNeuralAvailable = () => this.unavailable();
+  speechNeuralSpeak = () => this.unavailable();
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();
   agendaRead = () => this.unavailable();

@@ -294,3 +294,11 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Alias** : un paquet `aliases` peut dire un nom autrement (« dis cord » -> « Discord »). Il ne peut plus viser une liste : son identifiant est seulement un nom à chercher.
 - **Vérifié** : le scan trouve Microsoft Edge, Discord, Google Chrome, Bloc-notes, Calculatrice, Paint et l'Explorateur sur ce PC, et ne trouve rien pour un nom inventé. Le lancement n'a pas été testé sur ce PC, pour ne pas ouvrir d'application sans demande.
 - **Limites** : les applications ni dans le menu Démarrer, ni inscrites au registre, ni dans les dossiers scannés ne sont pas trouvées. Le nom doit être celui que Windows affiche (ou un alias). Les noms de la liste viennent de Windows, donc varient selon la langue du système.
+
+## ADR-043 — Voix naturelle locale : Piper, installé avec accord, repli sur la voix Windows
+
+- **Choix** : Piper (moteur neural hors ligne, rhasspy/piper 2023.11.14-2, Windows x64) et la voix française `fr_FR-siwis-medium` (Hugging Face, 63 Mo). Rien n'est envoyé en ligne au moment de parler.
+- **Installation** : téléchargée seulement après accord, dans `%APPDATA%\fr.nexus.assistant\voices\` (moteur dans `piper\piper\`, voix à la racine du dossier). Aucune installation système.
+- **Fonctionnement** : la réponse est nettoyée (`src/core/voice/spoken.ts`), envoyée au moteur par son entrée standard, et rendue en WAV. L'interface la joue par Web Audio, qui n'est pas bloquée par la CSP. Le chemin du moteur et de la voix est fixe côté Rust : l'interface ne transmet que le texte et la vitesse.
+- **Repli** : sans voix installée, en cas d'erreur, ou pour l'anglais, la voix Windows (SAPI) lit la réponse.
+- **Limites** : la qualité n'a pas été écoutée par l'auteur du code : la synthèse a été vérifiée (WAV produit, lecture par l'application), pas le son. La voix est française seulement ; un poste sans ce dossier garde la voix Windows.

@@ -15,6 +15,7 @@ pub mod agenda;
 pub mod power;
 pub mod startup;
 pub mod web;
+pub mod voice_tts;
 pub mod plugin_store;
 pub mod plugins;
 
@@ -596,6 +597,8 @@ pub fn run() {
             web::web_news_search,
             web::web_search,
             web::web_read,
+            voice_tts::speech_neural_available,
+            voice_tts::speech_neural_speak,
             startup::startup_status,
             startup::startup_set,
             power::battery_status,
