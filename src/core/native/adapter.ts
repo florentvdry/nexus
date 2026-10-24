@@ -18,22 +18,15 @@ export interface SystemInfo {
   uptimeSeconds: number;
 }
 
+/** Application trouvée sur le PC par le scan, puis lancée : son nom tel que Windows l'affiche. */
 export interface LaunchOutcome {
-  appId: string;
   displayName: string;
-  pid: number;
-}
-
-export interface AppStatus {
-  id: string;
-  displayName: string;
-  installed: boolean;
 }
 
 export interface NativeAdapter {
   systemInfo(): Promise<SystemInfo>;
-  launchApp(appId: string): Promise<LaunchOutcome>;
-  listApps(): Promise<AppStatus[]>;
+  /** Cherche l'application par son nom sur ce PC, puis la lance. Une application absente : `not-installed`. */
+  launchApp(name: string): Promise<LaunchOutcome>;
 }
 
 /** Erreur structurée renvoyée par le backend natif. */

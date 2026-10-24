@@ -284,3 +284,13 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Lecture vocale** : le bouton « Répondre à voix haute » lit toutes les réponses (mode `always`). Le mode `voice`, qui ne lit que les commandes vocales, reste disponible dans les réglages vocaux.
 - **Edge** : ajouté au catalogue (Rust et TypeScript). « Lance X » est une ouverture d'application ; `AGENT_RUN` ne sert qu'aux demandes explicites d'agent.
 - **Limites** : les résultats de recherche peuvent être des sites commerciaux peu fiables, et le modèle ne les classe pas encore. La réponse est lente sur un poste sans GPU (plusieurs dizaines de secondes avec un modèle 7 B). Pas de recherche d'images ni de vidéos.
+
+## ADR-042 — Applications : aucun catalogue, un scan du PC à la demande
+
+- **Choix** : NEXUS ne tient plus de liste d'applications. Il cherche le nom demandé sur le PC : d'abord la liste des applications du menu Démarrer (`Get-StartApps`, avec le nom affiché par Windows, y compris les applications du Store), puis les raccourcis du menu Démarrer, les clés « App Paths » du registre, et les exécutables sous Program Files et AppData\Local\Programs.
+- **Lancement** : une application du Store ou un raccourci passe par l'explorateur (`shell:AppsFolder\<identifiant>` ou le fichier .lnk) ; un exécutable est lancé directement, sans shell. Le frontend ne transmet qu'un nom, jamais une commande ni un chemin.
+- **Correspondance** : mots entiers, sans casse ni accent, mots vides retirés (« le », « the »). Un nom exact passe avant un nom qui le contient ; un raccourci passe avant le même programme dans la liste du Store.
+- **Cache** : le scan est gardé dix minutes ; une application absente est cherchée une seconde fois dans un scan neuf.
+- **Alias** : un paquet `aliases` peut dire un nom autrement (« dis cord » -> « Discord »). Il ne peut plus viser une liste : son identifiant est seulement un nom à chercher.
+- **Vérifié** : le scan trouve Microsoft Edge, Discord, Google Chrome, Bloc-notes, Calculatrice, Paint et l'Explorateur sur ce PC, et ne trouve rien pour un nom inventé. Le lancement n'a pas été testé sur ce PC, pour ne pas ouvrir d'application sans demande.
+- **Limites** : les applications ni dans le menu Démarrer, ni inscrites au registre, ni dans les dossiers scannés ne sont pas trouvées. Le nom doit être celui que Windows affiche (ou un alias). Les noms de la liste viennent de Windows, donc varient selon la langue du système.

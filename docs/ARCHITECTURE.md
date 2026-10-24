@@ -24,13 +24,13 @@ règle locale ne suffit (non implémenté en phase 1).
                 ▼
 ┌──────────────────────── Windows Adapter (Rust, Tauri 2) — src-tauri/src ─────────────────┐
 │ system.rs    informations système réelles (sysinfo)                                      │
-│ apps.rs      catalogue FERMÉ d'applications, résolution des chemins, lancement           │
+│ apps.rs      scan du PC (menu Démarrer, registre, dossiers), recherche par nom, lancement │
 │ lib.rs       commandes Tauri exposées au frontend                                        │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 Règle de frontières : le frontend ne voit jamais de commande shell. Le core ne connaît que le
-contrat `NativeAdapter`. Le backend Rust ne connaît que des identifiants du catalogue.
+contrat `NativeAdapter`. Le backend Rust ne reçoit qu'un nom : il le cherche sur le PC, et ne lance que ce qu'il a trouvé.
 
 ## Flux d'une commande
 

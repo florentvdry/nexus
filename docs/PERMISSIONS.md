@@ -30,7 +30,7 @@ demande lui-même la confirmation (voir la phase 4). Une permission `restricted`
 
 ## Garanties techniques (phase 1)
 
-- Le lancement d'application n'accepte que des identifiants du catalogue Rust
+- Le lancement d'application n'accepte qu'un nom, cherché sur le PC par le scan ; seule une application trouvée peut être lancée
   (`src-tauri/src/plugins/actions/apps.rs`). Aucune chaîne venant de l'interface n'est exécutée comme commande.
 - Aucune élévation de privilèges n'est demandée ni tentée.
 - Le processus lancé est détaché : NEXUS ne le surveille pas et n'injecte rien dans lui.

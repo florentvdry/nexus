@@ -36,8 +36,7 @@ const fakeSystem: SystemInfo = {
 function fakeNative(overrides: Partial<NativeAdapter> = {}): NativeAdapter {
   return {
     systemInfo: vi.fn(async () => fakeSystem),
-    launchApp: vi.fn(async (appId: string) => ({ appId, displayName: appId, pid: 1234 })),
-    listApps: vi.fn(async () => []),
+    launchApp: vi.fn(async (name: string) => ({ displayName: name })),
     ...overrides,
   };
 }
@@ -61,7 +60,7 @@ describe("Engine — lancement d'application", () => {
 
     await engine.submit("Jarvis, lance Discord.");
 
-    expect(native.launchApp).toHaveBeenCalledWith("discord");
+    expect(native.launchApp).toHaveBeenCalledWith("Discord");
     expect(assistantTexts(events)).toEqual(["Discord est ouvert."]);
     expect(orbStates(events)).toEqual(expect.arrayContaining(["thinking", "executing", "responding"]));
     expect(engine.tasksSnapshot()[0]).toMatchObject({ labelKey: "task.openApp", state: "done", labelParams: { app: "Discord" } });
@@ -83,19 +82,18 @@ describe("Engine — lancement d'application", () => {
 
     await engine.submit("lance la calculatrice");
 
-    expect(assistantTexts(events)).toEqual(["Calculatrice n'est pas installé sur cette machine."]);
+    expect(assistantTexts(events)).toEqual(["calculatrice n'est pas installé sur cette machine."]);
     expect(events).toContainEqual(expect.objectContaining({ type: "present", content: expect.objectContaining({ kind: "error-card", code: "not-installed" }) }));
     expect(orbStates(events)).toContain("error");
     expect(engine.tasksSnapshot()[0]).toMatchObject({ state: "error", errorCode: "not-installed" });
   });
 
-  it("n'appelle jamais le système pour une application inconnue", async () => {
+  it("passe le nom au natif, qui le cherche sur le PC : aucune liste d'applications connues dans le noyau", async () => {
     const native = fakeNative();
-    const { events } = setup(native);
+    const { engine } = setup(native);
 
-    await setup(native).engine.submit("lance Claude Code");
-    expect(native.launchApp).not.toHaveBeenCalled();
-    expect(events.length).toBe(0);
+    await engine.submit("lance Claude Code");
+    expect(native.launchApp).toHaveBeenCalledWith("Claude Code");
   });
 
   it("explique honnêtement l'absence du backend natif hors application de bureau", async () => {

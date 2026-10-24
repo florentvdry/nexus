@@ -5,8 +5,6 @@ use thiserror::Error;
 #[derive(Debug, Error, Serialize)]
 #[serde(tag = "code", content = "message", rename_all = "kebab-case")]
 pub enum AdapterError {
-    #[error("application inconnue : {0}")]
-    UnknownApp(String),
     #[error("application non installée : {0}")]
     NotInstalled(String),
     #[error("échec du lancement : {0}")]

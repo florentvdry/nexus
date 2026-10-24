@@ -1,14 +1,9 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { loadBuiltinPlugins } from "./builtin";
 import { dictionaryFromPack, registerPacks, type PluginPackData } from "./packs";
-import { findApplication } from "../intent/dictionaries";
-import { normalize } from "../intent/normalize";
-import { pluginCommandsForModel, registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
+import { applicationSearchName, pluginCommandsForModel } from "../intent/registry";
 
-beforeAll(() => {
-  loadBuiltinPlugins({ registerCapability: () => {}, registerLanguage: registerLanguageDictionary, registerApplications });
-});
+
 
 afterEach(() => registerPacks([]));
 
@@ -29,13 +24,13 @@ describe("paquets de données", () => {
     expect("le bloc notes".replace(dictionary.fillerWords, "")).toBe("bloc notes");
   });
 
-  it("un alias ajouté par un paquet retrouve l'application pour le modèle, et disparaît avec le paquet", () => {
-    const aliased: PluginPackData = { ...verbs, language: null, aliases: { applications: [{ id: "discord", aliases: ["dis cord"] }] } };
-    expect(findApplication(normalize("dis cord"), registeredApplications())).toBeUndefined();
+  it("un alias ajouté par un paquet donne le nom à chercher sur le PC, et disparaît avec le paquet", () => {
+    const aliased: PluginPackData = { ...verbs, language: null, aliases: { applications: [{ id: "Discord", aliases: ["dis cord"] }] } };
+    expect(applicationSearchName("Dis Cord")).toBe("Dis Cord");
     registerPacks([aliased]);
-    expect(findApplication(normalize("dis cord"), registeredApplications())?.entry.id).toBe("discord");
+    expect(applicationSearchName("Dis Cord")).toBe("Discord");
     registerPacks([]);
-    expect(findApplication(normalize("dis cord"), registeredApplications())).toBeUndefined();
+    expect(applicationSearchName("Dis Cord")).toBe("Dis Cord");
   });
 
   it("les commandes des plugins installés sont données au modèle avec leur identifiant", () => {

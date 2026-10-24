@@ -45,7 +45,6 @@ const finding = (overrides: Partial<Finding>): Finding => ({
 const nativeDouble: NativeAdapter = {
   systemInfo: vi.fn(),
   launchApp: vi.fn(),
-  listApps: vi.fn(async () => []),
 };
 
 function setup(osint: OsintRunner, native: NativeAdapter = nativeDouble) {

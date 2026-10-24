@@ -1,14 +1,15 @@
-import type { AppEntry, LanguageDictionary } from "./dictionaries";
+import type { LanguageDictionary } from "./dictionaries";
+import { normalize } from "./normalize";
 
 /**
  * Données de compréhension fournies par les plugins. Elles sont remplacées (et non cumulées) à chaque
  * activation : charger le même plugin deux fois ne duplique rien.
  */
 const dictionaries = new Map<string, LanguageDictionary>();
-let applications: readonly AppEntry[] = [];
-/** Vocabulaire et alias fournis par les paquets de données installés : ils complètent, ils ne remplacent pas. */
+/** Vocabulaire fourni par les paquets de données installés : ils complètent, ils ne remplacent pas. */
 let packDictionaries = new Map<string, LanguageDictionary>();
-let packAliases = new Map<string, readonly string[]>();
+/** Nom dit par l'utilisateur (normalisé) -> nom à chercher sur le PC. Aucune liste d'applications n'est tenue ici. */
+let packAliases = new Map<string, string>();
 let packActions: PluginActionEntry[] = [];
 
 /** Commande d'un plugin WebAssembly et ses déclencheurs normalisés. */
@@ -21,11 +22,11 @@ export interface PluginActionEntry {
 /** Remplace tous les apports des paquets (appelé à chaque changement d'installation). */
 export function replacePacks(
   dictionariesByPack: Map<string, LanguageDictionary>,
-  aliasesByApp: Map<string, readonly string[]>,
+  aliasTargets: Map<string, string>,
   actions: PluginActionEntry[] = [],
 ): void {
   packDictionaries = dictionariesByPack;
-  packAliases = aliasesByApp;
+  packAliases = aliasTargets;
   packActions = actions;
 }
 
@@ -41,17 +42,14 @@ export function registerLanguageDictionary(locale: string, dictionary: LanguageD
   dictionaries.set(locale, dictionary);
 }
 
-export function registerApplications(entries: readonly AppEntry[]): void {
-  applications = [...entries];
-}
-
 export function languageDictionaries(): LanguageDictionary[] {
   return [...dictionaries.values(), ...packDictionaries.values()];
 }
 
-export function registeredApplications(): readonly AppEntry[] {
-  return applications.map((entry) => {
-    const extra = packAliases.get(entry.id);
-    return extra ? { ...entry, aliases: [...entry.aliases, ...extra] } : entry;
-  });
+/**
+ * Le nom à chercher sur le PC pour un nom dit par l'utilisateur : celui d'un alias installé, sinon le nom lui-même.
+ */
+export function applicationSearchName(spokenName: string): string {
+  const normalized = normalize(spokenName);
+  return packAliases.get(normalized) ?? spokenName.trim();
 }

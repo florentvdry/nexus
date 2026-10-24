@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
 import { createEngine } from "./engine";
 
-const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) };
+const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
 describe("historique de la conversation : le modèle voit ce qui précède", () => {
   it("après une photo de Britney Spears, la question suivante reçoit ce sujet dans son contexte", async () => {

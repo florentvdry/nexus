@@ -16,7 +16,6 @@
   ],
   "connectors": [],
   "languages": [],
-  "applications": false,
   "permissions": [
     "system.read"
   ],

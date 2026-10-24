@@ -30,7 +30,7 @@ fn plugin_folder(root: &Path, language: &str) -> PathBuf {
 #[test]
 fn a_plugin_is_prepared_approved_used_altered_and_removed() {
     let sandbox = scratch("flow");
-    let store = Store::new(sandbox.join("plugins"), vec!["discord"]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
 
     let prepared = store.prepare_folder(&plugin_folder(&sandbox, LANGUAGE)).unwrap();
     assert_eq!(prepared.id, "community.ana.verbes");
@@ -59,7 +59,7 @@ fn a_plugin_is_prepared_approved_used_altered_and_removed() {
 #[test]
 fn installation_requires_the_digest_the_user_approved() {
     let sandbox = scratch("digest");
-    let store = Store::new(sandbox.join("plugins"), vec![]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
     let prepared = store.prepare_folder(&plugin_folder(&sandbox, LANGUAGE)).unwrap();
     let error = store.install(&prepared.staging_id, "sha256:0000").unwrap_err();
     assert!(matches!(error, AdapterError::PluginInvalid(ref message) if message.contains("changé")));
@@ -71,7 +71,7 @@ fn installation_requires_the_digest_the_user_approved() {
 #[test]
 fn an_invalid_pack_never_reaches_the_staging_area() {
     let sandbox = scratch("invalid");
-    let store = Store::new(sandbox.join("plugins"), vec![]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
     let error = store.prepare_folder(&plugin_folder(&sandbox, r#"{"locale":"fr","phrases":{"openVerbs":["OUVRE.*"]}}"#)).unwrap_err();
     assert!(matches!(error, AdapterError::PluginInvalid(_)));
     let staging = sandbox.join("plugins/.staging");
@@ -82,7 +82,7 @@ fn an_invalid_pack_never_reaches_the_staging_area() {
 #[test]
 fn identifiers_coming_from_the_interface_cannot_escape_the_store() {
     let sandbox = scratch("traversal");
-    let store = Store::new(sandbox.join("plugins"), vec![]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
     assert!(matches!(store.staged("../../etc"), Err(AdapterError::InvalidTarget(_))));
     assert!(matches!(store.remove("../community.ana.verbes"), Err(AdapterError::InvalidTarget(_))));
     assert!(matches!(store.remove("community.ana.absent"), Err(AdapterError::InvalidTarget(_))));
@@ -91,7 +91,7 @@ fn identifiers_coming_from_the_interface_cannot_escape_the_store() {
 
 #[test]
 fn only_https_sources_are_fetched_from_the_network() {
-    let store = Store::new(scratch("https").join("plugins"), vec![]).unwrap();
+    let store = Store::new(scratch("https").join("plugins")).unwrap();
     assert!(matches!(store.prepare_git("http://example.org/a/b.git"), Err(AdapterError::InvalidTarget(_))));
     assert!(matches!(store.prepare_git("https://user:pass@example.org/a/b.git"), Err(AdapterError::InvalidTarget(_))));
 }
@@ -138,7 +138,7 @@ fn example_dir() -> PathBuf {
 #[test]
 fn the_rust_example_runs_its_commands_inside_the_approved_permissions() {
     let sandbox = scratch("wasm");
-    let store = Store::new(sandbox.join("plugins"), vec![]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
     let id = "community.exemple.convertisseur";
 
     let prepared = store.prepare_folder(&example_dir()).unwrap();
@@ -176,7 +176,7 @@ fn the_rust_example_runs_its_commands_inside_the_approved_permissions() {
 #[test]
 fn a_modified_wasm_module_is_not_run() {
     let sandbox = scratch("wasm-modified");
-    let store = Store::new(sandbox.join("plugins"), vec![]).unwrap();
+    let store = Store::new(sandbox.join("plugins")).unwrap();
     let id = "community.exemple.convertisseur";
     let prepared = store.prepare_folder(&example_dir()).unwrap();
     store.install(&prepared.staging_id, &prepared.digest).unwrap();

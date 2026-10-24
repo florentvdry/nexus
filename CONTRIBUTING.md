@@ -7,7 +7,7 @@ Merci de votre intérêt. Quelques règles pour garder le projet stable et compr
 1. **Pas de données simulées présentées comme réelles.** Une simulation doit être explicitement
    nommée comme telle, et réservée aux tests.
 2. **Pas de logique métier dans l'interface.** Les composants de `src/ui` appellent le moteur.
-3. **Pas de commande libre.** Le lancement passe par le catalogue fermé (`src-tauri/src/plugins/actions/apps.rs`).
+3. **Pas de commande libre.** Le lancement ne peut viser qu'une application trouvée par le scan du PC (`src-tauri/src/plugins/actions/apps.rs`). Aucun catalogue d'applications n'est tenu.
 4. **Pas d'appel à un modèle de langage pour une tâche simple.** Ajoutez d'abord une règle locale.
 5. **Chaque capacité déclare son manifeste** : permissions, localité, délai, coût.
 6. **Les erreurs ne sont jamais masquées.** Elles apparaissent sous forme de carte d'erreur.
@@ -46,12 +46,11 @@ La convention des plugins et la piste d'une marketplace sont décrites dans [doc
 Documentation complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERMISSIONS.md](docs/PERMISSIONS.md),
 [docs/DECISIONS.md](docs/DECISIONS.md).
 
-## Ajouter une application lançable
+## Applications lançables
 
-1. Ajouter une entrée `AppSpec` dans `src-tauri/src/plugins/actions/apps.rs` avec ses emplacements candidats.
-2. Ajouter une entrée `AppEntry` dans `plugins/actions/app-launch/index.ts` (alias FR et EN).
-3. Ajouter le nom traduit dans `src/i18n/messages.ts` (clé `app.*`, FR et EN).
-4. Ajouter un test dans `src/core/intent/parse.test.ts`.
+Rien à ajouter : NEXUS ne tient pas de liste. Le scan (`apps.rs`) lit le menu Démarrer, le registre (« App Paths ») et les dossiers des programmes, puis lance ce qu'il trouve par son nom. Pour changer ce qui est reconnu, modifier les sources du scan, pas une liste.
+
+Un nom dit autrement par l'utilisateur peut être ajouté par un paquet `aliases` (voir `docs/PLUGIN-SPEC.md`).
 
 ## Ajouter une capacité
 

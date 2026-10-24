@@ -79,8 +79,16 @@ pub fn validate_language(text: &str) -> Result<LanguagePack, Vec<String>> {
     if problems.is_empty() { Ok(pack) } else { Err(problems) }
 }
 
-/// `known` : identifiants du catalogue d'applications. Un alias ne peut viser qu'une application connue.
-pub fn validate_aliases(text: &str, known: &[&str]) -> Result<AliasesPack, Vec<String>> {
+/// Nom d'application visé par un alias : un nom que le scan du PC saura chercher. Pas de chemin, pas de commande.
+pub fn valid_app_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    !trimmed.is_empty()
+        && trimmed.chars().count() <= 60
+        && !trimmed.chars().any(|c| c.is_control() || matches!(c, '\\' | '/' | ':' | '%' | '"' | '<' | '>' | '|' | '*' | '?' | ';' | '&'))
+}
+
+/// `id` est le nom de l'application à chercher sur le PC : aucun catalogue n'est tenu, donc il n'est pas comparé à une liste.
+pub fn validate_aliases(text: &str) -> Result<AliasesPack, Vec<String>> {
     let pack: AliasesPack = serde_json::from_str(text).map_err(|error| vec![format!("aliases.json illisible : {error}")])?;
     let mut problems = Vec::new();
     if pack.applications.len() > MAX_APPS {
@@ -88,8 +96,8 @@ pub fn validate_aliases(text: &str, known: &[&str]) -> Result<AliasesPack, Vec<S
     }
     let mut seen = BTreeSet::new();
     for app in &pack.applications {
-        if !known.contains(&app.id.as_str()) {
-            problems.push(format!("application « {} » inconnue du catalogue de NEXUS", app.id));
+        if !valid_app_name(&app.id) {
+            problems.push(format!("nom d'application « {} » refusé : 60 caractères au plus, sans chemin ni symbole", app.id));
         }
         if !seen.insert(app.id.as_str()) {
             problems.push(format!("application « {} » listée deux fois", app.id));
@@ -109,8 +117,6 @@ pub fn validate_aliases(text: &str, known: &[&str]) -> Result<AliasesPack, Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const KNOWN: &[&str] = &["discord", "notepad"];
 
     #[test]
     fn phrases_are_plain_lowercase_words() {
@@ -138,11 +144,11 @@ mod tests {
     }
 
     #[test]
-    fn aliases_must_target_a_known_application() {
-        let ok = validate_aliases(r#"{"applications":[{"id":"discord","aliases":["dis cord"]}]}"#, KNOWN);
+    fn aliases_target_an_application_name_not_a_path() {
+        let ok = validate_aliases(r#"{"applications":[{"id":"Discord","aliases":["dis cord"]}]}"#);
         assert!(ok.is_ok());
-        let unknown = validate_aliases(r#"{"applications":[{"id":"powershell","aliases":["shell"]}]}"#, KNOWN).unwrap_err();
-        assert!(unknown.iter().any(|p| p.contains("inconnue du catalogue")));
+        let path = validate_aliases(r#"{"applications":[{"id":"C:\\Windows\\cmd.exe","aliases":["shell"]}]}"#).unwrap_err();
+        assert!(path.iter().any(|p| p.contains("refusé")));
     }
 
     #[test]

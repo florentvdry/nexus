@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "type": "actions",
-  "description": "Lance une application du catalogue natif. Aucune commande libre n'est exécutée. Fournit le catalogue d'alias.",
+  "description": "Cherche une application installée sur ce PC par son nom, puis la lance. Aucune commande libre n'est exécutée.",
   "author": "NEXUS contributors",
   "license": "MIT",
   "entry": "index.ts",
@@ -16,7 +16,6 @@
   ],
   "connectors": [],
   "languages": [],
-  "applications": true,
   "permissions": [
     "process.launch"
   ],

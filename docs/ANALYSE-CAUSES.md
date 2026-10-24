@@ -11,7 +11,7 @@ empêcher le retour du défaut. Il ne remplace pas les tests : il dit quels test
 2. **Une règle générale du prompt s'applique à des cas qu'elle ne visait pas.** « Lance » était associé aux lancements d'agents
    (Claude Code), donc « lance Edge » devenait `AGENT_RUN`.
 3. **Le catalogue d'applications est écrit à deux endroits** (TypeScript pour les alias, Rust pour les chemins). Une application
-   ajoutée d'un seul côté n'est pas trouvée.
+   ajoutée d'un seul côté n'est pas trouvée. Corrigé en supprimant le catalogue : NEXUS scanne le PC (ADR-042).
 4. **Un réglage est mal nommé par rapport à son effet.** Le bouton « Répondre à voix haute » écrivait le mode `voice`, qui ne lit
    que les commandes vocales : tapé au clavier, rien n'était lu.
 5. **Les sources étaient fermées par conception.** Wikipédia, Commons et Google Actualités ne répondent pas à une question

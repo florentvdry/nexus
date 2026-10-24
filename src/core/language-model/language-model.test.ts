@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { registerApplications, registerLanguageDictionary } from "../intent/registry";
+import { registerLanguageDictionary } from "../intent/registry";
 import { loadBuiltinPlugins } from "../plugins/builtin";
 import { chooseTier, DEFAULT_LIMITS, REFERENCE_CASES, runTierBenchmark, type Classifier, type TierResult } from "./benchmark";
 import { candidateTiers, type HardwareProfile } from "./hardware";
@@ -8,9 +8,9 @@ import { understandWithModel } from "./branch";
 import { buildIntentGrammar, MODEL_INTENT_TYPES } from "./grammar";
 import { validateModelIntent } from "./validate";
 
-// Les règles ont besoin du vocabulaire et des applications des plugins intégrés, comme au démarrage de NEXUS.
+// Les règles ont besoin du vocabulaire des plugins intégrés, comme au démarrage de NEXUS.
 beforeAll(() => {
-  loadBuiltinPlugins({ registerCapability: () => {}, registerLanguage: registerLanguageDictionary, registerApplications });
+  loadBuiltinPlugins({ registerCapability: () => {}, registerLanguage: registerLanguageDictionary });
 });
 
 const machine = (overrides: Partial<HardwareProfile> = {}): HardwareProfile => ({
@@ -161,18 +161,11 @@ describe("compréhension par le modèle", () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  it("retrouve l'identifiant d'une application nommée par le modèle, dans le catalogue", async () => {
+  it("transmet le nom d'application nommé par le modèle, tel quel : aucune liste n'est consultée", async () => {
     const classify = vi.fn(async () => ({ type: "OPEN_APPLICATION", appName: "Discord" }));
     const understood = await understandWithModel("xyzzy plugh", { classify });
     expect(understood.source).toBe("model");
-    expect(understood.intent).toMatchObject({ type: "OPEN_APPLICATION" });
-    expect((understood.intent as { appId?: string }).appId).toBeDefined();
-  });
-
-  it("garde une application inconnue sans identifiant, pour que rien ne soit lancé", async () => {
-    const classify = vi.fn(async () => ({ type: "OPEN_APPLICATION", appName: "logiciel-inconnu-zz" }));
-    const understood = await understandWithModel("xyzzy plugh", { classify });
-    expect(understood.intent).toEqual({ type: "OPEN_APPLICATION", appName: "logiciel-inconnu-zz" });
+    expect(understood.intent).toEqual({ type: "OPEN_APPLICATION", appName: "Discord" });
   });
 
   it("une réponse en texte du modèle (UNKNOWN avec reply) est renvoyée telle quelle, pas comme une erreur", async () => {

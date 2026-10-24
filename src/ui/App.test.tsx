@@ -33,8 +33,7 @@ function simulatedNative(overrides: Partial<NativeAdapter> = {}): NativeAdapter 
       disks: [],
       uptimeSeconds: 3600,
     })),
-    launchApp: vi.fn(async (appId: string) => ({ appId, displayName: appId, pid: 1 })),
-    listApps: vi.fn(async () => []),
+    launchApp: vi.fn(async (name: string) => ({ displayName: name })),
     ...overrides,
   };
 }
@@ -75,7 +74,7 @@ describe("App", () => {
     send("Jarvis, lance Discord.");
 
     await waitFor(() => expect(screen.getByText("Discord est ouvert.")).toBeTruthy());
-    expect(native.launchApp).toHaveBeenCalledWith("discord");
+    expect(native.launchApp).toHaveBeenCalledWith("Discord");
     expect(screen.getByText("Tâches")).toBeTruthy();
   });
 
@@ -99,7 +98,7 @@ describe("App", () => {
     render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native, locale: "fr", responseHoldMs: 0 })} />);
 
     send("lance la calculatrice");
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Calculatrice n'est pas installé"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("calculatrice n'est pas installé"));
   });
 
   it("signale honnêtement l'absence du backend natif hors application de bureau", async () => {

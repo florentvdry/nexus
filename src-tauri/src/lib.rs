@@ -31,7 +31,7 @@ use std::sync::Arc;
 use host::runner;
 use permissions::{Broker, Permission, Row};
 use plugins as connectors;
-use plugins::actions::apps::{self, AppStatus, LaunchOutcome, OsEnvironment};
+use plugins::actions::apps::{self, AppMatch, LaunchOutcome};
 use plugins::actions::files::{self, FileEntry, Operation, SearchQuery};
 use plugins::actions::processes::{self, ProcessEntry};
 use plugins::actions::windows::{self as desktop_windows, WindowEntry};
@@ -132,14 +132,20 @@ async fn hardware_profile(caller: String) -> Result<hardware::HardwareProfile, A
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
 }
 
+/// Trouve puis lance une application du PC, par son nom. Seule une application trouvée par le scan peut être lancée.
 #[tauri::command]
-async fn launch_app(app_id: String) -> Result<LaunchOutcome, AdapterError> {
-    apps::launch(&app_id, &OsEnvironment)
+async fn app_open(name: String) -> Result<LaunchOutcome, AdapterError> {
+    tauri::async_runtime::spawn_blocking(move || apps::open(&name))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
+/// Application trouvée sur le PC pour ce nom, sans la lancer.
 #[tauri::command]
-async fn list_apps() -> Vec<AppStatus> {
-    apps::list(&OsEnvironment)
+async fn app_find(name: String) -> Result<Option<AppMatch>, AdapterError> {
+    tauri::async_runtime::spawn_blocking(move || Ok(apps::find(&name).map(|found| apps::describe(&found))))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
@@ -546,8 +552,7 @@ fn open_broker(app: &tauri::App) -> Broker {
 
 fn open_plugin_store(app: &tauri::App) -> Option<Arc<Store>> {
     let root = app.path().app_data_dir().ok()?.join("plugins");
-    let known: Vec<&'static str> = plugins::actions::apps::CATALOG.iter().map(|spec| spec.id).collect();
-    Store::new(root, known).ok().map(Arc::new)
+    Store::new(root).ok().map(Arc::new)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -601,8 +606,8 @@ pub fn run() {
             ollama_status,
             ollama_pull,
             ollama_install,
-            launch_app,
-            list_apps,
+            app_open,
+            app_find,
             commands::voice_status,
             commands::voice_start,
             commands::voice_stop,

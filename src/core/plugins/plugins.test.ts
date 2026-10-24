@@ -5,7 +5,6 @@ import { NativeCallError } from "../native/adapter";
 import { activatePlugin, validateManifest } from "./host";
 import { discoverBuiltinPlugins, loadBuiltinPlugins } from "./builtin";
 import { API_VERSION, type DiscoveredPlugin, type PluginApi, type PluginManifest } from "./types";
-import { registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
 
 const manifest = (overrides: Partial<PluginManifest> = {}): PluginManifest => ({
   id: "actions.demo",
@@ -21,7 +20,6 @@ const manifest = (overrides: Partial<PluginManifest> = {}): PluginManifest => ({
   capabilities: ["demo.run"],
   connectors: [],
   languages: [],
-  applications: false,
   permissions: ["system.read"],
   locality: "local",
   cost: "local",
@@ -32,7 +30,6 @@ const manifest = (overrides: Partial<PluginManifest> = {}): PluginManifest => ({
 const noopApi = (): PluginApi => ({
   registerCapability: vi.fn(),
   registerLanguage: vi.fn(),
-  registerApplications: vi.fn(),
 });
 
 describe("plugins livrés", () => {
@@ -63,14 +60,15 @@ describe("plugins livrés", () => {
   });
 
   it("un moteur neuf charge les plugins et expose leur état", () => {
-    const engine = createEngine({ native: { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) }, locale: "fr", responseHoldMs: 0 });
+    const engine = createEngine({ native: { systemInfo: vi.fn(), launchApp: vi.fn() }, locale: "fr", responseHoldMs: 0 });
     expect(engine.plugins.every((plugin) => plugin.state === "active")).toBe(true);
-    expect(registeredApplications().map((app) => app.id)).toContain("discord");
   });
 
-  it("le catalogue d'applications et les langues viennent des plugins, pas du noyau", () => {
-    loadBuiltinPlugins(noopApi());
-    expect(registeredApplications().length).toBeGreaterThan(0);
+  it("le lancement d'application vient du plugin, et le nom est cherché sur le PC par le natif", () => {
+    const api = noopApi();
+    loadBuiltinPlugins(api);
+    const registered = vi.mocked(api.registerCapability).mock.calls.map(([manifest]) => manifest.id);
+    expect(registered).toContain("apps.launch");
   });
 });
 
@@ -135,11 +133,6 @@ describe("activation isolée", () => {
     expect(inner).toHaveBeenCalledWith({}, expect.objectContaining({ bridge: scoped }));
   });
 
-  it("refuse un catalogue d'applications non déclaré dans le manifeste", () => {
-    const status = activatePlugin(plugin((host) => host.registerApplications([])), noopApi());
-    expect(status.error).toContain("catalogue d'applications non déclaré");
-  });
-
   it("refuse une langue non déclarée", () => {
     const status = activatePlugin(plugin((host) => host.registerLanguage("de", {} as never)), noopApi());
     expect(status.error).toContain("langue non déclarée : de");
@@ -150,11 +143,3 @@ describe("activation isolée", () => {
   });
 });
 
-describe("registre des données de plugins", () => {
-  it("remplace le catalogue au lieu de le cumuler", () => {
-    registerApplications([{ id: "a", nameKey: "app.Notepad", aliases: ["a"] }]);
-    registerApplications([{ id: "b", nameKey: "app.Notepad", aliases: ["b"] }]);
-    expect(registeredApplications().map((app) => app.id)).toEqual(["b"]);
-    registerLanguageDictionary("test", { openVerbs: [], closeAll: [], closeWindow: [], cancelTasks: [], systemInfo: [], help: [], fillerWords: /$^/ });
-  });
-});

@@ -14,7 +14,6 @@
   "languages": [
     "en"
   ],
-  "applications": false,
   "permissions": [],
   "locality": "local",
   "cost": "local",

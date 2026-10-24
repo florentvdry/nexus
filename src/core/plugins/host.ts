@@ -35,10 +35,6 @@ export function activatePlugin(plugin: DiscoveredPlugin, api: PluginApi): Plugin
       if (!manifest.languages.includes(locale)) throw new Error(`langue non déclarée : ${locale}`);
       api.registerLanguage(locale, dictionary);
     },
-    registerApplications(entries) {
-      if (!manifest.applications) throw new Error("catalogue d'applications non déclaré");
-      api.registerApplications(entries);
-    },
   };
 
   try {

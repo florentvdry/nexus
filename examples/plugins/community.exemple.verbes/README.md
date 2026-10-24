@@ -3,7 +3,7 @@
 Exemple de paquet de données pour NEXUS. Il ne contient aucun code.
 
 - `language.json` : verbes d'ouverture supplémentaires et mots de remplissage.
-- `aliases.json` : noms alternatifs pour une application du catalogue (ici Discord).
+- `aliases.json` : noms alternatifs pour une application à chercher sur le PC (ici Discord).
 
 Valider le paquet :
 

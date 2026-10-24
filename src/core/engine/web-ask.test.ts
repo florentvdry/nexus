@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
 import { createEngine, type EngineEvent } from "./engine";
 
-const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) };
+const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
 function assistantTexts(events: EngineEvent[]): string[] {
   return events.flatMap((event) => (event.type === "message" && event.role === "assistant" ? [event.text] : []));

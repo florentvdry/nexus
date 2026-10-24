@@ -8,7 +8,7 @@ rang, avec un SDK). Les types `source`, `document`, `agent` et `speech` restent 
 
 - **Local d'abord.** Un plugin est un dossier. Il est installé sur cet ordinateur, rien n'est envoyé à un serveur.
 - **Données avant code.** Un paquet de données ne contient ni script ni expression régulière écrite par son auteur :
-  seulement des listes de mots et des noms d'applications du catalogue.
+  seulement des listes de mots et des noms d'applications à chercher sur le PC.
 - **Code dans un bac à sable.** Un plugin avec code est un module WebAssembly. Il ne peut agir qu'à travers une seule
   fonction hôte, et chaque action est vérifiée contre les permissions que l'utilisateur a approuvées (§ 4.4).
 - **Rien n'est exécuté à l'installation.** Un dépôt Git est cloné sans hook ni script. Le contenu est seulement lu.
@@ -87,7 +87,7 @@ Exemple : voir `examples/plugins/community.exemple.verbes/nexus.json`.
 }
 ```
 
-- `id` : doit exister dans le catalogue d'applications de NEXUS. Un identifiant inconnu fait refuser le paquet.
+- `id` : nom de l'application à chercher sur le PC (60 caractères au plus, sans chemin ni symbole). NEXUS ne tient pas de liste d'applications : un nom absent du PC ne lance rien.
 - 50 applications au maximum, 20 alias par application, mêmes règles d'écriture que les expressions.
 - Un alias ne peut ni lancer une commande ni ajouter une application : il ne fait que désigner une application connue.
 

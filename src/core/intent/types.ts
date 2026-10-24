@@ -1,4 +1,3 @@
-import type { AppId } from "./dictionaries";
 import type { Recurrence } from "../schedule/recurrence";
 
 /**
@@ -6,7 +5,7 @@ import type { Recurrence } from "../schedule/recurrence";
  * (`validate.ts`) et le moteur décident ensuite. Aucune règle de texte ne produit d'intention.
  */
 export type Intent =
-  | { type: "OPEN_APPLICATION"; appId?: AppId; appName: string }
+  | { type: "OPEN_APPLICATION"; appName: string }
   | { type: "SYSTEM_INFO" }
   | { type: "CLOSE_WINDOW" }
   | { type: "CLOSE_ALL_WINDOWS" }

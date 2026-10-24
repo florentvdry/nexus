@@ -18,7 +18,6 @@
     "document.inspect"
   ],
   "languages": [],
-  "applications": false,
   "permissions": [
     "file.read"
   ],

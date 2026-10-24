@@ -20,7 +20,6 @@
   ],
   "connectors": [],
   "languages": [],
-  "applications": false,
   "permissions": [
     "plugin.manage"
   ],

@@ -1,27 +1,19 @@
-import type { AppEntry } from "../../../src/core/intent/dictionaries";
 import type { PluginApi } from "../../../src/core/plugins/types";
 import { NativeCallError } from "../../../src/core/native/adapter";
 import { CapabilityError } from "../../../src/core/capabilities/errors";
 import type { CapabilityHandler, CapabilityManifest } from "../../../src/core/capabilities/types";
 
-/** Catalogue des applications lançables. Chaque identifiant doit exister dans `plugins/actions/app-launch` côté Rust. */
-export const APPS: readonly AppEntry[] = [
-  { id: "notepad", nameKey: "app.Notepad", aliases: ["bloc notes", "bloc note", "notepad"] },
-  { id: "calculator", nameKey: "app.Calculator", aliases: ["calculatrice", "calculator", "calc"] },
-  { id: "paint", nameKey: "app.Paint", aliases: ["paint", "mspaint"] },
-  { id: "file-explorer", nameKey: "app.FileExplorer", aliases: ["explorateur de fichiers", "explorateur", "file explorer"] },
-  { id: "chrome", nameKey: "app.Chrome", aliases: ["google chrome", "chrome"] },
-  { id: "edge", nameKey: "app.Edge", aliases: ["microsoft edge", "edge"] },
-  { id: "discord", nameKey: "app.Discord", aliases: ["discord"] },
-];
-
+/**
+ * Lancement d'une application. Aucun catalogue : le natif cherche le nom sur ce PC (menu Démarrer, registre, dossiers
+ * des programmes), puis lance ce qu'il a trouvé. Aucune commande libre n'est exécutée.
+ */
 export const APPS_LAUNCH_MANIFEST: CapabilityManifest = {
   id: "apps.launch",
   name: "Lancement d'applications",
   version: "1.0.0",
-  description: "Lance une application du catalogue natif. Aucune commande libre n'est exécutée.",
+  description: "Cherche une application installée sur ce PC par son nom, puis la lance.",
   categories: ["applications"],
-  inputs: ["app-id"],
+  inputs: ["app-name"],
   outputs: ["launch-status"],
   dependencies: [],
   permissions: ["process.launch"],
@@ -33,15 +25,15 @@ export const APPS_LAUNCH_MANIFEST: CapabilityManifest = {
 };
 
 export const launchApp: CapabilityHandler = async (input, { native, t }) => {
-  const entry = APPS.find((app) => app.id === input.appId);
-  if (!entry) throw new CapabilityError("unknown-app", { name: input.appId ?? "" });
-  const name = t(entry.nameKey);
+  const requested = typeof input.appName === "string" ? input.appName.trim() : "";
+  if (!requested) throw new CapabilityError("unknown-app", { name: "" });
 
+  let name = requested;
   try {
-    await native.launchApp(entry.id);
+    name = (await native.launchApp(requested)).displayName;
   } catch (error) {
     if (error instanceof NativeCallError) {
-      throw new CapabilityError(error.code, { name, details: error.message });
+      throw new CapabilityError(error.code, { name: requested, details: error.message });
     }
     throw error;
   }
@@ -55,5 +47,4 @@ export const launchApp: CapabilityHandler = async (input, { native, t }) => {
 
 export function activate(api: PluginApi): void {
   api.registerCapability(APPS_LAUNCH_MANIFEST, launchApp);
-  api.registerApplications(APPS);
 }

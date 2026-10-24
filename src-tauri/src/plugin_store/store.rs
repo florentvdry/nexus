@@ -128,7 +128,6 @@ pub struct ActionData {
 
 pub struct Store {
     root: PathBuf,
-    known_apps: Vec<&'static str>,
     sandbox: Sandbox,
     /// Résultat des contrôles, par empreinte : un contenu identique n'est jamais réanalysé.
     verified: Mutex<HashMap<String, Vec<String>>>,
@@ -152,10 +151,9 @@ fn problem(message: impl Into<String>) -> AdapterError {
 }
 
 impl Store {
-    pub fn new(root: PathBuf, known_apps: Vec<&'static str>) -> Result<Store, AdapterError> {
+    pub fn new(root: PathBuf) -> Result<Store, AdapterError> {
         Ok(Store {
             root,
-            known_apps,
             sandbox: Sandbox::new()?,
             verified: Mutex::new(HashMap::new()),
             compiled: Mutex::new(HashMap::new()),
@@ -164,7 +162,7 @@ impl Store {
 
     /// Contrôles complets d'un dossier, sans cache.
     fn problems_of(&self, dir: &Path) -> Vec<String> {
-        check::check_dir(dir, &self.known_apps, &self.sandbox)
+        check::check_dir(dir, &self.sandbox)
     }
 
     /// Contrôles d'un dossier déjà approuvé, mis en cache par empreinte.
@@ -457,7 +455,7 @@ impl Store {
                 let text = fs::read_to_string(dir.join(file)).map_err(|error| AdapterError::Operation(error.to_string()))?;
                 match kind.as_str() {
                     "language" => pack.language = packs::validate_language(&text).ok(),
-                    "aliases" => pack.aliases = packs::validate_aliases(&text, &self.known_apps).ok(),
+                    "aliases" => pack.aliases = packs::validate_aliases(&text).ok(),
                     _ => {}
                 }
             }

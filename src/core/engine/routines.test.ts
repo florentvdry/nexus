@@ -4,7 +4,7 @@ import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
 import type { RoutineStorage } from "../routines/detector";
 import { createEngine, type EngineEvent } from "./engine";
 
-const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) };
+const NATIVE = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
 function memoryStorage(): RoutineStorage {
   const items = new Map<string, string>();

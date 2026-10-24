@@ -78,8 +78,7 @@ fn read_limited(path: &Path, limit: u64, label: &str) -> Result<String, String> 
 }
 
 /// Problèmes d'un dossier de plugin. Liste vide : le dossier peut être installé.
-/// `known_apps` : identifiants du catalogue, pour valider les alias.
-pub fn check_dir(dir: &Path, known_apps: &[&str], sandbox: &Sandbox) -> Vec<String> {
+pub fn check_dir(dir: &Path, sandbox: &Sandbox) -> Vec<String> {
     let files = match list_files(dir) {
         Ok(files) => files,
         Err(problem) => return vec![problem],
@@ -117,7 +116,7 @@ pub fn check_dir(dir: &Path, known_apps: &[&str], sandbox: &Sandbox) -> Vec<Stri
         };
         let content_problems = match kind.as_str() {
             "language" => packs::validate_language(&text).err(),
-            "aliases" => packs::validate_aliases(&text, known_apps).err(),
+            "aliases" => packs::validate_aliases(&text).err(),
             _ => Some(vec![format!("type « {kind} » sans lecteur")]),
         };
         problems.extend(content_problems.unwrap_or_default());
@@ -155,7 +154,7 @@ mod tests {
         let dir = scratch("ok");
         write(&dir, "nexus.json", MANIFEST);
         write(&dir, "language.json", r#"{"locale":"fr","phrases":{"openVerbs":["ouvre"]}}"#);
-        assert!(check_dir(&dir, &[], &sandbox()).is_empty());
+        assert!(check_dir(&dir, &sandbox()).is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -163,9 +162,9 @@ mod tests {
     fn a_missing_entry_file_or_bad_content_is_reported() {
         let dir = scratch("missing");
         write(&dir, "nexus.json", MANIFEST);
-        assert!(check_dir(&dir, &[], &sandbox()).iter().any(|p| p.contains("absent pour le type")));
+        assert!(check_dir(&dir, &sandbox()).iter().any(|p| p.contains("absent pour le type")));
         write(&dir, "language.json", r#"{"locale":"fr","phrases":{"openVerbs":["OUVRE"]}}"#);
-        assert!(check_dir(&dir, &[], &sandbox()).iter().any(|p| p.contains("refusée")));
+        assert!(check_dir(&dir, &sandbox()).iter().any(|p| p.contains("refusée")));
         let _ = fs::remove_dir_all(dir);
     }
 

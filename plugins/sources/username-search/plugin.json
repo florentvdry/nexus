@@ -18,7 +18,6 @@
     "username.profiles"
   ],
   "languages": [],
-  "applications": false,
   "permissions": [
     "osint.passive"
   ],

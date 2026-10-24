@@ -20,7 +20,6 @@
   "capabilities": [],
   "connectors": [],
   "languages": [],
-  "applications": false,
   "permissions": [],
   "locality": "local",
   "cost": "local",

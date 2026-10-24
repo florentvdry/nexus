@@ -5,7 +5,7 @@ import { FirstConversation } from "../onboarding/firstConversation";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
-import { pluginCommandsForModel, registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
+import { applicationSearchName, pluginCommandsForModel, registerLanguageDictionary } from "../intent/registry";
 import { loadBuiltinPlugins } from "../plugins/builtin";
 import type { PluginStatus } from "../plugins/types";
 import type { Intent } from "../intent/types";
@@ -207,7 +207,6 @@ export class Engine {
     this.#plugins = loadBuiltinPlugins({
       registerCapability: (manifest, handler) => this.#registry.register(manifest, handler),
       registerLanguage: (locale, dictionary) => registerLanguageDictionary(locale, dictionary),
-      registerApplications: (entries) => registerApplications(entries),
     });
     this.#tasks = new TaskManager({ concurrency: 3, historySize: 30 });
   }
@@ -425,13 +424,9 @@ export class Engine {
   async #route(intent: Intent, reply: Reply): Promise<void> {
     switch (intent.type) {
       case "OPEN_APPLICATION": {
-        if (!intent.appId) {
-          this.#fail(new CapabilityError("unknown-app", { name: intent.appName }), reply);
-          return;
-        }
-        const entry = registeredApplications().find((app) => app.id === intent.appId);
-        const name = reply.t(entry?.nameKey ?? "app.Notepad");
-        return this.#runCapability("apps.launch", { appId: intent.appId }, { labelKey: "task.openApp", labelParams: { app: name } }, reply);
+        // Aucun catalogue : le nom (ou son alias installé) est cherché sur ce PC par le natif.
+        const name = applicationSearchName(intent.appName);
+        return this.#runCapability("apps.launch", { appName: name }, { labelKey: "task.openApp", labelParams: { app: name } }, reply);
       }
       case "SYSTEM_INFO":
         return this.#runCapability("system.info", {}, { labelKey: "task.systemInfo" }, reply);

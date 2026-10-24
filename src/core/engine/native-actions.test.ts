@@ -173,7 +173,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
   return bridge;
 }
 
-const nativeDouble: NativeAdapter = { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) };
+const nativeDouble: NativeAdapter = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
 function setup(bridge: NativeBridge) {
   const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0 });
@@ -522,12 +522,13 @@ describe("conversation : références, questions et demandes enchaînées (phase
     expect(bridge.closeWindow).toHaveBeenCalledExactlyOnceWith(202);
   });
 
-  it("un nom inconnu ne lance rien, et le dit", async () => {
+  it("un nom inconnu n'est pas deviné : le natif cherche sur le PC et dit qu'il n'est pas installé", async () => {
+    vi.mocked(nativeDouble.launchApp).mockRejectedValueOnce(new NativeCallError("not-installed", "application non installée : Discrd"));
     const bridge = fakeBridge();
     const { engine, events } = setup(bridge);
     await engine.submit("Lance Discrd");
-    expect(nativeDouble.launchApp).not.toHaveBeenCalled();
-    expect(assistant(events).join(" ")).toContain("Discrd");
+    expect(nativeDouble.launchApp).toHaveBeenCalledWith("Discrd");
+    expect(assistant(events).join(" ")).toContain("Discrd n'est pas installé");
   });
 
 });

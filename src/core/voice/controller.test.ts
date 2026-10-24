@@ -56,8 +56,7 @@ class TestSpeechOutput implements SpeechOutput {
 function nativeDouble(overrides: Partial<NativeAdapter> = {}): NativeAdapter {
   return {
     systemInfo: vi.fn(),
-    launchApp: vi.fn(async (appId: string) => ({ appId, displayName: appId, pid: 1 })),
-    listApps: vi.fn(async () => []),
+    launchApp: vi.fn(async (name: string) => ({ displayName: name })),
     ...overrides,
   };
 }
@@ -109,7 +108,7 @@ describe("VoiceController", () => {
     input.emit({ kind: "transcript", text: "lance discord", language: "fr" });
 
     await vi.waitFor(() => expect(assistantTexts(messages)).toContain("Discord est ouvert."));
-    expect(native.launchApp).toHaveBeenCalledWith("discord");
+    expect(native.launchApp).toHaveBeenCalledWith("Discord");
   });
 
   it("répond en anglais à une transcription anglaise", async () => {

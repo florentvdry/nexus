@@ -8,7 +8,6 @@ use std::process::ExitCode;
 
 use nexus_lib::error::AdapterError;
 use nexus_lib::plugin_store::{check, manifest, sandbox::Sandbox};
-use nexus_lib::plugins::actions::apps::CATALOG;
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -21,7 +20,6 @@ fn main() -> ExitCode {
         eprintln!("dossier introuvable : {}", dir.display());
         return ExitCode::from(2);
     }
-    let known: Vec<&str> = CATALOG.iter().map(|spec| spec.id).collect();
     match command.as_str() {
         "validate" => {
             let sandbox = match Sandbox::new() {
@@ -31,7 +29,7 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let problems = check::check_dir(&dir, &known, &sandbox);
+            let problems = check::check_dir(&dir, &sandbox);
             if problems.is_empty() {
                 let text = std::fs::read_to_string(dir.join(manifest::MANIFEST_FILE)).unwrap_or_default();
                 let parsed = manifest::parse(&text);

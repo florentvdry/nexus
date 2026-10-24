@@ -1,4 +1,4 @@
-import type { AppEntry, LanguageDictionary } from "../intent/dictionaries";
+import type { LanguageDictionary } from "../intent/dictionaries";
 import type { CapabilityHandler, CapabilityManifest } from "../capabilities/types";
 
 /** Version de l'API des plugins. Un plugin déclare la version qu'il vise ; une autre version est refusée. */
@@ -25,7 +25,6 @@ export interface PluginManifest {
   capabilities: string[];
   connectors: string[];
   languages: string[];
-  applications: boolean;
   permissions: string[];
   locality: "local" | "network";
   cost: "local" | "internet" | "external-api" | "llm";
@@ -36,7 +35,6 @@ export interface PluginManifest {
 export interface PluginApi {
   registerCapability(manifest: CapabilityManifest, handler: CapabilityHandler): void;
   registerLanguage(locale: string, dictionary: LanguageDictionary): void;
-  registerApplications(entries: readonly AppEntry[]): void;
 }
 
 export interface PluginModule {

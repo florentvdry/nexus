@@ -1,6 +1,3 @@
-import { normalize } from "../intent/normalize";
-import { findApplication } from "../intent/dictionaries";
-import { registeredApplications } from "../intent/registry";
 import type { Intent } from "../intent/types";
 import type { Classifier } from "./benchmark";
 import { validateModelIntent } from "./validate";
@@ -12,17 +9,6 @@ export interface UnderstoodIntent {
    * l'interface le dit à l'utilisateur.
    */
   source: "model" | "unavailable";
-}
-
-/**
- * Le modèle donne un nom d'application, pas son identifiant : on le retrouve dans le catalogue des applications
- * (alias et noms fournis par les plugins). Un nom inconnu reste sans identifiant, et la route refuse alors de lancer
- * quoi que ce soit.
- */
-function resolveAppName(intent: Intent): Intent {
-  if (intent.type !== "OPEN_APPLICATION") return intent;
-  const match = findApplication(normalize(intent.appName), registeredApplications());
-  return match ? { ...intent, appId: match.entry.id } : intent;
 }
 
 const MAX_REPLY_LENGTH = 500;
@@ -52,9 +38,7 @@ export async function understandWithModel(input: string, classifier: Classifier 
   const reply = chatReply(answer);
   if (reply !== null) return { intent: { type: "CHAT", text: reply }, source: "model" };
   const intent = validateModelIntent(answer);
-  return intent
-    ? { intent: resolveAppName(intent), source: "model" }
-    : { intent: { type: "UNKNOWN", text: input }, source: "model" };
+  return intent ? { intent, source: "model" } : { intent: { type: "UNKNOWN", text: input }, source: "model" };
 }
 
 /** Réponse du modèle avec une limite explicite. Au-delà, la requête est annulée et l'on renvoie `null`. */

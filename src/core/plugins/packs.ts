@@ -1,4 +1,5 @@
 import type { LanguageDictionary } from "../intent/dictionaries";
+import { normalize } from "../intent/normalize";
 import { replacePacks, type PluginActionEntry } from "../intent/registry";
 
 /** Vocabulaire d'un paquet : listes de mots, jamais d'expressions régulières écrites par son auteur. */
@@ -62,12 +63,13 @@ export function dictionaryFromPack(pack: LanguagePackData): LanguageDictionary {
 /** Enregistre les paquets actifs auprès du moteur de compréhension, en remplaçant les précédents. */
 export function registerPacks(packs: readonly PluginPackData[]): void {
   const dictionaries = new Map<string, LanguageDictionary>();
-  const aliases = new Map<string, readonly string[]>();
+  const aliases = new Map<string, string>();
   const actions: PluginActionEntry[] = [];
   for (const pack of packs) {
     if (pack.language) dictionaries.set(pack.id, dictionaryFromPack(pack.language));
+    // Un alias dit un nom d'application autrement (« dis cord ») : il renvoie au nom à chercher sur le PC.
     for (const app of pack.aliases?.applications ?? []) {
-      aliases.set(app.id, [...(aliases.get(app.id) ?? []), ...app.aliases]);
+      for (const alias of app.aliases) aliases.set(normalize(alias), app.id);
     }
     for (const action of pack.actions) {
       actions.push({ pluginId: pack.id, command: action.name, triggers: action.triggers });

@@ -11,7 +11,6 @@ export function isDesktopRuntime(): boolean {
 export const unavailableNativeAdapter: NativeAdapter = {
   systemInfo: () => Promise.reject(new NativeUnavailableError()),
   launchApp: () => Promise.reject(new NativeUnavailableError()),
-  listApps: () => Promise.reject(new NativeUnavailableError()),
 };
 
 export function createNativeAdapter(): NativeAdapter {
