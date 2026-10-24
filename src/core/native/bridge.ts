@@ -208,6 +208,8 @@ export interface NativeBridge {
   webPhoto(query: string): Promise<WebPhoto>;
   /** Actualités d'une date (AAAA-MM-JJ) : le flux « à la une » de Wikipédia fr. */
   webNews(date: string): Promise<WebNewsItem[]>;
+  /** Titres du jour de France 24, depuis son flux RSS officiel. */
+  webHeadlines(): Promise<WebNewsItem[]>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
   mcpInstalled(): Promise<InstalledConnector[]>;
@@ -407,6 +409,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebNewsItem[]>("web_news", { date });
   }
 
+  webHeadlines(): Promise<WebNewsItem[]> {
+    return this.#call<WebNewsItem[]>("web_headlines");
+  }
+
   modelJson(model: string, system: string, user: string): Promise<unknown> {
     return this.#call<unknown>("model_json", { model, system, user });
   }
@@ -503,6 +509,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   webSummary = () => this.unavailable();
   webPhoto = () => this.unavailable();
   webNews = () => this.unavailable();
+  webHeadlines = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();

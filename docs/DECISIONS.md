@@ -221,3 +221,11 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Ce qui n'est pas compté** : les réponses, la mémoire, les tâches programmées elles-mêmes, l'aide, les connecteurs, et les demandes très courtes (moins de six caractères). Une demande lancée par une tâche programmée ne compte pas non plus.
 - **Où** : seulement dans le stockage local du navigateur (`nexus.routines.v1`), avec la demande et les jours. Pas envoyé au modèle, pas de réseau. Un stockage bloqué désactive simplement la détection.
 - **Limites** : une seule proposition par demande. Pas encore de moyen de désactiver la détection ; à ajouter dans les réglages avant de l'élargir.
+
+## ADR-034 — Actualités : France 24 et Wikipédia, deux sources publiques vérifiées ; pas de recherche web à l'exécution
+
+- **Choix** : la liste du jour combine les titres du flux RSS de France 24 (version française, `https://www.france24.com/fr/rss`, 24 éléments datés vérifiés le 24/10/2026) et le flux « à la une » de Wikipédia fr (ADR-032). Chaque élément garde sa page de référence ; la fenêtre cite les deux sources.
+- **Hôtes autorisés à l'exécution** : `www.france24.com`, `fr.wikipedia.org`, `commons.wikimedia.org`, `upload.wikimedia.org`, `thumb.wikimedia.org`. Rien d'autre.
+- **Recherche web** : elle est utilisée pour trouver des sources pendant le développement, pas par NEXUS à l'exécution. Une source n'entre dans NEXUS qu'après vérification et ton accord.
+- **Non retenus pour l'instant** : BBC, 20 Minutes, RFI, Le Monde, Radio France. Leurs flux n'ont pas pu être lus depuis cet environnement (blocage de la lecture), ou ne sont pas encore vérifiés. À reprendre une fois que tu auras choisi les médias.
+- **Limites** : une seule source d'actualité française vérifiée ; la sélection de France 24 reste celle de sa rédaction.

@@ -573,6 +573,7 @@ pub fn run() {
             web::web_summary,
             web::web_photo,
             web::web_news,
+            web::web_headlines,
             ollama_status,
             ollama_pull,
             ollama_install,

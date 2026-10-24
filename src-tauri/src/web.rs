@@ -13,6 +13,10 @@ use crate::grants::require_core;
 
 pub const WIKIPEDIA: &str = "https://fr.wikipedia.org";
 pub const COMMONS: &str = "https://commons.wikimedia.org";
+/// Flux RSS de France 24 (version française), vérifié le 24/10/2026 : 24 éléments datés.
+pub const FRANCE24_RSS: &str = "https://www.france24.com/fr/rss";
+const MAX_RSS_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_HEADLINES: usize = 8;
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 3 * 1024 * 1024;
@@ -52,6 +56,56 @@ pub fn valid_query(query: &str) -> bool {
     let trimmed = query.trim();
     (2..=MAX_QUERY_CHARS).contains(&trimmed.chars().count())
         && trimmed.chars().all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '\'' | '’' | '(' | ')'))
+}
+
+/// Valeur d'une balise simple dans un fragment XML (CDATA et entités courantes décodés).
+fn tag_text(fragment: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = fragment.find(&open)? + open.len();
+    let end = fragment[start..].find(&close)? + start;
+    let raw = fragment[start..end].trim();
+    let inner = raw.strip_prefix("<![CDATA[").and_then(|value| value.strip_suffix("]]>")).unwrap_or(raw);
+    let decoded = inner
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#039;", "'");
+    let cleaned = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+/// Titres et liens d'un flux RSS. Un élément sans titre ou sans lien est ignoré.
+pub fn rss_headlines(xml: &str) -> Vec<NewsItem> {
+    xml.split("<item>")
+        .skip(1)
+        .filter_map(|part| {
+            let item = part.split("</item>").next().unwrap_or(part);
+            let text = tag_text(item, "title")?;
+            let page = tag_text(item, "link")?;
+            (page.starts_with("https://") || page.starts_with("http://")).then_some(NewsItem { text, page })
+        })
+        .take(MAX_HEADLINES)
+        .collect()
+}
+
+/// Titres du jour de France 24 (fr), depuis son flux RSS officiel.
+pub fn france24_at(endpoint: &str) -> Result<Vec<NewsItem>, AdapterError> {
+    let (status, _, bytes) = fetch(endpoint, MAX_RSS_BYTES)?;
+    if status != 200 {
+        return Err(AdapterError::Operation(format!("France 24 : réponse HTTP {status}")));
+    }
+    Ok(rss_headlines(&String::from_utf8_lossy(&bytes)))
+}
+
+#[tauri::command]
+pub async fn web_headlines(caller: String) -> Result<Vec<NewsItem>, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(|| france24_at(FRANCE24_RSS))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 /// Date au format AAAA-MM-JJ, avec des chiffres seulement : elle entre dans une URL.
@@ -345,6 +399,25 @@ mod tests {
             })
             .collect();
         assert_eq!(items, vec![NewsItem { text: "17 octobre : manifestations.".into(), page: "https://fr.wikipedia.org/wiki/Manifestations".into() }]);
+    }
+
+    #[test]
+    fn rss_titles_and_links_are_read_and_entities_decoded() {
+        let xml = r#"<rss><channel>
+            <item><title><![CDATA[Ukraine &amp; Europe : sommet]]></title><link>https://www.france24.com/fr/a</link></item>
+            <item><title>Sans lien</title></item>
+            <item><title>Second titre</title><link>https://www.france24.com/fr/b</link></item>
+        </channel></rss>"#;
+        let items = rss_headlines(xml);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], NewsItem { text: "Ukraine & Europe : sommet".into(), page: "https://www.france24.com/fr/a".into() });
+        assert_eq!(items[1].text, "Second titre");
+    }
+
+    #[test]
+    fn a_link_that_is_not_web_is_dropped() {
+        let xml = "<item><title>x</title><link>javascript:alert(1)</link></item>";
+        assert!(rss_headlines(xml).is_empty());
     }
 
     #[test]

@@ -477,18 +477,23 @@ export class Engine {
   async #showNews(reply: Reply): Promise<void> {
     this.#reply(reply, reply.t("web.searching", { query: reply.t("web.newsQuery") }));
     try {
+      const headlines = await this.#bridge.webHeadlines().catch(() => []);
       const today = new Date();
-      let date = localDate(today);
-      let items = await this.#bridge.webNews(date).catch(() => []);
-      if (items.length === 0) {
-        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-        date = localDate(yesterday);
-        items = await this.#bridge.webNews(date);
+      let wikiDate = localDate(today);
+      let wiki = await this.#bridge.webNews(wikiDate).catch(() => []);
+      if (wiki.length === 0) {
+        wikiDate = localDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1));
+        wiki = await this.#bridge.webNews(wikiDate).catch(() => []);
       }
+      const items = [...headlines, ...wiki];
       if (items.length === 0) return this.#reply(reply, reply.t("web.newsEmpty"), "error");
+      const sources = [
+        headlines.length > 0 ? "France 24" : undefined,
+        wiki.length > 0 ? reply.t("web.sourceWiki", { date: wikiDate }) : undefined,
+      ].filter((name): name is string => name !== undefined);
       this.#emit({
         type: "present",
-        content: { kind: "news-list", title: reply.t("web.newsTitle", { date }), items, source: reply.t("web.newsSource") },
+        content: { kind: "news-list", title: reply.t("web.newsTitle", { date: localDate(today) }), items, source: reply.t("web.newsSources", { sources: sources.join(" · ") }) },
         source: { capabilityId: "web.news", locality: "network", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("web.newsReply", { count: items.length }));
