@@ -142,7 +142,7 @@ export function validateModelIntent(raw: unknown): Intent | null {
       return { type, query: query === undefined || /^tout\b/i.test(query) ? null : query };
     }
     case "SCHEDULE": {
-      const request = text(candidate.request, 500);
+      const request = text(candidate.request, 500) ?? text(candidate.query, 500) ?? text(candidate.text, 500);
       const recurrence = recurrenceFrom(candidate);
       return request && recurrence ? { type, request, recurrence } : null;
     }
@@ -176,16 +176,23 @@ export function validateModelIntent(raw: unknown): Intent | null {
  * (avec `time` au format HH:MM, et `weekday` de 0 dimanche à 6 samedi). Toute autre forme est refusée.
  */
 function recurrenceFrom(candidate: Record<string, unknown>): Recurrence | null {
-  if (candidate.kind === "once") {
-    const at = typeof candidate.at === "string" ? Date.parse(candidate.at) : Number.NaN;
-    return Number.isFinite(at) ? { kind: "once", at } : null;
-  }
   const time = text(candidate.time, 5);
-  if (!time || !parseTime(time)) return null;
-  if (candidate.kind === "daily") return { kind: "daily", time };
-  const weekday = candidate.weekday;
-  if (candidate.kind === "weekly" && typeof weekday === "number" && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6) {
-    return { kind: "weekly", weekday, time };
+  const parsed = time ? parseTime(time) : null;
+  // Sans « kind » : une tâche ponctuelle. L'interface affiche la date exacte, donc une erreur se voit et se corrige.
+  if (candidate.kind === "daily") return time && parsed ? { kind: "daily", time } : null;
+  if (candidate.kind === "weekly") {
+    const weekday = candidate.weekday;
+    return time && parsed && typeof weekday === "number" && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 ? { kind: "weekly", weekday, time } : null;
   }
-  return null;
+  const at = typeof candidate.at === "string" ? Date.parse(candidate.at) : Number.NaN;
+  if (Number.isFinite(at)) return { kind: "once", at };
+  if (!time || !parsed) return null;
+  const base = new Date();
+  const offset = candidate.day === "tomorrow" ? 1 : candidate.day === "today" ? 0 : null;
+  if (offset !== null) return { kind: "once", at: new Date(base.getFullYear(), base.getMonth(), base.getDate() + offset, parsed.hours, parsed.minutes, 0, 0).getTime() };
+  // Ni jour ni date : la prochaine fois que cette heure arrive.
+  const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parsed.hours, parsed.minutes, 0, 0).getTime();
+  if (today > base.getTime()) return { kind: "once", at: today };
+  // Le lendemain se calcule par la date du calendrier : ajouter 24 h en millisecondes fausserait l'heure au changement d'heure.
+  return { kind: "once", at: new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1, parsed.hours, parsed.minutes, 0, 0).getTime() };
 }

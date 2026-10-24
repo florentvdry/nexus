@@ -503,7 +503,7 @@ export class Engine {
       if (items.length === 0) return this.#reply(reply, reply.t("web.newsEmpty"), "error");
       this.#emit({
         type: "present",
-        content: { kind: "news-list", title: reply.t("web.newsTitle", { date: localDate(new Date()) }), items, source: reply.t("web.newsSourceWeb") },
+        content: { kind: "news-list", title: reply.t("web.newsTitle", { date: new Date().toLocaleDateString(reply.locale) }), items, source: reply.t("web.newsSourceWeb") },
         source: { capabilityId: "web.news", locality: "network", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("web.newsReply", { count: items.length }));
@@ -669,12 +669,6 @@ export class Engine {
   #emit(event: EngineEvent): void {
     for (const listener of this.#listeners) listener(event);
   }
-}
-
-/** Date locale au format AAAA-MM-JJ. */
-function localDate(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /** Date et heure locales au format « 2026-10-25T09:00 », lisible par le modèle et par la validation. */

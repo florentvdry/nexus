@@ -144,3 +144,13 @@ describe("tâches programmées", () => {
     expect(controller.executing).toBe(false);
   });
 });
+
+describe("réponses imparfaites des petits modèles : la demande et l'heure suffisent", () => {
+  it("la demande peut venir dans « query », et sans « kind » la tâche est ponctuelle", () => {
+    const intent = validateModelIntent({ type: "SCHEDULE", query: "vérifier la nuit", time: "09:00" }) as { request: string; recurrence: { kind: string; at: number } };
+    expect(intent.request).toBe("vérifier la nuit");
+    expect(intent.recurrence.kind).toBe("once");
+    expect(new Date(intent.recurrence.at).getHours()).toBe(9);
+    expect(intent.recurrence.at).toBeGreaterThan(Date.now());
+  });
+});

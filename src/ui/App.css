@@ -688,3 +688,25 @@ html[data-text-scale="large"] {
   line-height: 1.5;
   margin: 0 0 8px;
 }
+
+/* Liste d'actualités : titre, source et lien sur des lignes distinctes, sans débordement horizontal. */
+.news-list ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.news-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.news-list li span,
+.news-list p,
+.image-card figcaption,
+.image-card p,
+.article-card p {
+  overflow-wrap: anywhere;
+}

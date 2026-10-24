@@ -124,7 +124,6 @@ export function PresentedContentView({
             {content.items.map((item, index) => (
               <li key={index}>
                 <span>{item.text}</span>
-                <span className="field-hint">{item.page}</span>
               </li>
             ))}
           </ul>

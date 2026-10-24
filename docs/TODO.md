@@ -9,7 +9,7 @@ Relevé des usages et des assistants : `docs/RESEARCH.md`.
 
 Ordre, sans commit ni test sur le PC :
 1. [x] **Tâches programmées** (ADR-030, testées, non vérifiées dans l'application) : « rappelle-moi demain à 9 h », « chaque lundi, résume mes actus ». Une tâche planifiée ne peut pas en planifier d'autres (règle Hermes).
-2. [x] **Fenêtres par demande** (ADR-031) : photo (Wikimedia Commons) et fiche sujet (Wikipédia), testées. **Actualités** : recherche sur tout le web (Google Actualités), avec sujet (ADR-035). À vérifier dans l'application.
+2. [x] **Fenêtres par demande** (ADR-031) : photo (Wikimedia Commons) et fiche sujet (Wikipédia), testées. **Actualités** : recherche sur tout le web (Google Actualités), avec sujet (ADR-035). Vérifiée dans l'application le 24/10 (photo, fiche, actualités, tâches).
 3. [x] **Date et heure dans le contexte du modèle**, pour comprendre « demain », « lundi », « ce soir ».
 4. [x] **Mémoire des routines** (ADR-033) : proposition après trois jours à la même heure, programmée seulement après « oui ». Désactivable dans les réglages (section Mémoire).
 
