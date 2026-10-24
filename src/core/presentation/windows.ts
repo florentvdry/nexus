@@ -130,3 +130,12 @@ export function reflowOpenWindows(state: WindowsState, context: WindowContext): 
 
   return { open, history };
 }
+
+/**
+ * Fenêtre que Échap ferme : la dernière ouverte, sauf une demande de confirmation. Une confirmation attend une réponse
+ * explicite (approuver ou refuser) : la touche Échap ne doit jamais décider à sa place.
+ */
+export function escapeTarget(state: WindowsState): OpenWindow | undefined {
+  const last = state.open.at(-1);
+  return last && last.content.kind !== "confirmation" ? last : undefined;
+}

@@ -13,6 +13,7 @@ import {
   reflowOpenWindows,
   reopenFromHistory,
   type WindowContext,
+  escapeTarget,
   type WindowRequest,
   type WindowsState,
 } from "../core/presentation/windows";
@@ -127,6 +128,15 @@ export function App({ engine: injectedEngine }: AppProps) {
   useEffect(() => {
     void engine.refreshPacks();
   }, [engine]);
+  // Échap ferme la dernière fenêtre ordinaire, jamais une confirmation (qui attend une réponse explicite).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !escapeTarget(windowsRef.current)) return;
+      dispatch({ type: "closeLast", now: Date.now() });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // La taille du texte choisie est rétablie à chaque lancement.
   useEffect(() => {
     applyLargeText(readLargeText());
