@@ -22,6 +22,7 @@ interface Observation {
 }
 
 const KEY = "nexus.routines.v1";
+const ENABLED_KEY = "nexus.routines.enabled";
 /** Nombre de jours distincts avant de proposer. */
 export const MIN_DAYS = 3;
 /** Écart maximal, en heures, entre les moments où la demande revient. */
@@ -56,6 +57,23 @@ function write(storage: RoutineStorage | undefined, data: Record<string, Observa
   }
 }
 
+/** Détection des routines activée ? Oui par défaut ; l'utilisateur peut la couper dans les réglages. */
+export function routinesEnabled(storage: RoutineStorage | undefined): boolean {
+  try {
+    return storage?.getItem(ENABLED_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setRoutinesEnabled(storage: RoutineStorage | undefined, enabled: boolean): void {
+  try {
+    storage?.setItem(ENABLED_KEY, enabled ? "1" : "0");
+  } catch {
+    // Stockage indisponible : le réglage revient à sa valeur par défaut au prochain lancement.
+  }
+}
+
 export class RoutineDetector {
   readonly #storage: RoutineStorage | undefined;
   readonly #now: () => Date;
@@ -70,6 +88,7 @@ export class RoutineDetector {
    * heure stable, et qu'elle n'a pas déjà été proposée.
    */
   observe(request: string): RoutineProposal | null {
+    if (!routinesEnabled(this.#storage)) return null;
     const key = routineKey(request);
     if (key.length < MIN_REQUEST_CHARS) return null;
     const data = read(this.#storage);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MIN_DAYS, RoutineDetector, routineKey, type RoutineStorage } from "./detector";
+import { MIN_DAYS, RoutineDetector, routineKey, routinesEnabled, setRoutinesEnabled, type RoutineStorage } from "./detector";
 
 function memoryStorage(): RoutineStorage {
   const items = new Map<string, string>();
@@ -83,5 +83,21 @@ describe("routines : une habitude repérée, jamais imposée", () => {
     };
     const detector = new RoutineDetector(broken, () => new Date(2026, 9, 20, 8));
     expect(() => detector.observe("résume les actus")).not.toThrow();
+  });
+});
+
+describe("routines : désactivables", () => {
+  it("désactivées, rien n'est observé ni proposé ; réactivées, la détection reprend", () => {
+    const storage = memoryStorage();
+    const time = clock(new Date(2026, 9, 1));
+    const detector = new RoutineDetector(storage, time.now);
+    setRoutinesEnabled(storage, false);
+    for (const day of [20, 21, 22]) {
+      time.on(day, 8);
+      expect(detector.observe("résume les actus")).toBeNull();
+    }
+    expect(routinesEnabled(storage)).toBe(false);
+    setRoutinesEnabled(storage, true);
+    expect(routinesEnabled(storage)).toBe(true);
   });
 });

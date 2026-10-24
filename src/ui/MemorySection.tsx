@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { Memory } from "../core/memory/types";
+import { routinesEnabled, setRoutinesEnabled } from "../core/routines/detector";
 import type { NativeBridge } from "../core/native/bridge";
 import type { Locale, MessageKey } from "../i18n/messages";
 
@@ -14,6 +15,7 @@ interface MemorySectionProps {
 export function MemorySection({ bridge, locale, t }: MemorySectionProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [unavailable, setUnavailable] = useState(false);
+  const [routines, setRoutines] = useState(() => routinesEnabled(typeof window === "undefined" ? undefined : window.localStorage));
 
   useEffect(() => {
     let current = true;
@@ -56,6 +58,17 @@ export function MemorySection({ bridge, locale, t }: MemorySectionProps) {
       ) : (
         <>
           <p className="field-hint">{t("memory.hint")}</p>
+          <label className="field toggle">
+            <input
+              type="checkbox"
+              checked={routines}
+              onChange={(event) => {
+                setRoutines(event.target.checked);
+                setRoutinesEnabled(typeof window === "undefined" ? undefined : window.localStorage, event.target.checked);
+              }}
+            />
+            {t("routine.toggle")}
+          </label>
           {memories.length === 0 && <p className="field-hint">{t("memory.empty")}</p>}
           {memories.length > 0 && (
             <>
