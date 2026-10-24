@@ -603,3 +603,13 @@ describe("fenêtres par demande : une demande, une fenêtre", () => {
     expect(events.some((event) => event.type === "present" && event.content.kind === "error-card")).toBe(true);
   });
 });
+
+describe("retour immédiat pendant une recherche web", () => {
+  it("annonce ce qu'elle cherche avant d'ouvrir la fenêtre", async () => {
+    const { engine, events } = setup(fakeBridge());
+    await engine.submit("affiche une photo de Macron");
+    const messages = assistant(events);
+    expect(messages[0]).toContain("Je cherche « Emmanuel Macron »");
+    expect(messages.at(-1)).toContain("Photo : Macron.jpg");
+  });
+});

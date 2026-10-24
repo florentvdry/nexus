@@ -419,6 +419,8 @@ export class Engine {
 
   /** Une photo libre du sujet, dans sa fenêtre, avec son auteur et sa licence. */
   async #showPhoto(query: string, reply: Reply): Promise<void> {
+    // Retour immédiat : la recherche peut prendre quelques secondes.
+    this.#reply(reply, reply.t("web.searching", { query }));
     try {
       const photo = await this.#bridge.webPhoto(query);
       this.#emit({
@@ -434,6 +436,7 @@ export class Engine {
 
   /** Le résumé d'un sujet (Wikipédia), dans sa fenêtre, avec la page d'origine. */
   async #showTopic(query: string, reply: Reply): Promise<void> {
+    this.#reply(reply, reply.t("web.searching", { query }));
     try {
       const summary = await this.#bridge.webSummary(query);
       this.#emit({
