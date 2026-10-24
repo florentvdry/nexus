@@ -214,3 +214,10 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Choix** : « résume les actus » ouvre une fenêtre liste avec les éléments du jour du flux « à la une » de Wikipédia fr (`/api/rest_v1/feed/featured/AAAA/MM/JJ`), chacun avec sa page de référence. Si la journée n'est pas encore publiée, la veille est affichée, avec sa date.
 - **Pourquoi** : les grands médias refusent la lecture depuis cet environnement, et une liste inventée serait pire. Ce flux est public, sans compte, et vérifié par lecture réelle le 24/10/2026.
 - **Limites** : une sélection éditoriale de Wikipédia, pas la couverture complète de l'actualité. Les médias de l'utilisateur restent à ajouter, après vérification de chaque flux.
+
+## ADR-033 — Routines : proposées après trois jours, programmées seulement après « oui »
+
+- **Choix** : une demande faite sur trois jours distincts, à une heure stable (écart d'une heure au plus), devient une proposition : « Je le programme chaque jour à HH:MM ? ». Rien n'est programmé sans « oui ». La proposition arrive après la réponse, jamais à sa place.
+- **Ce qui n'est pas compté** : les réponses, la mémoire, les tâches programmées elles-mêmes, l'aide, les connecteurs, et les demandes très courtes (moins de six caractères). Une demande lancée par une tâche programmée ne compte pas non plus.
+- **Où** : seulement dans le stockage local du navigateur (`nexus.routines.v1`), avec la demande et les jours. Pas envoyé au modèle, pas de réseau. Un stockage bloqué désactive simplement la détection.
+- **Limites** : une seule proposition par demande. Pas encore de moyen de désactiver la détection ; à ajouter dans les réglages avant de l'élargir.

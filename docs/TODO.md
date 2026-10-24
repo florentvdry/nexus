@@ -11,7 +11,7 @@ Ordre, sans commit ni test sur le PC :
 1. [x] **Tâches programmées** (ADR-030, testées, non vérifiées dans l'application) : « rappelle-moi demain à 9 h », « chaque lundi, résume mes actus ». Une tâche planifiée ne peut pas en planifier d'autres (règle Hermes).
 2. [x] **Fenêtres par demande** (ADR-031) : photo (Wikimedia Commons) et fiche sujet (Wikipédia), testées. **Actualités** : « à la une » du jour, Wikipédia fr (vérifié).
 3. [x] **Date et heure dans le contexte du modèle**, pour comprendre « demain », « lundi », « ce soir ».
-4. [ ] **Mémoire des routines** : retenir les habitudes répétées, pas seulement des faits. Reste à faire : proposer une routine après des répétitions (opt-in).
+4. [x] **Mémoire des routines** (ADR-033) : proposition après trois jours à la même heure, programmée seulement après « oui ». Reste : désactivation dans les réglages.
 
 État au 24/10 : tâches programmées, photo, fiche sujet, actualités du jour, retour immédiat et messages d'aide sont faits et testés (voir `docs/JOURNAL-NUIT.md`). Rien n'est vérifié dans l'application lancée : à faire avec ton accord.
 

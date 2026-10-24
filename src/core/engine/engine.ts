@@ -16,6 +16,7 @@ import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
 import { MemoryController } from "../memory/memory";
 import { ScheduleController } from "../schedule/controller";
+import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
 import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
@@ -42,6 +43,8 @@ export interface EngineOptions {
   grantedPermissions?: Permission[];
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
+  /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */
+  routineStorage?: RoutineStorage;
   /** Modèle local utilisé pour comprendre. Par défaut, celui choisi dans les réglages ; les tests le fixent. */
   model?: () => string | null;
 }
@@ -132,6 +135,9 @@ export class Engine {
   readonly #onboarding: FirstConversation;
   /** Tâches programmées : relancées à l'heure prévue, tant que NEXUS tourne. */
   readonly #schedule: ScheduleController;
+  /** Routines repérées (demande répétée à la même heure) et proposition en attente d'un « oui ». */
+  readonly #routines: RoutineDetector;
+  #routinePending: RoutineProposal | undefined;
   #scheduleTimer: ReturnType<typeof setInterval> | undefined;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
@@ -155,6 +161,7 @@ export class Engine {
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
       t: (key, params) => translate(this.#locale, key, params),
     });
+    this.#routines = new RoutineDetector(options.routineStorage ?? (typeof window === "undefined" ? undefined : window.localStorage));
     this.#schedule = new ScheduleController({
       bridge: this.#bridge,
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
@@ -272,6 +279,7 @@ export class Engine {
     if (await this.#connectors.consume(text)) return;
     if (await this.#memory.consume(text)) return;
     if (await this.#onboarding.consume(text)) return;
+    if (await this.#consumeRoutine(text)) return;
     const pending = this.#conversation.pending();
     if (pending) {
       this.#conversation.clearPending();
@@ -284,6 +292,35 @@ export class Engine {
     this.#journal(text, intent.type);
     if (source === "unavailable") return this.#reply(reply, reply.t("model.unavailable"), "error");
     await this.#route(intent, reply);
+    // La réponse d'abord, la proposition de routine ensuite : elle n'arrive jamais à la place de la réponse.
+    if (source === "model" && !ROUTINE_EXCLUDED.has(intent.type)) this.#observeRoutine(text, reply);
+  }
+
+  /** Une demande répétée à la même heure devient une proposition ; rien n'est programmé sans « oui ». */
+  #observeRoutine(text: string, reply: Reply): void {
+    // Une tâche programmée qui se relance ne compte pas comme une habitude de l'utilisateur.
+    if (this.#schedule.executing) return;
+    const proposal = this.#routines.observe(text);
+    if (!proposal) return;
+    this.#routinePending = proposal;
+    this.#reply(reply, reply.t("routine.propose", { request: proposal.request, time: `${String(proposal.hour).padStart(2, "0")}:00` }));
+  }
+
+  /** Répond à la proposition de routine : « oui » programme chaque jour à l'heure repérée, « non » ne fait rien. */
+  async #consumeRoutine(text: string): Promise<boolean> {
+    const proposal = this.#routinePending;
+    if (!proposal) return false;
+    this.#routinePending = undefined;
+    const answer = text.trim().toLowerCase();
+    if (/^(?:oui|yes|ok|d'accord|vas-y|go)$/.test(answer)) {
+      await this.#schedule.add(proposal.request, { kind: "daily", time: `${String(proposal.hour).padStart(2, "0")}:00` });
+      return true;
+    }
+    if (/^(?:non|no)$/.test(answer)) {
+      this.#reply(replyFor(this.#locale), replyFor(this.#locale).t("routine.declined"));
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -630,6 +667,9 @@ function localDateTime(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** Demandes qui ne forment pas une habitude : réponses, mémoire, tâches programmées, aide, connecteurs. */
+const ROUTINE_EXCLUDED = new Set<Intent["type"]>(["CHAT", "UNKNOWN", "REMEMBER", "FORGET", "MEMORY_LIST", "SCHEDULE", "LIST_SCHEDULES", "CANCEL_SCHEDULE", "HELP", "NEEDS_CONNECTOR"]);
 
 export function createEngine(options: EngineOptions): Engine {
   return new Engine(options);
