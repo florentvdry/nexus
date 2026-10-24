@@ -151,6 +151,8 @@ export class Engine {
   /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
   readonly #monitor = new AlertMonitor();
   readonly #agendaPath: () => string | null;
+  /** Échange récent, borné : le modèle s'y réfère pour les demandes qui parlent de ce qui précède. */
+  readonly #history: { role: "user" | "assistant"; text: string }[] = [];
   /** Question sur l'écran en attente de la confirmation de l'utilisateur. */
   #visionPending: { question: string; model: string } | undefined;
   readonly #plugins: PluginStatus[];
@@ -375,6 +377,8 @@ export class Engine {
    */
   async classifierContext(): Promise<string[]> {
     const context = await this.#memory.texts();
+    const recent = this.#recentConversation();
+    if (recent) context.unshift(recent);
     const shown = this.#conversation.referents();
     if (shown.length > 0) {
       const list = shown.map((referent, index) => `${index + 1}) ${referent.label} (${referent.value})`).join(" · ");
@@ -802,7 +806,22 @@ export class Engine {
   }
 
   #emit(event: EngineEvent): void {
+    if (event.type === "message") this.#remember(event.role, event.text);
     for (const listener of this.#listeners) listener(event);
+  }
+
+  /** Garde l'échange récent (demandes et réponses) : le modèle s'y réfère pour « elle », « ça », « la suite ». */
+  #remember(role: "user" | "assistant", text: string): void {
+    const kept = text.length > HISTORY_LINE_CHARS ? `${text.slice(0, HISTORY_LINE_CHARS)}…` : text;
+    this.#history.push({ role, text: kept });
+    if (this.#history.length > HISTORY_TURNS) this.#history.splice(0, this.#history.length - HISTORY_TURNS);
+  }
+
+  /** L'échange récent pour le contexte du modèle : les plus anciens d'abord, une ligne par message. */
+  #recentConversation(): string | null {
+    if (this.#history.length === 0) return null;
+    const lines = this.#history.slice(-HISTORY_CONTEXT).map((entry) => `${entry.role === "user" ? "Utilisateur" : "NEXUS"} : ${entry.text}`);
+    return `Conversation récente (la plus ancienne d'abord) : ${lines.join(" | ")}`;
   }
 }
 
@@ -814,6 +833,11 @@ function localDateTime(date: Date): string {
 
 /** Modèles capables de lire une image (noms usuels : qwen2.5vl, llava, minicpm-v, moondream, gemma3…). */
 const VISION_MODEL = /vl|llava|vision|minicpm-v|moondream|gemma3/i;
+
+/** Échanges gardés en mémoire de session, et nombre de messages donnés au modèle à chaque demande. */
+const HISTORY_TURNS = 60;
+const HISTORY_CONTEXT = 12;
+const HISTORY_LINE_CHARS = 300;
 
 /** Vérification des alertes système : toutes les cinq minutes tant que NEXUS tourne. */
 const ALERT_INTERVAL_MS = 300_000;

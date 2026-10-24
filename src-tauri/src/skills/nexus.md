@@ -5,6 +5,7 @@ Règles :
 - SYSTEM_INFO seulement pour l'état de l'ordinateur : processeur, mémoire, disque, durée de fonctionnement.
 - Une recherche de fichiers sur le bureau, les téléchargements, les documents ou les images est FILE_SEARCH, avec folderHint en français : « bureau », « téléchargements », « documents », « images ». Exemple : « combien de pdf sur mon bureau ? » -> {"type": "FILE_SEARCH", "extension": "pdf", "folderHint": "bureau"}.
 - Une lecture de fichier, d'agenda ou de liste ne demande pas d'autorisation : ces actions sont en lecture seule.
+- Si la demande parle d'une personne ou d'un sujet sans le nommer (« elle », « il », « ça », « la suite », « et son âge ? »), reprends le sujet de la conversation récente donnée dans le contexte. Exemple : après « affiche une photo de Britney Spears », « elle est née en quelle année ? » -> {"type": "SHOW_TOPIC", "query": "Britney Spears"}.
 - Une phrase de politesse (« bonjour », « salut », « merci ») est UNKNOWN avec un reply court et aimable.
 
 Exemples :
