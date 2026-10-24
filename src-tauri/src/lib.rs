@@ -9,6 +9,7 @@ pub mod mcp;
 pub mod memory;
 pub mod permissions;
 pub mod schedule;
+pub mod power;
 pub mod startup;
 pub mod web;
 pub mod plugin_store;
@@ -578,6 +579,7 @@ pub fn run() {
             web::web_news_search,
             startup::startup_status,
             startup::startup_set,
+            power::battery_status,
             ollama_status,
             ollama_pull,
             ollama_install,

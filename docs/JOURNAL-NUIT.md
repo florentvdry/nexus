@@ -24,3 +24,4 @@ Une ligne par avancée, datée. Ce qui a changé, ce qui reste, ce qui est véri
   - Données de test retirées : quatre souvenirs parasites supprimés (créés pendant le test, à cause de la première conversation encore ouverte), tâche de test annulée.
   - Tests : TypeScript 301, Rust 180, clippy propre.
 - **Fonctionnalités Jarvis (10 points ajoutés au TODO, section 0bis)** : point 5 en partie (alertes disque et mémoire, une fois par alerte, ADR-036). Tests : TypeScript 306 (6 nouveaux). Reste : batterie, mises à jour, et les 9 autres points, selon ton accord.
+- **Batterie (point 5 Jarvis)** : lecture native en lecture seule et alerte sous 15 % débranchée (ADR-037). Rust 184 (4 nouveaux), TypeScript 308 (2 nouveaux), clippy propre. Non vérifié sur une machine avec batterie : le poste de test est fixe.

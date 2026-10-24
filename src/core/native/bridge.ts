@@ -214,6 +214,8 @@ export interface NativeBridge {
   webNewsSearch(topic?: string): Promise<WebNewsItem[]>;
   /** Démarrage avec Windows : lecture et réglage (clé de démarrage de l'utilisateur). */
   startupStatus(): Promise<boolean>;
+  /** Batterie, en lecture seule. `null` pour un poste sans batterie. */
+  batteryStatus(): Promise<{ percent: number; charging: boolean } | null>;
   startupSet(enabled: boolean): Promise<void>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
@@ -426,6 +428,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<boolean>("startup_status");
   }
 
+  batteryStatus(): Promise<{ percent: number; charging: boolean } | null> {
+    return this.#call<{ percent: number; charging: boolean } | null>("battery_status");
+  }
+
   startupSet(enabled: boolean): Promise<void> {
     return this.#call<void>("startup_set", { enabled });
   }
@@ -529,6 +535,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   webHeadlines = () => this.unavailable();
   webNewsSearch = () => this.unavailable();
   startupStatus = () => this.unavailable();
+  batteryStatus = () => this.unavailable();
   startupSet = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();

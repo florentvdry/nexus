@@ -243,3 +243,9 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Choix** : toutes les cinq minutes tant que NEXUS tourne, la machine est lue (même lecture que « état de la machine »). Un disque libre sous 10 % ou une mémoire utilisée au-delà de 90 % produit une alerte, annoncée une seule fois tant qu'elle dure.
 - **Pourquoi** : premier pas du point 5 des fonctionnalités Jarvis, sans compte, sans réseau, sans accord supplémentaire (lecture seule de la machine).
 - **Limites** : pas de batterie ni de mises à jour pour l'instant (API Windows à ajouter avec accord). Les seuils sont fixes ; à rendre réglables.
+
+## ADR-037 — Batterie : lecture seule, alerte sous 15 % débranchée
+
+- **Choix** : l'état de la batterie est lu en lecture seule (`GetSystemPowerStatus`, Windows) et alimente les alertes proactives. Une batterie faible, non branchée, sous 15 % produit une alerte, une seule fois tant qu'elle dure. Un poste fixe n'a pas d'alerte batterie.
+- **Pourquoi** : lecture sans effet sur la machine, pas de compte, pas de réseau.
+- **Limites** : les mises à jour Windows restent à faire (interrogation du système de mise à jour, à faire avec ton accord).

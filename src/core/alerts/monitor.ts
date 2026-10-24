@@ -7,19 +7,30 @@ import type { SystemInfo } from "../native/adapter";
 
 /** Espace libre sous lequel un disque est signalé. */
 export const DISK_LOW_RATIO = 0.1;
+/** Charge sous laquelle une batterie débranchée est signalée. */
+export const BATTERY_LOW_PERCENT = 15;
 /** Part de mémoire utilisée au-delà de laquelle la mémoire est signalée. */
 export const MEMORY_HIGH_RATIO = 0.9;
 
 export interface Alert {
   key: string;
-  kind: "disk" | "memory";
+  kind: "disk" | "memory" | "battery";
   label: string;
   detail: string;
 }
 
+/** Batterie : charge et branchement. `null` pour un poste fixe ou une lecture indisponible. */
+export interface Battery {
+  percent: number;
+  charging: boolean;
+}
+
 /** Alertes actives pour un état de la machine. Une valeur inconnue (total nul) ne déclenche rien. */
-export function alertsFor(info: SystemInfo): Alert[] {
+export function alertsFor(info: SystemInfo, battery: Battery | null = null): Alert[] {
   const alerts: Alert[] = [];
+  if (battery && !battery.charging && battery.percent <= BATTERY_LOW_PERCENT) {
+    alerts.push({ key: "battery", kind: "battery", label: "batterie", detail: `${battery.percent} % restant, branchez le chargeur` });
+  }
   for (const disk of info.disks) {
     if (disk.totalBytes <= 0) continue;
     const free = disk.availableBytes / disk.totalBytes;
@@ -38,8 +49,8 @@ export function alertsFor(info: SystemInfo): Alert[] {
 export class AlertMonitor {
   #announced = new Set<string>();
 
-  check(info: SystemInfo): Alert[] {
-    const active = alertsFor(info);
+  check(info: SystemInfo, battery: Battery | null = null): Alert[] {
+    const active = alertsFor(info, battery);
     const activeKeys = new Set(active.map((alert) => alert.key));
     for (const key of [...this.#announced]) {
       if (!activeKeys.has(key)) this.#announced.delete(key);

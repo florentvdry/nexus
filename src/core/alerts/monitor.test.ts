@@ -50,3 +50,15 @@ describe("une alerte n'est annoncée qu'une fois", () => {
     expect(monitor.check(full)).toHaveLength(1);
   });
 });
+
+describe("batterie faible", () => {
+  it("signalée sous 15 % sur batterie, pas quand le chargeur est branché", () => {
+    expect(alertsFor(machine(), { percent: 12, charging: false }).map((alert) => alert.kind)).toEqual(["battery"]);
+    expect(alertsFor(machine(), { percent: 12, charging: true })).toEqual([]);
+    expect(alertsFor(machine(), { percent: 40, charging: false })).toEqual([]);
+  });
+
+  it("un poste sans batterie n'a pas d'alerte batterie", () => {
+    expect(alertsFor(machine(), null)).toEqual([]);
+  });
+});

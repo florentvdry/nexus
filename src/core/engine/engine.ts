@@ -219,9 +219,11 @@ export class Engine {
     } catch {
       return;
     }
+    // Un poste sans batterie, ou une lecture impossible, ne bloque pas les autres alertes.
+    const battery = await this.#bridge.batteryStatus().catch(() => null);
     const reply = replyFor(this.#locale);
-    for (const alert of this.#monitor.check(info)) {
-      const what = alert.kind === "disk" ? reply.t("alert.disk", { label: alert.label }) : reply.t("alert.memory");
+    for (const alert of this.#monitor.check(info, battery)) {
+      const what = alert.kind === "disk" ? reply.t("alert.disk", { label: alert.label }) : alert.kind === "battery" ? reply.t("alert.battery") : reply.t("alert.memory");
       this.#emit({
         type: "present",
         content: { kind: "information-card", title: reply.t("alert.title"), rows: [{ label: what, value: alert.detail }] },
