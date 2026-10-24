@@ -17,6 +17,23 @@ Accessibilité : réglage « texte plus grand » (section Accessibilité des ré
 
 État au 24/10 : tâches programmées, photo, fiche sujet, actualités du jour, retour immédiat et messages d'aide sont faits et testés (voir `docs/JOURNAL-NUIT.md`). Rien n'est vérifié dans l'application lancée : à faire avec ton accord.
 
+## 0bis. Fonctionnalités « Jarvis » (demandées le 24/10)
+
+Chaque point : état, et ce qu'il faut pour le faire. « Accord » = ton accord explicite requis.
+
+1. [ ] **Écoute permanente avec mot de réveil** : répondre à « Jarvis » sans geste. Demande un micro ouvert en continu et une détection de mot de réveil locale. Accord (micro) requis.
+2. [ ] **Voix naturelle** : répondre à voix haute, et interrompre quand c'est utile. Base : synthèse vocale Windows. Accord pour la sortie audio.
+3. [ ] **Vision de l'écran** : comprendre ce qui est affiché. Demande un modèle multimodal local, à évaluer sur ta machine. Accord (capture d'écran) requis.
+4. [ ] **Contrôle des applications** : remplir et enchaîner des actions dans les logiciels, sans API. Demande une automatisation d'interface, étape par étape, avec confirmation.
+5. [~] **Alertes proactives** : disque presque plein, mémoire saturée. **Fait en partie** (ADR-036) ; batterie et mises à jour restent à faire.
+6. [ ] **Agenda et messages** : lire un calendrier (fichier ICS ou compte) et préparer des messages, avec ta validation avant tout envoi. Accord et source requis.
+7. [ ] **Maison connectée** : lumières, prises, thermostat. Demande les appareils et leur protocole. Accord requis.
+8. [ ] **Équipe d'agents** : plusieurs tâches en parallèle, chacune confiée à un agent qui rend compte. Demande un ordonnanceur et des garde-fous par agent.
+9. [ ] **Auto-amélioration** : écrire ses propres outils quand il en manque un, avec ton accord à chaque ajout. Risque élevé : à cadrer avant.
+10. [ ] **Interface cohérente** : un fil de conversation, des fenêtres au bon moment, une présence visuelle permanente (l'orbe). Partiellement en place.
+
+Hors périmètre : la reconnaissance faciale de personnes non volontaires et le suivi de leurs déplacements.
+
 ## 1. Modèle de langage local
 
 Le modèle comprend toutes les demandes (ADR-029). Sans modèle prêt, NEXUS le dit et ne devine rien.

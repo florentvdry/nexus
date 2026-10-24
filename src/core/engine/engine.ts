@@ -18,6 +18,8 @@ import { MemoryController } from "../memory/memory";
 import { ScheduleController } from "../schedule/controller";
 import { describeRecurrence } from "../schedule/recurrence";
 import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
+import { AlertMonitor } from "../alerts/monitor";
+import type { SystemInfo } from "../native/adapter";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
 import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
@@ -140,6 +142,9 @@ export class Engine {
   readonly #routines: RoutineDetector;
   #routinePending: RoutineProposal | undefined;
   #scheduleTimer: ReturnType<typeof setInterval> | undefined;
+  #alertTimer: ReturnType<typeof setInterval> | undefined;
+  /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
+  readonly #monitor = new AlertMonitor();
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -201,12 +206,37 @@ export class Engine {
     clearInterval(this.#scheduleTimer);
     void this.#schedule.tick();
     this.#scheduleTimer = setInterval(() => void this.#schedule.tick(), intervalMs);
+    clearInterval(this.#alertTimer);
+    void this.#checkSystem();
+    this.#alertTimer = setInterval(() => void this.#checkSystem(), ALERT_INTERVAL_MS);
+  }
+
+  /** Disque ou mémoire qui se dégradent : une alerte, annoncée une fois tant qu'elle dure. Une panne de lecture est ignorée. */
+  async #checkSystem(): Promise<void> {
+    let info: SystemInfo;
+    try {
+      info = await this.#native.systemInfo();
+    } catch {
+      return;
+    }
+    const reply = replyFor(this.#locale);
+    for (const alert of this.#monitor.check(info)) {
+      const what = alert.kind === "disk" ? reply.t("alert.disk", { label: alert.label }) : reply.t("alert.memory");
+      this.#emit({
+        type: "present",
+        content: { kind: "information-card", title: reply.t("alert.title"), rows: [{ label: what, value: alert.detail }] },
+        source: { capabilityId: "system.alerts", locality: "local", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("alert.raised", { what, detail: alert.detail }));
+    }
   }
 
   /** Arrête la vérification des tâches programmées (l'interface la relance au montage suivant). */
   stopScheduler(): void {
     clearInterval(this.#scheduleTimer);
     this.#scheduleTimer = undefined;
+    clearInterval(this.#alertTimer);
+    this.#alertTimer = undefined;
   }
 
   /** Une tâche programmée est relancée comme une demande tapée : mêmes règles, mêmes confirmations. */
@@ -676,6 +706,9 @@ function localDateTime(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** Vérification des alertes système : toutes les cinq minutes tant que NEXUS tourne. */
+const ALERT_INTERVAL_MS = 300_000;
 
 /** Demandes qui ne forment pas une habitude : réponses, mémoire, tâches programmées, aide, connecteurs. */
 const ROUTINE_EXCLUDED = new Set<Intent["type"]>(["CHAT", "UNKNOWN", "REMEMBER", "FORGET", "MEMORY_LIST", "SCHEDULE", "LIST_SCHEDULES", "CANCEL_SCHEDULE", "HELP", "NEEDS_CONNECTOR"]);

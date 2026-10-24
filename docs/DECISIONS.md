@@ -237,3 +237,9 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Tâches programmées** : « quelles tâches sont programmées ? » ouvre un tableau (demande, récurrence, prochaine exécution), sans passer par le texte d'une liste.
 - **Démarrage avec Windows** : une case dans les réglages, qui écrit ou retire la valeur `NEXUS` dans `HKCU\...\Run` (clé de l'utilisateur, sans droits administrateur). Rien n'est écrit à l'installation. Le chemin doit être sans guillemet.
 - **Reste** : `web_news` et `web_headlines` (Wikipédia et France 24) ne sont plus utilisés par les actualités ; à retirer ou à garder pour un usage futur.
+
+## ADR-036 — Alertes proactives : disque et mémoire, une fois par alerte
+
+- **Choix** : toutes les cinq minutes tant que NEXUS tourne, la machine est lue (même lecture que « état de la machine »). Un disque libre sous 10 % ou une mémoire utilisée au-delà de 90 % produit une alerte, annoncée une seule fois tant qu'elle dure.
+- **Pourquoi** : premier pas du point 5 des fonctionnalités Jarvis, sans compte, sans réseau, sans accord supplémentaire (lecture seule de la machine).
+- **Limites** : pas de batterie ni de mises à jour pour l'instant (API Windows à ajouter avec accord). Les seuils sont fixes ; à rendre réglables.
