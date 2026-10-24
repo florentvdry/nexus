@@ -1,4 +1,4 @@
-import type { Intent } from "../intent/parse";
+import type { Intent } from "../intent/types";
 import { BENCHMARK_ORDER, type ModelTier } from "./tiers";
 import { validateModelIntent } from "./validate";
 

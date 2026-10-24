@@ -3,12 +3,38 @@ import { describe, expect, it, vi } from "vitest";
 import { NativeCallError, type NativeAdapter } from "../native/adapter";
 import type { AgentEvent, AutoApproval, ConfirmationRequest, NativeBridge } from "../native/bridge";
 import { createEngine, type EngineEvent } from "./engine";
+import { TEST_MODEL } from "../testing/scripted";
 
-// Modèle choisi simulé : le moteur interroge alors le pont (qui répond ou échoue, selon le test).
-vi.mock("../language-model/selection", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../language-model/selection")>()),
-  readSelectedModel: () => "qwen2.5:7b",
-}));
+// Ce que le modèle local répond à chaque phrase de ces tests (intention JSON, validée ensuite par le moteur).
+const MODEL_ANSWERS: Record<string, unknown> = {
+  "convertis 12 km en miles": { type: "PLUGIN_ACTION", pluginId: "community.exemple.convertisseur", command: "convertit", text: "12 km en miles" },
+  "installe le plugin https://example.org/ana/verbes.git": { type: "PLUGIN_INSTALL", target: "https://example.org/ana/verbes.git" },
+  "installe le plugin community.ana.verbes": { type: "PLUGIN_INSTALL", target: "community.ana.verbes" },
+  "installe le plugin community.inconnu.rien": { type: "PLUGIN_INSTALL", target: "community.inconnu.rien" },
+  "supprime le plugin community.ana.verbes": { type: "PLUGIN_REMOVE", id: "community.ana.verbes" },
+  "liste mes plugins": { type: "PLUGIN_LIST" },
+  "Lance Discord": { type: "OPEN_APPLICATION", appName: "Discord" },
+  "Analyse example.com": { type: "OSINT_DOMAIN", domain: "example.com" },
+  "Liste mes fenêtres ouvertes": { type: "WINDOW_LIST" },
+  "ferme la fenêtre Word": { type: "WINDOW_CLOSE", name: "Word" },
+  "ferme la fenêtre notes": { type: "WINDOW_CLOSE", name: "notes" },
+  "ferme cette fenêtre": { type: "CLOSE_WINDOW" },
+  "ferme la fenêtre #202": { type: "WINDOW_CLOSE", name: "#202" },
+  "Cherche mes fichiers PDF téléchargés cette semaine": { type: "FILE_SEARCH", extension: "pdf", folderHint: "downloads", withinDays: 7 },
+  "Cherche mes fichiers PDF": { type: "FILE_SEARCH", extension: "pdf" },
+  "Quelles applications sont ouvertes ?": { type: "PROCESS_LIST" },
+  "supprime /home/ana/Documents/vieux.txt": { type: "FILE_TRASH", path: "/home/ana/Documents/vieux.txt" },
+  "lance Claude Code dans /home/ana/projet : liste les fichiers": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "liste les fichiers" },
+  "lance Claude Code dans /home/ana/projet : fais un test": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "fais un test" },
+  "lance Claude Code dans /home/ana/projet : tâche longue": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "tâche longue" },
+  "lance Claude Code": { type: "AGENT_RUN" },
+  "renomme le deuxième en idees.pdf": { type: "FILE_RENAME", path: "/home/ana/Téléchargements/facture.pdf", newName: "idees.pdf" },
+  "Lance Discrd": { type: "OPEN_APPLICATION", appName: "Discrd" },
+  "salut": { type: "UNKNOWN", reply: "Salut ! Que veux-tu faire ?" },
+  "xyzzy plugh": { type: "UNKNOWN", text: "xyzzy plugh" },
+  "retiens que je préfère Firefox": { type: "REMEMBER", text: "je préfère Firefox" },
+  "qu'est-ce que tu retiens de moi ?": { type: "MEMORY_LIST" },
+};
 
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
 function fakeBridge(overrides: Partial<NativeBridge> = {}) {
@@ -83,8 +109,9 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     revokeRule: vi.fn(async () => true),
     listAudit: vi.fn(async () => []),
     hardwareProfile: vi.fn(async () => ({ memoryGiB: 16, cores: 8, avx2: true, gpu: null })),
-    classifyIntent: vi.fn(async () => {
-      throw new Error("modèle non installé");
+    classifyIntent: vi.fn(async (text: string) => {
+      if (!(text in MODEL_ANSWERS)) throw new Error("réponse du modèle non prévue par le test : " + text);
+      return MODEL_ANSWERS[text];
     }),
     ollamaStatus: vi.fn(async () => ({ reachable: false, models: [] })),
     pullModel: vi.fn(async () => {}),
@@ -100,6 +127,13 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     mcpSetValue: vi.fn(async () => {}),
     mcpTools: vi.fn(async () => []),
     mcpCall: vi.fn(async () => ""),
+    memoryList: vi.fn(async () => []),
+    memoryAdd: vi.fn(async (text: string, source: "user" | "model") => ({ id: 1, text, createdAt: 0, source })),
+    memoryRemove: vi.fn(async () => true),
+    memoryForget: vi.fn(async () => 0),
+    memoryClear: vi.fn(async () => 0),
+    scheduleList: vi.fn(async () => []),
+    scheduleSave: vi.fn(async () => {}),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
       return () => autoApprovalListeners.delete(listener);
@@ -121,7 +155,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
 const nativeDouble: NativeAdapter = { systemInfo: vi.fn(), launchApp: vi.fn(), listApps: vi.fn(async () => []) };
 
 function setup(bridge: NativeBridge) {
-  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, locale: "fr", responseHoldMs: 0 });
+  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0 });
   const events: EngineEvent[] = [];
   engine.subscribe((event) => events.push(event));
   return { engine, events };
@@ -152,7 +186,7 @@ describe("commandes de plugins WebAssembly (phase 5)", () => {
   });
 
   it("ne lance aucune commande quand aucun plugin n'est installé", async () => {
-    const bridge = fakeBridge();
+    const bridge = fakeBridge({ classifyIntent: vi.fn(async () => ({ type: "UNKNOWN", text: "convertis 12 km en miles" })) });
     const { engine, events } = setup(bridge);
     await engine.submit("convertis 12 km en miles");
     expect(bridge.pluginRun).not.toHaveBeenCalled();
@@ -439,17 +473,6 @@ describe("conversation : références, questions et demandes enchaînées (phase
     });
   });
 
-  it("un pronom ambigu pose la question, et la réponse « 2 » exécute le bon choix", async () => {
-    const bridge = fakeBridge();
-    const { engine, events } = setup(bridge);
-    await engine.submit("Cherche mes fichiers PDF");
-    await engine.submit("supprime-le");
-    expect(bridge.operateFile).not.toHaveBeenCalled();
-    expect(assistant(events).join(" ")).toContain("Lequel ? 1) contrat.pdf · 2) facture.pdf");
-    await engine.submit("2");
-    expect(bridge.operateFile).toHaveBeenCalledWith({ kind: "trash", path: "/home/ana/Téléchargements/facture.pdf" });
-  });
-
   it("« non » annule la question sans rien faire", async () => {
     const bridge = fakeBridge({
       listWindows: vi.fn(async () => [
@@ -478,30 +501,21 @@ describe("conversation : références, questions et demandes enchaînées (phase
     expect(bridge.closeWindow).toHaveBeenCalledExactlyOnceWith(202);
   });
 
-  it("un nom proche suggère l'application, et « oui » la lance", async () => {
+  it("un nom inconnu ne lance rien, et le dit", async () => {
     const bridge = fakeBridge();
     const { engine, events } = setup(bridge);
-    await engine.submit("lance Discrd");
-    expect(assistant(events)).toContain("Tu voulais dire Discord ? 1) Discord");
-    await engine.submit("oui");
-    expect(nativeDouble.launchApp).toHaveBeenCalledWith("discord");
+    await engine.submit("Lance Discrd");
+    expect(nativeDouble.launchApp).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("Discrd");
   });
 
-  it("exécute deux demandes dans l'ordre quand elles sont reliées par « puis »", async () => {
-    const bridge = fakeBridge();
-    const { engine } = setup(bridge);
-    await engine.submit("liste mes fenêtres puis montre le cpu");
-    expect(bridge.listWindows).toHaveBeenCalled();
-    expect(nativeDouble.systemInfo).toHaveBeenCalled();
-    expect(vi.mocked(bridge.listWindows).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(nativeDouble.systemInfo).mock.invocationCallOrder[0]);
-  });
 });
 
 describe("salutations : une réponse aimable, jamais une erreur", () => {
-  it("répond à « salut » sans carte d'erreur, même si le modèle n'est pas disponible", async () => {
+  it("répond à « salut » par la réponse du modèle, sans carte d'erreur", async () => {
     const { engine, events } = setup(fakeBridge());
     await engine.submit("salut");
-    expect(assistant(events)).toContain("Salut ! Que veux-tu faire ? Par exemple : « Lance le Bloc-notes » ou « Affiche les informations de mon ordinateur ».");
+    expect(assistant(events)).toContain("Salut ! Que veux-tu faire ?");
     expect(presented(events).some((content) => content.kind === "error-card")).toBe(false);
   });
 
@@ -535,5 +549,17 @@ describe("connecteurs MCP : une demande hors des capacités propose un connecteu
     expect(mcpSearch).toHaveBeenCalledWith("Discord");
     expect(assistant(events).some((text) => text.includes("discord") && text.includes("120"))).toBe(true);
     expect(bridge.mcpInstall).not.toHaveBeenCalled();
+  });
+});
+
+describe("mémoire : l'utilisateur demande de retenir, oublier, lister", () => {
+  it("« retiens que… » enregistre tout de suite ; « qu'est-ce que tu retiens » répond avec la liste", async () => {
+    const memoryAdd = vi.fn(async (text: string, source: "user" | "model") => ({ id: 1, text, createdAt: 0, source }));
+    const memoryList = vi.fn(async () => [{ id: 1, text: "je préfère Firefox", createdAt: 0, source: "user" as const }]);
+    const { engine, events } = setup(fakeBridge({ memoryAdd, memoryList }));
+    await engine.submit("retiens que je préfère Firefox");
+    expect(memoryAdd).toHaveBeenCalledWith("je préfère Firefox", "model");
+    await engine.submit("qu'est-ce que tu retiens de moi ?");
+    expect(assistant(events).some((text) => text.includes("1) je préfère Firefox"))).toBe(true);
   });
 });

@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createEngine, type EngineEvent } from "../engine/engine";
+import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
+
+// Ce que le modèle local répond aux transcriptions de ces tests.
+const MODEL_ANSWERS: Record<string, unknown> = {
+  "lance discord": { type: "OPEN_APPLICATION", appName: "Discord" },
+  "open discord": { type: "OPEN_APPLICATION", appName: "Discord" },
+};
 import { NativeCallError, NativeUnavailableError, type NativeAdapter } from "../native/adapter";
 import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "./settings";
 import { VoiceController } from "./controller";
@@ -56,7 +63,7 @@ function nativeDouble(overrides: Partial<NativeAdapter> = {}): NativeAdapter {
 }
 
 function setup(settings: Partial<VoiceSettings> = {}, native = nativeDouble()) {
-  const engine = createEngine({ native, locale: "fr", responseHoldMs: 0 });
+  const engine = createEngine({ native, bridge: scriptedBridge(MODEL_ANSWERS), model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0 });
   const messages: Extract<EngineEvent, { type: "message" }>[] = [];
   engine.subscribe((event) => {
     if (event.type === "message") messages.push(event);

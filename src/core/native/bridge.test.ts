@@ -32,7 +32,7 @@ describe("pont natif attribué", () => {
 
   it("envoie la demande et le modèle choisi au classement local, au nom de l'interface", async () => {
     await new TauriNativeBridge().classifyIntent("ouvre la calculatrice", "qwen2.5:7b");
-    expect(callNative).toHaveBeenLastCalledWith("model_classify", { caller: "core", text: "ouvre la calculatrice", model: "qwen2.5:7b" });
+    expect(callNative).toHaveBeenLastCalledWith("model_classify", { caller: "core", text: "ouvre la calculatrice", model: "qwen2.5:7b", memories: [] });
   });
 
   it("télécharge un modèle au nom de l'interface, en écoutant sa progression", async () => {

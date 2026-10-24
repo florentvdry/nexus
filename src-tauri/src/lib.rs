@@ -6,7 +6,9 @@ pub mod model_download;
 pub mod ollama;
 pub mod journal;
 pub mod mcp;
+pub mod memory;
 pub mod permissions;
+pub mod schedule;
 pub mod plugin_store;
 pub mod plugins;
 
@@ -46,12 +48,12 @@ async fn system_info() -> Result<SystemInfo, AdapterError> {
 /// Classement d'une demande par le modèle local choisi par l'utilisateur (Ollama, sur ce poste uniquement).
 /// Sans modèle, ou si Ollama ne répond pas, l'erreur fait retomber l'interface sur les règles.
 #[tauri::command]
-async fn model_classify(caller: String, text: String, model: String) -> Result<serde_json::Value, AdapterError> {
+async fn model_classify(caller: String, text: String, model: String, memories: Vec<String>) -> Result<serde_json::Value, AdapterError> {
     require_core(&caller)?;
     if text.trim().is_empty() {
         return Err(AdapterError::InvalidTarget("demande vide".into()));
     }
-    tauri::async_runtime::spawn_blocking(move || ollama::classify_at(ollama::ENDPOINT, &model, &text))
+    tauri::async_runtime::spawn_blocking(move || ollama::classify_at(ollama::ENDPOINT, &model, &text, &memories))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
@@ -545,6 +547,8 @@ pub fn run() {
             app.manage(JournalStore(open_journal(app)));
             app.manage(PluginStore(open_plugin_store(app)));
             app.manage(mcp::commands::open_state(app.path().app_data_dir().ok()));
+            app.manage(memory::open_store(app.path().app_data_dir().ok()));
+            app.manage(schedule::open_store(app.path().app_data_dir().ok()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -558,6 +562,13 @@ pub fn run() {
             mcp::commands::mcp_set_value,
             mcp::commands::mcp_tools,
             mcp::commands::mcp_call,
+            memory::memory_list,
+            memory::memory_add,
+            memory::memory_remove,
+            memory::memory_forget,
+            memory::memory_clear,
+            schedule::schedule_list,
+            schedule::schedule_save,
             ollama_status,
             ollama_pull,
             ollama_install,

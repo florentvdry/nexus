@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { NativeCallError, NativeUnavailableError, type NativeAdapter, type SystemInfo } from "../native/adapter";
 import { unavailableNativeAdapter } from "../native";
 import { createEngine, type EngineEvent, type OrbState } from "./engine";
+import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
+
+// Ce que le modèle local répond à chaque phrase de ces tests : la compréhension n'est plus une règle de texte.
+const ANSWERS: Record<string, unknown> = {
+  "Jarvis, lance Discord.": { type: "OPEN_APPLICATION", appName: "Discord" },
+  "Open Notepad": { type: "OPEN_APPLICATION", appName: "Notepad" },
+  "lance la calculatrice": { type: "OPEN_APPLICATION", appName: "calculatrice" },
+  "lance Claude Code": { type: "OPEN_APPLICATION", appName: "Claude Code" },
+  "lance Discord": { type: "OPEN_APPLICATION", appName: "Discord" },
+  "Affiche l'utilisation CPU": { type: "SYSTEM_INFO" },
+  "Ferme cette fenêtre": { type: "CLOSE_WINDOW" },
+  "affiche les ressources de mon ordinateur": { type: "SYSTEM_INFO" },
+  "annule la recherche": { type: "CANCEL_TASKS" },
+  "quelle heure est-il sur la planète Mars": { type: "UNKNOWN", text: "quelle heure est-il sur la planète Mars" },
+};
 
 // Adaptateur natif SIMULÉ : réservé aux tests. Il ne représente pas la machine réelle.
 const GiB = 1024 ** 3;
@@ -28,7 +43,7 @@ function fakeNative(overrides: Partial<NativeAdapter> = {}): NativeAdapter {
 }
 
 function setup(native: NativeAdapter, locale: "fr" | "en" = "fr") {
-  const engine = createEngine({ native, locale, responseHoldMs: 0 });
+  const engine = createEngine({ native, bridge: scriptedBridge(ANSWERS), model: () => TEST_MODEL, locale, responseHoldMs: 0 });
   const events: EngineEvent[] = [];
   engine.subscribe((event) => events.push(event));
   return { engine, events };

@@ -7,6 +7,8 @@ import type { PluginPackData } from "../plugins/packs";
 import type { HardwareProfile } from "../language-model/hardware";
 import type { OllamaStatus, PullProgress } from "../language-model/ollama";
 import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
+import type { Memory } from "../memory/types";
+import type { ScheduledTask } from "../schedule/controller";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -182,7 +184,7 @@ export interface NativeBridge {
   /** Profil de la machine pour le choix du modèle local. Lecture seule, réservée à l'interface. */
   hardwareProfile(): Promise<HardwareProfile>;
   /** Classement d'une demande par le modèle choisi (Ollama) : JSON brut, validé ensuite. Échoue sans modèle ou sans Ollama. */
-  classifyIntent(text: string, model: string): Promise<unknown>;
+  classifyIntent(text: string, model: string, memories?: string[]): Promise<unknown>;
   /** État d'Ollama sur ce poste et modèles installés. Ne doit pas échouer : « non joignable » est une réponse. */
   ollamaStatus(): Promise<OllamaStatus>;
   /** Télécharge un modèle via Ollama. `onProgress` reçoit chaque étape ; la promesse n'aboutit qu'une fois le modèle prêt. */
@@ -191,6 +193,15 @@ export interface NativeBridge {
   installOllama(onStage: (stage: string) => void): Promise<void>;
   /** Réponse JSON libre du modèle local, pour choisir un outil de connecteur. Validée ensuite par l'interface. */
   modelJson(model: string, system: string, user: string): Promise<unknown>;
+  /** Souvenirs de l'utilisateur : lecture, ajout, oubli et suppression. Réservé au cœur. */
+  memoryList(): Promise<Memory[]>;
+  memoryAdd(text: string, source: "user" | "model"): Promise<Memory>;
+  memoryRemove(id: number): Promise<boolean>;
+  memoryForget(query: string): Promise<number>;
+  memoryClear(): Promise<number>;
+  /** Tâches programmées : lecture et écriture de la liste complète, réservées au cœur. */
+  scheduleList(): Promise<ScheduledTask[]>;
+  scheduleSave(tasks: ScheduledTask[]): Promise<void>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
   mcpInstalled(): Promise<InstalledConnector[]>;
@@ -346,8 +357,36 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<HardwareProfile>("hardware_profile");
   }
 
-  classifyIntent(text: string, model: string): Promise<unknown> {
-    return this.#call<unknown>("model_classify", { text, model });
+  classifyIntent(text: string, model: string, memories: string[] = []): Promise<unknown> {
+    return this.#call<unknown>("model_classify", { text, model, memories });
+  }
+
+  memoryList(): Promise<Memory[]> {
+    return this.#call<Memory[]>("memory_list");
+  }
+
+  memoryAdd(text: string, source: "user" | "model"): Promise<Memory> {
+    return this.#call<Memory>("memory_add", { text, source });
+  }
+
+  memoryRemove(id: number): Promise<boolean> {
+    return this.#call<boolean>("memory_remove", { id });
+  }
+
+  memoryForget(query: string): Promise<number> {
+    return this.#call<number>("memory_forget", { query });
+  }
+
+  memoryClear(): Promise<number> {
+    return this.#call<number>("memory_clear");
+  }
+
+  scheduleList(): Promise<ScheduledTask[]> {
+    return this.#call<ScheduledTask[]>("schedule_list");
+  }
+
+  scheduleSave(tasks: ScheduledTask[]): Promise<void> {
+    return this.#call<void>("schedule_save", { tasks });
   }
 
   modelJson(model: string, system: string, user: string): Promise<unknown> {
@@ -436,6 +475,13 @@ export class UnavailableNativeBridge implements NativeBridge {
   listAudit = () => this.unavailable();
   hardwareProfile = () => this.unavailable();
   classifyIntent = () => this.unavailable();
+  memoryList = () => this.unavailable();
+  memoryAdd = () => this.unavailable();
+  memoryRemove = () => this.unavailable();
+  memoryForget = () => this.unavailable();
+  memoryClear = () => this.unavailable();
+  scheduleList = () => this.unavailable();
+  scheduleSave = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();

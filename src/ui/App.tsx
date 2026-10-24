@@ -25,10 +25,11 @@ import { HistoryMenu } from "./HistoryMenu";
 import { Orb } from "./Orb";
 import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
+import { MemorySection } from "./MemorySection";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
 import { ModelSection } from "./ModelSection";
-import { hasSeenModelSetup, markModelSetupSeen } from "./setupMemory";
+import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { PermissionsSection } from "./PermissionsSection";
 import { VoicePanel } from "./VoicePanel";
 import { readStoredLocale, storeLocale } from "./locale";
@@ -115,8 +116,19 @@ export function App({ engine: injectedEngine }: AppProps) {
     setSetupOpen(false);
     setModelRevision((revision) => revision + 1);
   };
+  // Une fois le setup fermé (modèle prêt), NEXUS fait connaissance avec l'utilisateur, une seule fois.
+  useEffect(() => {
+    if (setupOpen || hasFirstConversation()) return;
+    markFirstConversation();
+    engine.startFirstConversation();
+  }, [engine, setupOpen]);
   useEffect(() => {
     void engine.refreshPacks();
+  }, [engine]);
+  // Les tâches programmées tournent tant que NEXUS est ouvert.
+  useEffect(() => {
+    engine.startScheduler();
+    return () => engine.stopScheduler();
   }, [engine]);
   const settingsRef = useRef(voiceSettings);
 
@@ -223,6 +235,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           <button type="button" className="chip" onClick={() => setSetupOpen(true)}>
             {t("setup.open")}
           </button>
+          <MemorySection bridge={answerBridge} locale={locale} t={t} />
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}

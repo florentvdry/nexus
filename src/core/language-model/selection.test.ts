@@ -44,8 +44,8 @@ describe("classifieur branché sur le modèle choisi", () => {
     chosen = "qwen2.5:7b";
     await classifier.classify("aide");
 
-    expect(classifyIntent).toHaveBeenNthCalledWith(1, "aide", "qwen2.5:1.5b");
-    expect(classifyIntent).toHaveBeenNthCalledWith(2, "aide", "qwen2.5:7b");
+    expect(classifyIntent).toHaveBeenNthCalledWith(1, "aide", "qwen2.5:1.5b", []);
+    expect(classifyIntent).toHaveBeenNthCalledWith(2, "aide", "qwen2.5:7b", []);
   });
 
   it("sans modèle choisi, ne contacte pas Ollama et rejette", async () => {

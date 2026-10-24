@@ -30,20 +30,11 @@ export function replacePacks(
 }
 
 /**
- * Commande de plugin dont un déclencheur ouvre le texte normalisé : « convertis 12 km en miles » → commande
- * `convertit`, texte « 12 km en miles ». Le déclencheur le plus long l'emporte.
+ * Commandes des plugins installés, pour le modèle : identifiant du plugin, nom de la commande, et exemples de
+ * formulations. Le modèle choisit la commande ; rien n'est reconnu par correspondance de texte.
  */
-export function matchPluginAction(normalized: string): { pluginId: string; command: string; text: string } | null {
-  let best: { pluginId: string; command: string; text: string; length: number } | null = null;
-  for (const action of packActions) {
-    for (const trigger of action.triggers) {
-      if (normalized !== trigger && !normalized.startsWith(`${trigger} `)) continue;
-      if (!best || trigger.length > best.length) {
-        best = { pluginId: action.pluginId, command: action.command, text: normalized.slice(trigger.length).trim(), length: trigger.length };
-      }
-    }
-  }
-  return best ? { pluginId: best.pluginId, command: best.command, text: best.text } : null;
+export function pluginCommandsForModel(): string[] {
+  return packActions.map((action) => `${action.pluginId} / ${action.command} (ex. : ${action.triggers.join(", ")})`);
 }
 
 export function registerLanguageDictionary(locale: string, dictionary: LanguageDictionary): void {

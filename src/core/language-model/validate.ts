@@ -1,4 +1,5 @@
-import type { Intent } from "../intent/parse";
+import type { Intent } from "../intent/types";
+import { parseTime, type Recurrence } from "../schedule/recurrence";
 
 /**
  * Sortie du modèle, re-validée avant tout usage (TODO §1, « Branchement »). Seule la forme est contrôlée ici :
@@ -19,6 +20,8 @@ const NO_PARAMETER = new Set<Intent["type"]>([
   "WINDOW_LIST",
   "PLUGIN_CATALOG",
   "PLUGIN_LIST",
+  "MEMORY_LIST",
+  "LIST_SCHEDULES",
 ]);
 
 /** Texte non vide, sans espaces autour, borné. Tout autre valeur est refusée. */
@@ -127,6 +130,26 @@ export function validateModelIntent(raw: unknown): Intent | null {
         ...(prompt !== undefined ? { prompt } : {}),
       };
     }
+    case "REMEMBER": {
+      // Une information sur l'utilisateur : une phrase, bornée. Aucune limite de nombre côté souvenirs.
+      const remembered = text(candidate.text, 1000);
+      return remembered ? { type, text: remembered } : null;
+    }
+    case "FORGET": {
+      // Sans texte (ou « tout »), c'est toute la mémoire : l'interface demandera confirmation.
+      const query = optionalText(candidate.query, 200);
+      if (query === null) return null;
+      return { type, query: query === undefined || /^tout\b/i.test(query) ? null : query };
+    }
+    case "SCHEDULE": {
+      const request = text(candidate.request, 500);
+      const recurrence = recurrenceFrom(candidate);
+      return request && recurrence ? { type, request, recurrence } : null;
+    }
+    case "CANCEL_SCHEDULE": {
+      const query = text(candidate.query, 200);
+      return query ? { type, query } : null;
+    }
     case "NEEDS_CONNECTOR": {
       // Le modèle nomme le service et reformule la demande ; un connecteur MCP installé la prendra en charge.
       const service = optionalText(candidate.service, 100);
@@ -137,4 +160,23 @@ export function validateModelIntent(raw: unknown): Intent | null {
     default:
       return null;
   }
+}
+
+/**
+ * Récurrence proposée par le modèle : `kind` est « once » (avec `at`, date et heure locales), « daily » ou « weekly »
+ * (avec `time` au format HH:MM, et `weekday` de 0 dimanche à 6 samedi). Toute autre forme est refusée.
+ */
+function recurrenceFrom(candidate: Record<string, unknown>): Recurrence | null {
+  if (candidate.kind === "once") {
+    const at = typeof candidate.at === "string" ? Date.parse(candidate.at) : Number.NaN;
+    return Number.isFinite(at) ? { kind: "once", at } : null;
+  }
+  const time = text(candidate.time, 5);
+  if (!time || !parseTime(time)) return null;
+  if (candidate.kind === "daily") return { kind: "daily", time };
+  const weekday = candidate.weekday;
+  if (candidate.kind === "weekly" && typeof weekday === "number" && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6) {
+    return { kind: "weekly", weekday, time };
+  }
+  return null;
 }

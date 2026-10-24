@@ -185,3 +185,11 @@ Rien n'est silencieux :
 - **Variables** : saisies une à une dans la conversation, puis gardées sur ce poste (fichier `mcp/installed.json` du dossier de données, en clair). L'interface ne les relit jamais.
 - **Appel d'un outil** : toujours précédé d'un récapitulatif (outil et arguments) et d'un « oui ». Un outil hors de la liste du serveur, ou des arguments qui ne sont pas un objet, sont refusés avant tout lancement.
 - **Non couvert** : le courtier de permissions natif ne contrôle pas ces appels (pas de `permission.*` dédiée) ; la confirmation est faite dans la conversation.
+
+## Mémoire de l'utilisateur
+
+- **Enregistrement** : le modèle local garde sans question les informations durables que l'utilisateur donne sur lui (prénom, ville, préférences). Aucune limite de nombre.
+- **Première conversation** : sept questions après le setup, chacune passable ; les réponses deviennent des souvenirs.
+- **Oubli** : « oublie X » supprime tout de suite les souvenirs qui contiennent X ; « oublie tout » demande une confirmation.
+- **Envoi au modèle** : les souvenirs, les éléments affichés et les commandes de plugins accompagnent chaque demande, en local (Ollama sur ce poste), comme données.
+- **Consultation et suppression** : liste dans les réglages, suppression par ligne, « Tout effacer ».

@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createEngine, type EngineEvent } from "../engine/engine";
+import { scriptedBridge, TEST_MODEL } from "../testing/scripted";
+
+// Ce que le modèle local répond à chaque phrase de ces tests.
+const MODEL_ANSWERS: Record<string, unknown> = {
+  "Analyse example.com": { type: "OSINT_DOMAIN", domain: "example.com" },
+  "analyse example.com": { type: "OSINT_DOMAIN", domain: "example.com" },
+  "analyse example.org": { type: "OSINT_DOMAIN", domain: "example.org" },
+  "analyse https://": { type: "UNKNOWN", text: "analyse https://" },
+  "recherche le pseudo alice": { type: "OSINT_USERNAME", username: "alice" },
+  'Analyse le fichier "C:\\Users\\Ana\\contrat.txt"': { type: "DOCUMENT_INSPECT", path: "C:\\Users\\Ana\\contrat.txt" },
+  "analyse jean.dupont@example.com": { type: "UNKNOWN", reply: "Je ne peux pas analyser les adresses email : seuls les domaines le permettent." },
+};
 import { NativeUnavailableError, type NativeAdapter } from "../native/adapter";
 import { unavailableNativeAdapter } from "../native";
 import type { ConnectorReport, ConnectorRequest, Finding, OsintRunner } from "./types";
@@ -37,7 +49,7 @@ const nativeDouble: NativeAdapter = {
 };
 
 function setup(osint: OsintRunner, native: NativeAdapter = nativeDouble) {
-  const engine = createEngine({ native, osint, locale: "fr", responseHoldMs: 0 });
+  const engine = createEngine({ native, osint, bridge: scriptedBridge(MODEL_ANSWERS), model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0 });
   const events: EngineEvent[] = [];
   engine.subscribe((event) => events.push(event));
   return { engine, events };

@@ -20,3 +20,23 @@ export function markModelSetupSeen(): void {
     // Stockage indisponible : le parcours réapparaîtra au prochain lancement.
   }
 }
+
+const FIRST_CONVERSATION_KEY = "nexus.firstConversation.done";
+
+/** La première conversation (questions sur l'utilisateur) a-t-elle déjà commencé sur ce poste ? */
+export function hasFirstConversation(): boolean {
+  try {
+    return window.localStorage.getItem(FIRST_CONVERSATION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Mémorise que la première conversation a commencé : elle ne se relance pas à chaque ouverture. */
+export function markFirstConversation(): void {
+  try {
+    window.localStorage.setItem(FIRST_CONVERSATION_KEY, "1");
+  } catch {
+    // Stockage indisponible : la conversation pourra recommencer au prochain lancement.
+  }
+}

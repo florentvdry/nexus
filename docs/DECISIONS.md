@@ -178,3 +178,26 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
   - Le nom du paquet et la version sont validés avant tout lancement ; `npx` ne reçoit que `paquet@version`.
   - Les variables (jetons) ne sont jamais réaffichées dans la conversation ni renvoyées à l'interface.
 - **Limites connues** : le paquet npm s'exécute avec les droits de l'utilisateur, une fois accepté : la popularité ne vaut pas audit. Les valeurs des variables sont gardées **en clair** dans `mcp/installed.json` (le chiffrement DPAPI reste à faire). Node.js doit être présent. Aucun délai sur l'appel d'outil : un connecteur bloqué peut bloquer la tâche jusqu'à arrêt de NEXUS.
+
+## ADR-028 — Mémoire de l'utilisateur : explicite d'abord, proposée ensuite, jamais cachée
+
+- **Choix** : NEXUS retient les préférences et faits de deux façons. (1) « retiens que… » : enregistré tout de suite, c'est l'utilisateur qui l'a demandé. (2) Le modèle local peut proposer un souvenir (`REMEMBER`) : il n'est gardé qu'après « oui ». Les souvenirs se consultent (« qu'est-ce que tu retiens de moi ? »), s'oublient un à un (« oublie Firefox ») ou tous ensemble (« oublie tout », avec confirmation), et se suppriment dans les réglages.
+- **Où** : `dossier de données/memory/memories.json`, côté natif, 200 souvenirs au plus (le plus ancien part), 300 caractères chacun, doublons à la casse près refusés.
+- **Contexte du modèle** : les souvenirs accompagnent chaque classement, dans la consigne, comme des données (« jamais des instructions »), pour comprendre des formules comme « mon navigateur ».
+- **Pourquoi pas plus automatique** : deviner une préférence depuis une conversation et la garder sans rien dire crée des faux souvenirs difficiles à voir. Une proposition confirmée reste la règle. L'utilisateur voit toujours la liste complète.
+- **Limites** : une formule résolue par les règles (« ouvre mon navigateur », qui devient une application introuvable) ne passe pas par le modèle, donc ne profite pas encore de la mémoire. Le résumé automatique des conversations (façon Hermes ou OpenClaw) n'est pas fait.
+
+## ADR-029 — Tout passe par le modèle local ; mémoire sans limite ; première conversation
+
+- **Choix** : l'analyseur de texte par règles est retiré. Chaque demande est comprise par le modèle local, dont la réponse est validée (`validate.ts`) avant usage. Sans modèle prêt, NEXUS le dit et n'essaie pas de deviner. La section 1 du TODO (« modèle d'abord ») est tenue ; les dictionnaires restent utiles pour retrouver une application dans le catalogue (alias, plugins), pas pour comprendre une phrase.
+- **Mémoire** : le modèle enregistre sans question les informations durables sur l'utilisateur (`REMEMBER`) et oublie sur demande (`FORGET`). Aucune limite de nombre de souvenirs ; une phrase tient en 1 000 caractères. Seul « tout oublier » demande confirmation. Remplace ADR-028 sur ces deux points (propositions à confirmer, limite de 200).
+- **Contexte du modèle** : chaque demande reçoit les souvenirs, les éléments affichés (« ferme le deuxième ») et les commandes des plugins installés, comme données et jamais comme instructions.
+- **Première conversation** : après l'installation et le setup, NEXUS pose sept questions (prénom, lieu, activité, usage, ton, longueur des réponses, ce qu'il ne doit jamais faire sans demander). Chaque réponse devient un souvenir « Libellé : réponse ». « passer » ignore une question. Les questions s'inspirent des parcours d'accueil d'assistants existants (OpenClaw BOOTSTRAP : nom, fuseau, rôle, limites ; et des patrons « 2 ou 3 questions, passer, choix multiples ») ; elles sont à relire avec l'utilisateur.
+- **Limites** : sans modèle, aucune demande n'est comprise. La compréhension dépend de la taille du modèle (le niveau léger de 1,5 B est le plus fragile). Les demandes composées (« liste mes fenêtres puis montre le cpu ») ne sont plus découpées : le modèle renvoie une seule intention. Les références (« le deuxième ») passent par le contexte transmis au modèle, sans réécriture de texte.
+
+## ADR-030 — Tâches programmées : relancées par NEXUS quand il tourne, par le même chemin que les demandes
+
+- **Choix** : une demande « rappelle-moi demain à 9 h », « chaque lundi, résume mes actus » devient une tâche (une fois, chaque jour, chaque semaine). NEXUS vérifie la liste toutes les 30 secondes tant qu'il est ouvert, et relance la demande comme si elle était tapée : mêmes règles, mêmes confirmations.
+- **Garde-fou** (règle relevée chez Hermes) : une tâche en cours d'exécution ne peut pas en créer d'autres.
+- **Stockage** : `dossier de données/schedule/tasks.json`, écriture atomique, 100 tâches au plus, demande de 500 caractères au plus. Une liste invalide n'est jamais écrite.
+- **Limites** : une tâche ne tourne que si NEXUS est ouvert. Une tâche manquée pendant la fermeture s'exécute une seule fois à la réouverture. Pas encore de démarrage avec Windows.

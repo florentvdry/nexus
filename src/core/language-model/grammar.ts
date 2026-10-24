@@ -1,4 +1,4 @@
-import type { Intent } from "../intent/parse";
+import type { Intent } from "../intent/types";
 
 /**
  * Intentions que le modèle peut proposer. `UNKNOWN` et `UNSUPPORTED` n'en font pas partie : elles viennent des règles.
@@ -28,6 +28,12 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "PLUGIN_ACTION",
   "AGENT_RUN",
   "NEEDS_CONNECTOR",
+  "REMEMBER",
+  "MEMORY_LIST",
+  "SCHEDULE",
+  "CANCEL_SCHEDULE",
+  "LIST_SCHEDULES",
+  "FORGET",
 ];
 
 /**

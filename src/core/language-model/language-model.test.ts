@@ -136,38 +136,32 @@ describe("grammaire GBNF", () => {
   });
 });
 
-describe("compréhension avec repli", () => {
-  it("n'interroge pas le modèle quand les règles comprennent", async () => {
-    const classify = vi.fn(async () => ({ type: "HELP" }));
-    const understood = await understandWithModel("aide", { classify });
-    expect(understood).toEqual({ intent: { type: "HELP" }, source: "rules" });
-    expect(classify).not.toHaveBeenCalled();
-  });
-
-  it("utilise la réponse valide du modèle quand les règles ne comprennent pas", async () => {
+describe("compréhension par le modèle", () => {
+  it("toute demande est confiée au modèle, et sa réponse valide devient l'intention", async () => {
     const classify = vi.fn(async () => ({ type: "SYSTEM_INFO" }));
-    const understood = await understandWithModel("xyzzy plugh", { classify });
+    const understood = await understandWithModel("montre le processeur", { classify });
+    expect(classify).toHaveBeenCalledWith("montre le processeur");
     expect(understood).toEqual({ intent: { type: "SYSTEM_INFO" }, source: "model" });
   });
 
-  it("revient aux règles quand la réponse est invalide", async () => {
+  it("une réponse invalide ne devient jamais une action : c'est une incompréhension", async () => {
     const classify = vi.fn(async () => ({ type: "FILE_TRASH" }));
     const understood = await understandWithModel("xyzzy plugh", { classify });
-    expect(understood.source).toBe("rules");
+    expect(understood).toEqual({ intent: { type: "UNKNOWN", text: "xyzzy plugh" }, source: "model" });
   });
 
-  it("revient aux règles après le délai, en annulant la requête", async () => {
+  it("après le délai, la requête est annulée et la demande est dite indisponible", async () => {
     let signal: AbortSignal | undefined;
     const classify = vi.fn((_text: string, abort?: AbortSignal) => {
       signal = abort;
       return new Promise<unknown>(() => {});
     });
     const understood = await understandWithModel("xyzzy plugh", { classify } as Classifier, 20);
-    expect(understood.source).toBe("rules");
+    expect(understood.source).toBe("unavailable");
     expect(signal?.aborted).toBe(true);
   });
 
-  it("retrouve l'identifiant d'une application nommée par le modèle, comme le font les règles", async () => {
+  it("retrouve l'identifiant d'une application nommée par le modèle, dans le catalogue", async () => {
     const classify = vi.fn(async () => ({ type: "OPEN_APPLICATION", appName: "Discord" }));
     const understood = await understandWithModel("xyzzy plugh", { classify });
     expect(understood.source).toBe("model");
@@ -187,14 +181,14 @@ describe("compréhension avec repli", () => {
     expect(understood).toEqual({ intent: { type: "CHAT", text: "Salut ! Que veux-tu faire ?" }, source: "model" });
   });
 
-  it("un UNKNOWN sans réponse reste une incompréhension des règles", async () => {
+  it("un UNKNOWN sans réponse est une incompréhension, renvoyée par le modèle", async () => {
     const classify = vi.fn(async () => ({ type: "UNKNOWN" }));
     const understood = await understandWithModel("xyzzy plugh", { classify });
-    expect(understood).toEqual({ intent: { type: "UNKNOWN", text: "xyzzy plugh" }, source: "rules" });
+    expect(understood).toEqual({ intent: { type: "UNKNOWN", text: "xyzzy plugh" }, source: "model" });
   });
 
-  it("fonctionne sans modèle installé", async () => {
+  it("sans modèle prêt, rien n'est deviné : la source est « indisponible »", async () => {
     const understood = await understandWithModel("xyzzy plugh", null);
-    expect(understood.source).toBe("rules");
+    expect(understood).toEqual({ intent: { type: "UNKNOWN", text: "xyzzy plugh" }, source: "unavailable" });
   });
 });

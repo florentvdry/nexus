@@ -1,21 +1,28 @@
-import { parseIntent, type Intent } from "../intent/parse";
+import { normalize } from "../intent/normalize";
+import { findApplication } from "../intent/dictionaries";
+import { registeredApplications } from "../intent/registry";
+import type { Intent } from "../intent/types";
 import type { Classifier } from "./benchmark";
 import { validateModelIntent } from "./validate";
 
 export interface UnderstoodIntent {
   intent: Intent;
-  /** D'où vient l'intention : les règles restent prioritaires, le modèle n'intervient que sur `UNKNOWN`. */
-  source: "rules" | "model";
+  /**
+   * `model` quand le modèle a répondu. `unavailable` quand aucun modèle n'a répondu : rien n'est deviné à la place,
+   * l'interface le dit à l'utilisateur.
+   */
+  source: "model" | "unavailable";
 }
 
 /**
- * Le modèle donne un nom d'application, pas son identifiant : on le retrouve avec le même vocabulaire que les règles.
- * Un nom inconnu reste sans identifiant, et la route refuse alors de lancer quoi que ce soit.
+ * Le modèle donne un nom d'application, pas son identifiant : on le retrouve dans le catalogue des applications
+ * (alias et noms fournis par les plugins). Un nom inconnu reste sans identifiant, et la route refuse alors de lancer
+ * quoi que ce soit.
  */
 function resolveAppName(intent: Intent): Intent {
   if (intent.type !== "OPEN_APPLICATION") return intent;
-  const resolved = parseIntent(`lance ${intent.appName}`).intent;
-  return resolved.type === "OPEN_APPLICATION" && resolved.appId ? resolved : intent;
+  const match = findApplication(normalize(intent.appName), registeredApplications());
+  return match ? { ...intent, appId: match.entry.id } : intent;
 }
 
 const MAX_REPLY_LENGTH = 500;
@@ -33,24 +40,21 @@ function chatReply(raw: unknown): string | null {
 }
 
 /**
- * Compréhension avec repli (TODO §1, « Branchement ») : les règles d'abord. Le modèle n'est interrogé que si
- * `parseIntent` renvoie `UNKNOWN`, et sa réponse n'est retenue que si elle est valide.
- * Aucun délai par défaut : une machine lente attend sa réponse. Sans modèle, ou en cas d'échec, c'est le résultat
- * des règles qui compte : NEXUS reste utilisable.
- *
- * `timeoutMs` est facultatif : seul un appelant qui le demande explicitement (ex. des tests) fixe une limite.
+ * Compréhension : toute demande passe par le modèle local, et sa réponse est validée avant usage. Aucun délai par
+ * défaut : une machine lente attend sa réponse. `timeoutMs` est facultatif : seul un appelant qui le demande fixe
+ * une limite (ex. des tests).
  */
 export async function understandWithModel(input: string, classifier: Classifier | null, timeoutMs?: number): Promise<UnderstoodIntent> {
-  const rules = parseIntent(input).intent;
-  if (rules.type !== "UNKNOWN" || classifier === null) {
-    return { intent: rules, source: "rules" };
-  }
+  if (classifier === null) return { intent: { type: "UNKNOWN", text: input }, source: "unavailable" };
 
   const answer = timeoutMs === undefined ? await classifier.classify(input).catch(() => null) : await withLimit(classifier, input, timeoutMs);
+  if (answer === null) return { intent: { type: "UNKNOWN", text: input }, source: "unavailable" };
   const reply = chatReply(answer);
   if (reply !== null) return { intent: { type: "CHAT", text: reply }, source: "model" };
-  const intent = answer === null ? null : validateModelIntent(answer);
-  return intent ? { intent: resolveAppName(intent), source: "model" } : { intent: rules, source: "rules" };
+  const intent = validateModelIntent(answer);
+  return intent
+    ? { intent: resolveAppName(intent), source: "model" }
+    : { intent: { type: "UNKNOWN", text: input }, source: "model" };
 }
 
 /** Réponse du modèle avec une limite explicite. Au-delà, la requête est annulée et l'on renvoie `null`. */

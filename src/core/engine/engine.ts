@@ -1,19 +1,21 @@
 import { registerPacks } from "../plugins/packs";
 import { Conversation, answerClarification } from "../conversation/conversation";
 import type { Clarification } from "../conversation/types";
-import { splitSteps } from "../intent/understand";
+import { FirstConversation } from "../onboarding/firstConversation";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
-import { registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
+import { pluginCommandsForModel, registeredApplications, registerApplications, registerLanguageDictionary } from "../intent/registry";
 import { loadBuiltinPlugins } from "../plugins/builtin";
 import type { PluginStatus } from "../plugins/types";
-import type { Intent } from "../intent/parse";
+import type { Intent } from "../intent/types";
 import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
 import { nativeClassifier } from "../language-model/classifier";
 import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
+import { MemoryController } from "../memory/memory";
+import { ScheduleController } from "../schedule/controller";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
 import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
@@ -40,6 +42,8 @@ export interface EngineOptions {
   grantedPermissions?: Permission[];
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
+  /** Modèle local utilisé pour comprendre. Par défaut, celui choisi dans les réglages ; les tests le fixent. */
+  model?: () => string | null;
 }
 
 export interface SubmitOptions {
@@ -69,8 +73,6 @@ const DEFAULT_GRANTED: Permission[] = [
 ];
 
 /** Titre affiché pour chaque permission demandant une confirmation. */
-/** Salutations courantes, en français et en anglais. Une salutation reçoit une réponse aimable, jamais une erreur. */
-const GREETING = /^(salut|bonjour|bonsoir|coucou|slt|bjr|hello|hi|hey|yo)\b/i;
 
 const PERMISSION_TITLE: Record<string, MessageKey> = {
   "file.write": "confirm.title.fileWrite",
@@ -124,6 +126,13 @@ export class Engine {
   readonly #classifier: Classifier;
   /** Connecteurs MCP : installation et appel d'un service extérieur, étape par étape, après accord de l'utilisateur. */
   readonly #connectors: ConnectorFlow;
+  /** Souvenirs : « retiens que… », oubli, liste, et propositions du modèle à confirmer. */
+  readonly #memory: MemoryController;
+  /** Première conversation après le setup : questions sur l'utilisateur, réponses gardées en souvenirs. */
+  readonly #onboarding: FirstConversation;
+  /** Tâches programmées : relancées à l'heure prévue, tant que NEXUS tourne. */
+  readonly #schedule: ScheduleController;
+  #scheduleTimer: ReturnType<typeof setInterval> | undefined;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -136,7 +145,23 @@ export class Engine {
     this.#native = options.native ?? createNativeAdapter();
     this.#osint = options.osint ?? createOsintRunner();
     this.#bridge = options.bridge ?? createNativeBridge();
-    this.#classifier = nativeClassifier(this.#bridge, readSelectedModel);
+    this.#memory = new MemoryController({
+      bridge: this.#bridge,
+      say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
+      t: (key, params) => translate(this.#locale, key, params),
+    });
+    this.#onboarding = new FirstConversation({
+      bridge: this.#bridge,
+      say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
+      t: (key, params) => translate(this.#locale, key, params),
+    });
+    this.#schedule = new ScheduleController({
+      bridge: this.#bridge,
+      say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
+      t: (key, params) => translate(this.#locale, key, params),
+      run: (request) => this.#runScheduled(request),
+    });
+    this.#classifier = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext());
     this.#connectors = new ConnectorFlow({
       bridge: this.#bridge,
       model: () => readSelectedModel(),
@@ -160,6 +185,25 @@ export class Engine {
   dispose(): void {
     this.#unsubscribeConfirmations();
     this.#unsubscribeAutoApprovals();
+    clearInterval(this.#scheduleTimer);
+  }
+
+  /** Vérifie les tâches programmées tout de suite, puis à intervalle régulier. Appelé au démarrage de l'interface. */
+  startScheduler(intervalMs = 30_000): void {
+    clearInterval(this.#scheduleTimer);
+    void this.#schedule.tick();
+    this.#scheduleTimer = setInterval(() => void this.#schedule.tick(), intervalMs);
+  }
+
+  /** Arrête la vérification des tâches programmées (l'interface la relance au montage suivant). */
+  stopScheduler(): void {
+    clearInterval(this.#scheduleTimer);
+    this.#scheduleTimer = undefined;
+  }
+
+  /** Une tâche programmée est relancée comme une demande tapée : mêmes règles, mêmes confirmations. */
+  #runScheduled(request: string): Promise<void> {
+    return this.#handle(request, replyFor(this.#locale));
   }
 
   /** État de chaque plugin chargé : un plugin en échec est signalé, il ne bloque pas les autres. */
@@ -221,12 +265,13 @@ export class Engine {
   }
 
   /**
-   * Traite une saisie : répond d'abord à la question en attente, découpe les demandes successives, puis résout
-   * les références (« le deuxième », « ferme-le ») avant la compréhension.
+   * Traite une saisie. Une étape en attente (connecteur, mémoire, première conversation, question à choix) reçoit
+   * la saisie d'abord ; sinon toute demande passe par le modèle local, sans analyseur de texte.
    */
   async #handle(text: string, reply: Reply): Promise<void> {
-    // Une étape d'installation de connecteur en attente (oui/non, valeur, confirmation) reçoit la saisie d'abord.
     if (await this.#connectors.consume(text)) return;
+    if (await this.#memory.consume(text)) return;
+    if (await this.#onboarding.consume(text)) return;
     const pending = this.#conversation.pending();
     if (pending) {
       this.#conversation.clearPending();
@@ -235,23 +280,33 @@ export class Engine {
       if (answer) return this.#handle(answer.text, reply);
     }
 
-    const steps = splitSteps(text);
-    if (steps.length > 1) {
-      for (const step of steps) {
-        await this.#handle(step, reply);
-        // Une étape qui pose une question suspend la suite : la réponse concerne d'abord cette question.
-        if (this.#conversation.pending()) return;
-      }
-      return;
-    }
-
-    const resolution = this.#conversation.resolve(text);
-    if (resolution.clarification) return this.#ask(resolution.clarification, reply);
-
-    // Les règles d'abord ; le modèle local ne intervient que sur `UNKNOWN`, et sa réponse est validée avant usage.
-    const { intent } = await understandWithModel(resolution.text, this.#classifier);
+    const { intent, source } = await understandWithModel(text, this.#classifier);
     this.#journal(text, intent.type);
+    if (source === "unavailable") return this.#reply(reply, reply.t("model.unavailable"), "error");
     await this.#route(intent, reply);
+  }
+
+  /**
+   * Contexte donné au modèle avec chaque demande : les souvenirs de l'utilisateur, et les éléments que NEXUS vient
+   * d'afficher (« ferme le deuxième »). Ce sont des données, jamais des instructions.
+   */
+  async classifierContext(): Promise<string[]> {
+    const context = await this.#memory.texts();
+    const shown = this.#conversation.referents();
+    if (shown.length > 0) {
+      const list = shown.map((referent, index) => `${index + 1}) ${referent.label} (${referent.value})`).join(" · ");
+      context.push(`Éléments affichés à l'utilisateur : ${list}`);
+    }
+    const now = new Date();
+    context.push(`Date et heure actuelles : ${localDateTime(now)} (${now.toLocaleDateString("fr-FR", { weekday: "long" })}).`);
+    const commands = pluginCommandsForModel();
+    if (commands.length > 0) context.push(`Commandes des plugins installés (PLUGIN_ACTION : pluginId, command, text) : ${commands.join(" ; ")}`);
+    return context;
+  }
+
+  /** Première conversation, après le setup : NEXUS pose ses questions et garde les réponses en souvenirs. */
+  startFirstConversation(): void {
+    this.#onboarding.start();
   }
 
   /** Pose une question : la réponse de l'utilisateur sera interprétée par `#handle`. */
@@ -264,12 +319,6 @@ export class Engine {
   async #route(intent: Intent, reply: Reply): Promise<void> {
     switch (intent.type) {
       case "OPEN_APPLICATION": {
-        if (!intent.appId && intent.suggestion) {
-          // Un nom proche d'une application connue : on demande avant de lancer quoi que ce soit.
-          const suggested = registeredApplications().find((app) => app.id === intent.suggestion?.appId);
-          const name = reply.t(suggested?.nameKey ?? "app.Notepad");
-          return this.#ask({ question: reply.t("clarify.didYouMean", { name }), options: [{ label: name, text: `lance ${intent.suggestion.alias}` }] }, reply);
-        }
         if (!intent.appId) {
           this.#fail(new CapabilityError("unknown-app", { name: intent.appName }), reply);
           return;
@@ -322,11 +371,24 @@ export class Engine {
           return this.#reply(reply, reply.t("agent.needsProject"), "error");
         }
         return this.#runCapability("agent.claude-code", { project: intent.project, prompt: intent.prompt }, { labelKey: "task.agent", labelParams: {} }, reply);
+      case "REMEMBER":
+        // Une information sur l'utilisateur est gardée sans question : c'est le modèle qui juge ce qui compte.
+        return this.#memory.remember(intent.text);
+      case "FORGET":
+        return this.#memory.forget(intent.query);
+      case "MEMORY_LIST":
+        return this.#memory.list();
+      case "SCHEDULE":
+        // Une tâche programmée ne programme pas d'autres tâches : pas de boucle sans fin.
+        if (this.#schedule.executing) return this.#reply(reply, reply.t("schedule.nested"), "error");
+        return this.#schedule.add(intent.request, intent.recurrence);
+      case "LIST_SCHEDULES":
+        return this.#schedule.list();
+      case "CANCEL_SCHEDULE":
+        return this.#schedule.cancel(intent.query);
       case "NEEDS_CONNECTOR":
         // Le modèle a reconnu un service extérieur : on cherche un connecteur de confiance et on propose de l'installer.
         return this.#connectors.start(intent.task, intent.service);
-      case "UNSUPPORTED":
-        return this.#reply(reply, reply.t(intent.reason === "email" ? "intent.emailUnsupported" : "intent.unknown", { text: intent.text }), "error");
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -343,8 +405,7 @@ export class Engine {
         // La réponse du modèle, telle quelle : ce n'est pas une erreur.
         return this.#reply(reply, intent.text);
       case "UNKNOWN":
-        // Sans modèle, une salutation reçoit tout de même une réponse aimable ; le reste est une vraie incompréhension.
-        if (GREETING.test(intent.text.trim())) return this.#reply(reply, reply.t("greet.reply"));
+        // Le modèle n'a rien reconnu et n'a rien répondu : c'est une vraie incompréhension.
         return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
     }
   }
@@ -490,6 +551,12 @@ export class Engine {
   #emit(event: EngineEvent): void {
     for (const listener of this.#listeners) listener(event);
   }
+}
+
+/** Date et heure locales au format « 2026-10-25T09:00 », lisible par le modèle et par la validation. */
+function localDateTime(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function createEngine(options: EngineOptions): Engine {

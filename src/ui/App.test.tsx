@@ -3,9 +3,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createEngine } from "../core/engine/engine";
+import { scriptedBridge, TEST_MODEL } from "../core/testing/scripted";
 import { NativeCallError, type NativeAdapter } from "../core/native/adapter";
 import { unavailableNativeAdapter } from "../core/native";
 import { App } from "./App";
+
+
+// Réponses du modèle local simulé, pour les phrases envoyées dans la barre de commande.
+const APP_ANSWERS: Record<string, unknown> = {
+  "Jarvis, lance Discord.": { type: "OPEN_APPLICATION", appName: "Discord" },
+  "Affiche les informations de mon ordinateur": { type: "SYSTEM_INFO" },
+  "lance la calculatrice": { type: "OPEN_APPLICATION", appName: "calculatrice" },
+  "lance discord": { type: "OPEN_APPLICATION", appName: "Discord" },
+};
 
 // Adaptateur natif SIMULÉ, réservé aux tests d'interface.
 const GiB = 1024 ** 3;
@@ -40,6 +50,8 @@ beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
   // Le parcours de premier lancement déjà vu : il ne masque pas les autres tests.
   window.localStorage.setItem("nexus.modelSetup.seen", "1");
+  // La première conversation déjà faite : elle ne pose pas ses questions pendant les tests.
+  window.localStorage.setItem("nexus.firstConversation.done", "1");
 });
 
 afterEach(() => cleanup());
@@ -47,7 +59,7 @@ afterEach(() => cleanup());
 describe("App", () => {
   it("au premier lancement, le parcours bloque l'application : pas de « Passer », rien n'est marqué vu", async () => {
     window.localStorage.removeItem("nexus.modelSetup.seen");
-    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
 
     expect(screen.getByRole("dialog", { name: "Configuration du modèle local" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Passer" })).toBeNull();
@@ -57,7 +69,7 @@ describe("App", () => {
 
   it("lance une application depuis la barre de commande et affiche la réponse courte", async () => {
     const native = simulatedNative();
-    render(<App engine={createEngine({ native, locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native, locale: "fr", responseHoldMs: 0 })} />);
 
     expect(screen.getByText(/Je suis prêt/)).toBeTruthy();
     send("Jarvis, lance Discord.");
@@ -68,7 +80,7 @@ describe("App", () => {
   });
 
   it("affiche les ressources système dans une fenêtre flottante, puis la ferme", async () => {
-    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
 
     send("Affiche les informations de mon ordinateur");
     await waitFor(() => expect(screen.getByText("Ressources système")).toBeTruthy());
@@ -84,33 +96,33 @@ describe("App", () => {
         throw new NativeCallError("not-installed", "application non installée : Calculatrice");
       }),
     });
-    render(<App engine={createEngine({ native, locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native, locale: "fr", responseHoldMs: 0 })} />);
 
     send("lance la calculatrice");
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Calculatrice n'est pas installé"));
   });
 
   it("signale honnêtement l'absence du backend natif hors application de bureau", async () => {
-    render(<App engine={createEngine({ native: unavailableNativeAdapter, locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: unavailableNativeAdapter, locale: "fr", responseHoldMs: 0 })} />);
 
     send("lance discord");
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("application de bureau NEXUS"));
   });
 
   it("bascule la langue de l'interface", () => {
-    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
     fireEvent.click(screen.getByRole("button", { name: "Langue" }));
     expect(screen.getByPlaceholderText("Tell me what you want to do…")).toBeTruthy();
   });
 
   it("affiche le micro et signale honnêtement l'absence du backend vocal", async () => {
-    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
     fireEvent.click(screen.getByRole("button", { name: "Démarrer l'écoute" }));
     await waitFor(() => expect(screen.getByText(/application de bureau NEXUS/)).toBeTruthy());
   });
 
   it("ouvre le panneau de réglages vocaux", () => {
-    render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
+    render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
     fireEvent.click(screen.getByRole("button", { name: "Réglages" }));
     expect(screen.getByRole("heading", { name: "Réglages vocaux" })).toBeTruthy();
     expect(screen.getByLabelText("Fonctions vocales activées")).toBeTruthy();

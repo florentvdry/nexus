@@ -1,75 +1,49 @@
 import { describe, expect, it } from "vitest";
 
-import { Conversation, answerClarification } from "./conversation";
-import type { Referent } from "./types";
+import { answerClarification, Conversation } from "./conversation";
+import type { Clarification } from "./types";
 
-const files: Referent[] = [
-  { kind: "file", label: "facture.txt", value: "/root/Documents/nexus-e2e/facture.txt" },
-  { kind: "file", label: "notes.txt", value: "/root/Documents/nexus-e2e/notes.txt" },
-];
+const choice: Clarification = {
+  question: "Lequel ?",
+  options: [
+    { label: "notes.txt", text: "ouvre notes.txt" },
+    { label: "facture.txt", text: "ouvre facture.txt" },
+  ],
+};
 
-function withFiles(list: Referent[] = files): Conversation {
-  const conversation = new Conversation();
-  conversation.setReferents(list);
-  return conversation;
-}
-
-describe("références dans la conversation", () => {
-  it("réécrit « le deuxième » avec le chemin de l'élément désigné", () => {
-    expect(withFiles().resolve("renomme le deuxième en idees.txt").text).toBe('renomme le fichier "/root/Documents/nexus-e2e/notes.txt" en idees.txt');
-    expect(withFiles().resolve("supprime le dernier").text).toBe('supprime le fichier "/root/Documents/nexus-e2e/notes.txt"');
-    expect(withFiles().resolve("analyse le premier").text).toBe('analyse le fichier "/root/Documents/nexus-e2e/facture.txt"');
+describe("réponse à une question à choix", () => {
+  it("accepte un numéro, un ordinal ou le libellé", () => {
+    expect(answerClarification(choice, "2")).toEqual(choice.options[1]);
+    expect(answerClarification(choice, "le premier")).toEqual(choice.options[0]);
+    expect(answerClarification(choice, "dernier")).toEqual(choice.options[1]);
+    expect(answerClarification(choice, "facture")).toEqual(choice.options[1]);
   });
 
-  it("accepte les formes accentuées et la dictée", () => {
-    expect(withFiles().resolve("supprime la deuxième").text).toContain("notes.txt");
-    expect(withFiles().resolve("supprime la deuxieme").text).toContain("notes.txt");
+  it("« oui » ne vaut que pour une option unique, « non » annule", () => {
+    expect(answerClarification(choice, "oui")).toBeNull();
+    expect(answerClarification({ question: "?", options: [choice.options[0]] }, "oui")).toEqual(choice.options[0]);
+    expect(answerClarification(choice, "non")).toBe("cancel");
   });
 
-  it("réécrit un pronom unique : « ferme-le », « renomme ça en X », « renomme le en X »", () => {
-    const one = withFiles([files[0]]);
-    expect(one.resolve("analyse-le").text).toBe('analyse le fichier "/root/Documents/nexus-e2e/facture.txt"');
-    expect(one.resolve("renomme ça en neuf.txt").text).toBe('renomme le fichier "/root/Documents/nexus-e2e/facture.txt" en neuf.txt');
-    expect(one.resolve("renomme le en neuf.txt").text).toContain('"/root/Documents/nexus-e2e/facture.txt"');
-  });
-
-  it("ne touche jamais une demande d'application qui contient « la »", () => {
-    expect(withFiles().resolve("ouvre la calculatrice").text).toBe("ouvre la calculatrice");
-    expect(withFiles().resolve("retiens le pain").text).toBe("retiens le pain");
-  });
-
-  it("demande lequel quand un pronom ne désigne pas un seul élément", () => {
-    const resolution = withFiles().resolve("ferme-le");
-    expect(resolution.clarification?.question).toBe("Lequel ?");
-    expect(resolution.clarification?.options.map((option) => option.label)).toEqual(["facture.txt", "notes.txt"]);
-    expect(resolution.clarification?.options[1].text).toContain("notes.txt");
-  });
-
-  it("sans liste précédente, rien n'est réécrit", () => {
-    expect(new Conversation().resolve("renomme le deuxième en x").text).toBe("renomme le deuxième en x");
+  it("une réponse hors choix n'est pas devinée", () => {
+    expect(answerClarification(choice, "quelle heure est-il ?")).toBeNull();
   });
 });
 
-describe("réponse à une question", () => {
-  const options = [
-    { label: "Document1 - Word", text: "ferme la fenêtre #101" },
-    { label: "Notes - Bloc-notes", text: "ferme la fenêtre #102" },
-  ];
-
-  it("accepte un numéro, un ordinal ou un libellé", () => {
-    expect(answerClarification({ question: "?", options }, "2")).toEqual(options[1]);
-    expect(answerClarification({ question: "?", options }, "le premier")).toEqual(options[0]);
-    expect(answerClarification({ question: "?", options }, "notes")).toEqual(options[1]);
+describe("mémoire de la conversation", () => {
+  it("garde les éléments affichés, et une liste vide les efface", () => {
+    const conversation = new Conversation();
+    conversation.setReferents([{ kind: "file", label: "notes.txt", value: "/docs/notes.txt" }]);
+    expect(conversation.referents()).toHaveLength(1);
+    conversation.setReferents([]);
+    expect(conversation.referents()).toHaveLength(0);
   });
 
-  it("refuse, ou ne répond pas à une saisie hors sujet", () => {
-    expect(answerClarification({ question: "?", options }, "non")).toBe("cancel");
-    expect(answerClarification({ question: "?", options }, "ouvre discord")).toBeNull();
-    expect(answerClarification({ question: "?", options }, "9")).toBeNull();
-  });
-
-  it("« oui » ne vaut que pour une option unique", () => {
-    expect(answerClarification({ question: "?", options: [options[0]] }, "oui")).toEqual(options[0]);
-    expect(answerClarification({ question: "?", options }, "oui")).toBeNull();
+  it("garde la question en attente jusqu'à sa réponse", () => {
+    const conversation = new Conversation();
+    conversation.ask(choice);
+    expect(conversation.pending()).toEqual(choice);
+    conversation.clearPending();
+    expect(conversation.pending()).toBeNull();
   });
 });
