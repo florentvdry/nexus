@@ -210,6 +210,11 @@ export interface NativeBridge {
   webNews(date: string): Promise<WebNewsItem[]>;
   /** Titres du jour de France 24, depuis son flux RSS officiel. */
   webHeadlines(): Promise<WebNewsItem[]>;
+  /** Actualités sur un sujet, ou du moment, par recherche sur le web (Google Actualités). */
+  webNewsSearch(topic?: string): Promise<WebNewsItem[]>;
+  /** Démarrage avec Windows : lecture et réglage (clé de démarrage de l'utilisateur). */
+  startupStatus(): Promise<boolean>;
+  startupSet(enabled: boolean): Promise<void>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
   mcpInstalled(): Promise<InstalledConnector[]>;
@@ -413,6 +418,18 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebNewsItem[]>("web_headlines");
   }
 
+  webNewsSearch(topic?: string): Promise<WebNewsItem[]> {
+    return this.#call<WebNewsItem[]>("web_news_search", { topic });
+  }
+
+  startupStatus(): Promise<boolean> {
+    return this.#call<boolean>("startup_status");
+  }
+
+  startupSet(enabled: boolean): Promise<void> {
+    return this.#call<void>("startup_set", { enabled });
+  }
+
   modelJson(model: string, system: string, user: string): Promise<unknown> {
     return this.#call<unknown>("model_json", { model, system, user });
   }
@@ -510,6 +527,9 @@ export class UnavailableNativeBridge implements NativeBridge {
   webPhoto = () => this.unavailable();
   webNews = () => this.unavailable();
   webHeadlines = () => this.unavailable();
+  webNewsSearch = () => this.unavailable();
+  startupStatus = () => this.unavailable();
+  startupSet = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();

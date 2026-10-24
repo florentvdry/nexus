@@ -28,6 +28,7 @@ import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
 import { MemorySection } from "./MemorySection";
 import { AccessibilitySection } from "./AccessibilitySection";
+import { StartupSection } from "./StartupSection";
 import { applyLargeText, readLargeText } from "./textScale";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
@@ -253,6 +254,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           </button>
           <MemorySection bridge={answerBridge} locale={locale} t={t} />
           <AccessibilitySection t={t} />
+          <StartupSection bridge={answerBridge} t={t} />
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}

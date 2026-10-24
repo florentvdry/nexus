@@ -34,9 +34,11 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "xyzzy plugh": { type: "UNKNOWN", text: "xyzzy plugh" },
   "retiens que je préfère Firefox": { type: "REMEMBER", text: "je préfère Firefox" },
   "qu'est-ce que tu retiens de moi ?": { type: "MEMORY_LIST" },
+  "quelles tâches sont programmées ?": { type: "LIST_SCHEDULES" },
   "affiche une photo de Macron": { type: "SHOW_IMAGE", query: "Emmanuel Macron" },
   "qui est Marie Curie ?": { type: "SHOW_TOPIC", query: "Marie Curie" },
   "fais un résumé des actus du jour": { type: "NEWS_SUMMARY" },
+  "actus sur Macron": { type: "NEWS_SUMMARY", topic: "Emmanuel Macron" },
 };
 
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
@@ -140,6 +142,9 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     webSummary: vi.fn(async () => ({ title: "Emmanuel Macron", extract: "Homme d'État français.", page: "https://fr.wikipedia.org/wiki/Emmanuel_Macron" })),
     webNews: vi.fn(async () => [{ text: "17 octobre : manifestations.", page: "https://fr.wikipedia.org/wiki/Manifestations" }]),
     webHeadlines: vi.fn(async () => [{ text: "Ukraine : nouvelles frappes", page: "https://www.france24.com/fr/a" }]),
+    webNewsSearch: vi.fn(async () => [{ text: "Macron : nouvelle annonce - Le Monde", page: "https://news.google.com/rss/articles/abc" }]),
+    startupStatus: vi.fn(async () => false),
+    startupSet: vi.fn(async () => {}),
     webPhoto: vi.fn(async () => ({ title: "Macron.jpg", dataUrl: "data:image/jpeg;base64,AAAA", credit: "Simon Dawson", license: "CC BY 2.0", page: "https://commons.wikimedia.org/wiki/File:Macron.jpg" })),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
@@ -594,9 +599,9 @@ describe("fenêtres par demande : une demande, une fenêtre", () => {
     const { engine, events } = setup(bridge);
     await engine.submit("fais un résumé des actus du jour");
     expect(presented(events).some((content) => content.kind === "image-card" || content.kind === "article-card")).toBe(false);
-    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "news-list", source: expect.stringContaining("France 24") }));
-    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "news-list", source: expect.stringContaining("Wikipédia") }));
-    expect(assistant(events).join(" ")).toContain("2 actualité");
+    expect(bridge.webNewsSearch).toHaveBeenCalledWith(undefined);
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "news-list", source: expect.stringContaining("Google") }));
+    expect(assistant(events).join(" ")).toContain("1 actualité");
   });
 
   it("une source injoignable devient une carte d'erreur, pas une fenêtre vide", async () => {
@@ -615,5 +620,24 @@ describe("retour immédiat pendant une recherche web", () => {
     const messages = assistant(events);
     expect(messages[0]).toContain("Je cherche « Emmanuel Macron »");
     expect(messages.at(-1)).toContain("Photo : Macron.jpg");
+  });
+});
+
+describe("tâches programmées : une fenêtre pour les voir", () => {
+  it("« quelles tâches sont programmées ? » ouvre un tableau avec la demande et la prochaine exécution", async () => {
+    const task = { id: 1, request: "résume mes actus", recurrence: { kind: "daily" as const, time: "08:00" }, nextRunAt: new Date(2026, 9, 25, 8, 0).getTime(), createdAt: 0 };
+    const bridge = fakeBridge({ scheduleList: vi.fn(async () => [task]) });
+    const { engine, events } = setup(bridge);
+    await engine.submit("quelles tâches sont programmées ?");
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "data-table", rows: [expect.arrayContaining(["résume mes actus", "chaque jour à 08:00"])] }));
+  });
+});
+
+describe("actualités sur un sujet : la recherche reçoit le sujet", () => {
+  it("« actus sur Macron » interroge la recherche web avec ce sujet", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("actus sur Macron");
+    expect(bridge.webNewsSearch).toHaveBeenCalledWith("Emmanuel Macron");
   });
 });

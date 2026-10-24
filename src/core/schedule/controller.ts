@@ -62,15 +62,9 @@ export class ScheduleController {
     }
   }
 
-  async list(): Promise<void> {
-    try {
-      const tasks = await this.#load();
-      if (tasks.length === 0) return this.#options.say(this.#options.t("schedule.none"));
-      const lines = tasks.map((task) => `${task.id}) ${task.request} (${describeRecurrence(task.recurrence)})`).join(" · ");
-      this.#options.say(this.#options.t("schedule.list", { list: lines }));
-    } catch (error) {
-      this.#failed(error);
-    }
+  /** Les tâches telles qu'elles sont enregistrées, pour les afficher. */
+  async snapshot(): Promise<ScheduledTask[]> {
+    return [...(await this.#load())];
   }
 
   /** Annule les tâches dont la demande contient `query`. */

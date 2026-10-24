@@ -229,3 +229,11 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Recherche web** : elle est utilisée pour trouver des sources pendant le développement, pas par NEXUS à l'exécution. Une source n'entre dans NEXUS qu'après vérification et ton accord.
 - **Non retenus pour l'instant** : BBC, 20 Minutes, RFI, Le Monde, Radio France. Leurs flux n'ont pas pu être lus depuis cet environnement (blocage de la lecture), ou ne sont pas encore vérifiés. À reprendre une fois que tu auras choisi les médias.
 - **Limites** : une seule source d'actualité française vérifiée ; la sélection de France 24 reste celle de sa rédaction.
+
+## ADR-035 — Actualités sur tout le web, tâches visibles, démarrage avec Windows (sur demande)
+
+- **Actualités** : la liste du jour vient de la recherche d'actualités de Google (`news.google.com/rss`, flux public sans clé, vérifié le 24/10/2026). Avec un sujet (« actus sur Macron »), la recherche porte sur ce sujet ; sans sujet, ce sont les titres du moment. Plus de liste de médias fixée à l'avance. Les liens passent par la redirection de Google, qui reste la page de référence.
+- **Hôtes autorisés à l'exécution** : `news.google.com`, `www.france24.com`, `fr.wikipedia.org`, `commons.wikimedia.org`, `upload.wikimedia.org`, `thumb.wikimedia.org`.
+- **Tâches programmées** : « quelles tâches sont programmées ? » ouvre un tableau (demande, récurrence, prochaine exécution), sans passer par le texte d'une liste.
+- **Démarrage avec Windows** : une case dans les réglages, qui écrit ou retire la valeur `NEXUS` dans `HKCU\...\Run` (clé de l'utilisateur, sans droits administrateur). Rien n'est écrit à l'installation. Le chemin doit être sans guillemet.
+- **Reste** : `web_news` et `web_headlines` (Wikipédia et France 24) ne sont plus utilisés par les actualités ; à retirer ou à garder pour un usage futur.

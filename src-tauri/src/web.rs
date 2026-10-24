@@ -13,6 +13,8 @@ use crate::grants::require_core;
 
 pub const WIKIPEDIA: &str = "https://fr.wikipedia.org";
 pub const COMMONS: &str = "https://commons.wikimedia.org";
+/// Google Actualités : recherche d'actualités sur tout le web, flux RSS public, sans clé (vérifié le 24/10/2026).
+pub const GOOGLE_NEWS: &str = "https://news.google.com";
 /// Flux RSS de France 24 (version française), vérifié le 24/10/2026 : 24 éléments datés.
 pub const FRANCE24_RSS: &str = "https://www.france24.com/fr/rss";
 const MAX_RSS_BYTES: u64 = 2 * 1024 * 1024;
@@ -89,6 +91,32 @@ pub fn rss_headlines(xml: &str) -> Vec<NewsItem> {
         })
         .take(MAX_HEADLINES)
         .collect()
+}
+
+/// URL du flux d'actualités : la recherche sur un sujet, ou les titres du moment sans sujet. Le sujet est validé.
+pub fn news_url(endpoint: &str, topic: Option<&str>) -> Result<String, AdapterError> {
+    match topic.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(query) if valid_query(query) => Ok(format!("{endpoint}/rss/search?q={}&hl=fr&gl=FR&ceid=FR:fr", percent_encode(query))),
+        Some(_) => Err(AdapterError::InvalidTarget("sujet d'actualité invalide : quelques mots, sans symboles".into())),
+        None => Ok(format!("{endpoint}/rss?hl=fr&gl=FR&ceid=FR:fr")),
+    }
+}
+
+/// Actualités d'un sujet, ou du moment, par Google Actualités. Aucun résultat : liste vide, sans erreur.
+pub fn news_search_at(endpoint: &str, topic: Option<&str>) -> Result<Vec<NewsItem>, AdapterError> {
+    let (status, _, bytes) = fetch(&news_url(endpoint, topic)?, MAX_RSS_BYTES)?;
+    if status != 200 {
+        return Err(AdapterError::Operation(format!("actualités : réponse HTTP {status}")));
+    }
+    Ok(rss_headlines(&String::from_utf8_lossy(&bytes)))
+}
+
+#[tauri::command]
+pub async fn web_news_search(caller: String, topic: Option<String>) -> Result<Vec<NewsItem>, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || news_search_at(GOOGLE_NEWS, topic.as_deref()))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 /// Titres du jour de France 24 (fr), depuis son flux RSS officiel.
@@ -412,6 +440,13 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0], NewsItem { text: "Ukraine & Europe : sommet".into(), page: "https://www.france24.com/fr/a".into() });
         assert_eq!(items[1].text, "Second titre");
+    }
+
+    #[test]
+    fn the_news_url_searches_the_topic_or_the_top_stories() {
+        assert_eq!(news_url(GOOGLE_NEWS, None).unwrap(), "https://news.google.com/rss?hl=fr&gl=FR&ceid=FR:fr");
+        assert_eq!(news_url(GOOGLE_NEWS, Some("Emmanuel Macron")).unwrap(), "https://news.google.com/rss/search?q=Emmanuel%20Macron&hl=fr&gl=FR&ceid=FR:fr");
+        assert!(news_url(GOOGLE_NEWS, Some("x&hl=en")).is_err());
     }
 
     #[test]

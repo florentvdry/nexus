@@ -16,6 +16,7 @@ import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
 import { MemoryController } from "../memory/memory";
 import { ScheduleController } from "../schedule/controller";
+import { describeRecurrence } from "../schedule/recurrence";
 import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
@@ -420,7 +421,7 @@ export class Engine {
         if (this.#schedule.executing) return this.#reply(reply, reply.t("schedule.nested"), "error");
         return this.#schedule.add(intent.request, intent.recurrence);
       case "LIST_SCHEDULES":
-        return this.#schedule.list();
+        return this.#showSchedules(reply);
       case "CANCEL_SCHEDULE":
         return this.#schedule.cancel(intent.query);
       case "NEEDS_CONNECTOR":
@@ -431,7 +432,7 @@ export class Engine {
       case "SHOW_TOPIC":
         return this.#showTopic(intent.query, reply);
       case "NEWS_SUMMARY":
-        return this.#showNews(reply);
+        return this.#showNews(intent.topic, reply);
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -450,6 +451,27 @@ export class Engine {
       case "UNKNOWN":
         // Le modèle n'a rien reconnu et n'a rien répondu : c'est une vraie incompréhension.
         return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
+    }
+  }
+
+  /** Les tâches programmées, dans une fenêtre tableau : demande, récurrence, prochaine exécution. */
+  async #showSchedules(reply: Reply): Promise<void> {
+    try {
+      const tasks = await this.#schedule.snapshot();
+      if (tasks.length === 0) return this.#reply(reply, reply.t("schedule.none"));
+      this.#emit({
+        type: "present",
+        content: {
+          kind: "data-table",
+          title: reply.t("schedule.windowTitle"),
+          columns: [reply.t("schedule.colRequest"), reply.t("schedule.colWhen"), reply.t("schedule.colNext")],
+          rows: tasks.map((task) => [task.request, describeRecurrence(task.recurrence), new Date(task.nextRunAt).toLocaleString(reply.locale)]),
+        },
+        source: { capabilityId: "schedule", locality: "local", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("schedule.windowReply", { count: tasks.length }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
     }
   }
 
@@ -474,26 +496,14 @@ export class Engine {
    * L'actualité du jour, dans une fenêtre liste. Si Wikipédia n'a pas encore publié la journée, la veille fait foi,
    * et la date affichée est celle de la source.
    */
-  async #showNews(reply: Reply): Promise<void> {
-    this.#reply(reply, reply.t("web.searching", { query: reply.t("web.newsQuery") }));
+  async #showNews(topic: string | undefined, reply: Reply): Promise<void> {
+    this.#reply(reply, reply.t("web.searching", { query: topic ?? reply.t("web.newsQuery") }));
     try {
-      const headlines = await this.#bridge.webHeadlines().catch(() => []);
-      const today = new Date();
-      let wikiDate = localDate(today);
-      let wiki = await this.#bridge.webNews(wikiDate).catch(() => []);
-      if (wiki.length === 0) {
-        wikiDate = localDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1));
-        wiki = await this.#bridge.webNews(wikiDate).catch(() => []);
-      }
-      const items = [...headlines, ...wiki];
+      const items = await this.#bridge.webNewsSearch(topic);
       if (items.length === 0) return this.#reply(reply, reply.t("web.newsEmpty"), "error");
-      const sources = [
-        headlines.length > 0 ? "France 24" : undefined,
-        wiki.length > 0 ? reply.t("web.sourceWiki", { date: wikiDate }) : undefined,
-      ].filter((name): name is string => name !== undefined);
       this.#emit({
         type: "present",
-        content: { kind: "news-list", title: reply.t("web.newsTitle", { date: localDate(today) }), items, source: reply.t("web.newsSources", { sources: sources.join(" · ") }) },
+        content: { kind: "news-list", title: reply.t("web.newsTitle", { date: localDate(new Date()) }), items, source: reply.t("web.newsSourceWeb") },
         source: { capabilityId: "web.news", locality: "network", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("web.newsReply", { count: items.length }));
