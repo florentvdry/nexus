@@ -11,6 +11,7 @@ export const APPS: readonly AppEntry[] = [
   { id: "paint", nameKey: "app.Paint", aliases: ["paint", "mspaint"] },
   { id: "file-explorer", nameKey: "app.FileExplorer", aliases: ["explorateur de fichiers", "explorateur", "file explorer"] },
   { id: "chrome", nameKey: "app.Chrome", aliases: ["google chrome", "chrome"] },
+  { id: "edge", nameKey: "app.Edge", aliases: ["microsoft edge", "edge"] },
   { id: "discord", nameKey: "app.Discord", aliases: ["discord"] },
 ];
 

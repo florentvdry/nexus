@@ -64,6 +64,21 @@ pub const CATALOG: &[AppSpec] = &[
         ],
     },
     AppSpec {
+        id: "edge",
+        display_name: "Microsoft Edge",
+        candidates: &[
+            Candidate {
+                program: "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe",
+                args: &[],
+            },
+            Candidate {
+                program: "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe",
+                args: &[],
+            },
+            Candidate { program: "msedge.exe", args: &[] },
+        ],
+    },
+    AppSpec {
         id: "discord",
         display_name: "Discord",
         candidates: &[Candidate {
@@ -233,6 +248,18 @@ mod tests {
         let resolved = resolve(spec("notepad"), &env).expect("bloc-notes trouvé");
         assert_eq!(resolved.program, PathBuf::from(r"C:\Windows\System32").join("notepad.exe"));
         assert!(resolved.args.is_empty());
+    }
+
+    #[test]
+    fn finds_edge_in_program_files_x86() {
+        let edge = PathBuf::from(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe");
+        let env = FakeEnv {
+            vars: HashMap::from([("ProgramFiles(x86)".to_string(), r"C:\Program Files (x86)".to_string())]),
+            files: HashSet::from([edge.clone()]),
+            ..Default::default()
+        };
+        let resolved = resolve(spec("edge"), &env).expect("edge trouvé");
+        assert_eq!(resolved.program, edge);
     }
 
     #[test]
