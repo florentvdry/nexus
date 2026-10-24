@@ -2,31 +2,30 @@ import { chooseTier, type TierResult } from "./benchmark";
 import { tierSpec, type ModelTier } from "./tiers";
 
 /**
- * Parcours de premier lancement (TODO §1bis). Cette partie ne contient que l'ordre des étapes et le choix du niveau :
- * l'affichage et les appels natifs viendront ensuite. Passer le parcours est toujours possible.
+ * Parcours de premier lancement : trois étapes. Profil de la machine, choix du mode, puis installation (Ollama,
+ * téléchargement, test) dont la fin débloque l'application. Il n'y a pas d'étape pour passer : tant que le modèle
+ * n'est pas prêt, l'application n'est pas accessible.
  */
-export type SetupStep = "profile" | "mode" | "download" | "benchmark" | "summary" | "skipped";
+export type SetupStep = "profile" | "mode" | "download";
 
 /** « automatic » laisse le test décider ; les deux autres imposent un niveau. */
 export type SetupMode = "automatic" | "faster" | "precise";
 
-const ORDER: readonly SetupStep[] = ["profile", "mode", "download", "benchmark", "summary"];
+const ORDER: readonly SetupStep[] = ["profile", "mode", "download"];
 
-/** Étape suivante du parcours, ou `summary` une fois le dernier passé. `skipped` est définitif. */
+/** Étape suivante. La dernière étape reste la dernière : c'est là que l'installation se termine. */
 export function nextStep(current: SetupStep): SetupStep {
-  if (current === "skipped" || current === "summary") return current;
   const index = ORDER.indexOf(current);
-  return ORDER[index + 1] ?? "summary";
+  return ORDER[index + 1] ?? current;
 }
 
-/** Étape précédente. Le premier pas et le passage restent en place. */
+/** Étape précédente. Le premier pas reste en place. */
 export function previousStep(current: SetupStep): SetupStep {
-  if (current === "skipped" || current === "profile") return current;
   const index = ORDER.indexOf(current);
-  return ORDER[index - 1] ?? "profile";
+  return ORDER[index - 1] ?? current;
 }
 
-/** Position d'une étape dans le parcours, pour l'affichage « étape n sur 5 ». Sans effet pour « passé ». */
+/** Position d'une étape dans le parcours, pour l'affichage « étape n sur 3 ». */
 export function stepNumber(current: SetupStep): { index: number; total: number } {
   return { index: ORDER.indexOf(current) + 1, total: ORDER.length };
 }
@@ -41,7 +40,7 @@ export function tierForMode(mode: SetupMode, candidates: readonly ModelTier[], r
   return candidates[0] ?? null;
 }
 
-/** Taille et ordre de grandeur du niveau, pour l'étape de choix du mode et le résumé. */
+/** Taille et ordre de grandeur du niveau, pour l'étape de choix du mode. */
 export function describeTier(tier: ModelTier): { parametersBillions: number; fileGiB: number } {
   const spec = tierSpec(tier);
   return { parametersBillions: spec.parametersBillions, fileGiB: spec.fileGiB };

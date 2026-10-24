@@ -4,6 +4,10 @@ import { TauriNativeBridge } from "./bridge";
 
 const callNative = vi.fn(async (_command: string, _args?: Record<string, unknown>) => undefined as never);
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
+
 vi.mock("./tauri-adapter", () => ({
   callNative: (command: string, args?: Record<string, unknown>) => callNative(command, args),
 }));
@@ -26,9 +30,24 @@ describe("pont natif attribué", () => {
     expect(callNative).toHaveBeenCalledWith("permission_answer", { caller: "core", id: "perm-2", approved: true, remember: true });
   });
 
-  it("envoie la demande au classement local au nom de l'interface, sans rien d'autre", async () => {
-    await new TauriNativeBridge().classifyIntent("ouvre la calculatrice");
-    expect(callNative).toHaveBeenLastCalledWith("model_classify", { caller: "core", text: "ouvre la calculatrice" });
+  it("envoie la demande et le modèle choisi au classement local, au nom de l'interface", async () => {
+    await new TauriNativeBridge().classifyIntent("ouvre la calculatrice", "qwen2.5:7b");
+    expect(callNative).toHaveBeenLastCalledWith("model_classify", { caller: "core", text: "ouvre la calculatrice", model: "qwen2.5:7b" });
+  });
+
+  it("télécharge un modèle au nom de l'interface, en écoutant sa progression", async () => {
+    await new TauriNativeBridge().pullModel("qwen2.5:1.5b", () => {});
+    expect(callNative).toHaveBeenLastCalledWith("ollama_pull", { caller: "core", model: "qwen2.5:1.5b" });
+  });
+
+  it("installe Ollama au nom de l'interface, après accord", async () => {
+    await new TauriNativeBridge().installOllama(() => {});
+    expect(callNative).toHaveBeenLastCalledWith("ollama_install", { caller: "core" });
+  });
+
+  it("lit l'état d'Ollama au nom de l'interface", async () => {
+    await new TauriNativeBridge().ollamaStatus();
+    expect(callNative).toHaveBeenLastCalledWith("ollama_status", { caller: "core" });
   });
 
   it("lit le profil de la machine au nom de l'interface", async () => {

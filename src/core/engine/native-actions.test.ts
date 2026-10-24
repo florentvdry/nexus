@@ -80,6 +80,9 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     classifyIntent: vi.fn(async () => {
       throw new Error("modèle non installé");
     }),
+    ollamaStatus: vi.fn(async () => ({ reachable: false, models: [] })),
+    pullModel: vi.fn(async () => {}),
+    installOllama: vi.fn(async () => {}),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
       return () => autoApprovalListeners.delete(listener);
@@ -474,5 +477,20 @@ describe("conversation : références, questions et demandes enchaînées (phase
     expect(bridge.listWindows).toHaveBeenCalled();
     expect(nativeDouble.systemInfo).toHaveBeenCalled();
     expect(vi.mocked(bridge.listWindows).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(nativeDouble.systemInfo).mock.invocationCallOrder[0]);
+  });
+});
+
+describe("salutations : une réponse aimable, jamais une erreur", () => {
+  it("répond à « salut » sans carte d'erreur, même si le modèle n'est pas disponible", async () => {
+    const { engine, events } = setup(fakeBridge());
+    await engine.submit("salut");
+    expect(assistant(events)).toContain("Salut ! Que veux-tu faire ? Par exemple : « Lance le Bloc-notes » ou « Affiche les informations de mon ordinateur ».");
+    expect(presented(events).some((content) => content.kind === "error-card")).toBe(false);
+  });
+
+  it("garde le message « je n'ai pas compris » pour une demande vraiment incomprise", async () => {
+    const { engine, events } = setup(fakeBridge());
+    await engine.submit("xyzzy plugh");
+    expect(assistant(events).some((text) => text.includes("Je n'ai pas compris"))).toBe(true);
   });
 });

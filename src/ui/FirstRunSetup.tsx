@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 
 import { candidateTiers, type HardwareProfile } from "../core/language-model/hardware";
-import { describeTier, nextStep, previousStep, stepNumber, tierForMode, type SetupMode, type SetupStep } from "../core/language-model/setup";
-import type { ModelTier } from "../core/language-model/tiers";
+import type { InstallOutcome } from "../core/language-model/install";
+import { describeTier, nextStep, previousStep, stepNumber, type SetupMode, type SetupStep } from "../core/language-model/setup";
+import { tierSpec, type ModelTier } from "../core/language-model/tiers";
 import type { NativeBridge } from "../core/native/bridge";
 import type { MessageKey } from "../i18n/messages";
+import { ModelInstaller } from "./ModelInstaller";
 
 type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
 interface FirstRunSetupProps {
   bridge: NativeBridge;
   t: Translate;
+  /** Appelé seulement quand le modèle est prêt (ou quand la machine ne peut en faire tourner aucun). */
   onClose: () => void;
 }
 
@@ -20,23 +23,21 @@ const MODE_LABEL: Record<SetupMode, MessageKey> = {
   faster: "setup.mode.faster",
   precise: "setup.mode.precise",
 };
-const TIER_LABEL: Record<ModelTier, MessageKey> = {
-  light: "tier.light",
-  balanced: "tier.balanced",
-  precise: "tier.precise",
-};
 
 type ProfileState = { status: "loading" } | { status: "ready"; profile: HardwareProfile } | { status: "unavailable" };
 
 /**
- * Parcours de premier lancement (TODO §1bis), ouvert depuis les réglages. Il ne télécharge rien et ne mesure rien :
- * les étapes de téléchargement et de test disent honnêtement qu'elles ne sont pas encore disponibles.
- * Passer le parcours est toujours possible, et NEXUS reste utilisable avec les règles seules.
+ * Parcours de premier lancement : profil, mode, puis installation (Ollama, téléchargement, test). Il n'y a pas de
+ * bouton pour passer ni pour fermer : tant que le modèle n'est pas prêt, l'application n'est pas accessible.
  */
 export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
   const [step, setStep] = useState<SetupStep>("profile");
   const [profile, setProfile] = useState<ProfileState>({ status: "loading" });
   const [mode, setMode] = useState<SetupMode>("automatic");
+  const [outcome, setOutcome] = useState<InstallOutcome | null>(null);
+  const [installDone, setInstallDone] = useState(false);
+  // Incrémenté à chaque nouvelle tentative : l'installeur repart de zéro.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -54,10 +55,10 @@ export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
   }, [bridge]);
 
   const candidates = profile.status === "ready" ? candidateTiers(profile.profile) : [];
-  // Sans mesure de référence, le mode automatique ne retient aucun niveau : les règles restent seules.
-  const selected = tierForMode(mode, candidates, []);
+  // Niveaux à installer et tester, du plus précis au plus léger, selon le mode : « plus rapide » ne teste que le léger.
+  const plannedTiers: ModelTier[] =
+    mode === "faster" ? candidates.filter((tier) => tier === "light") : mode === "precise" ? candidates.slice(0, 1) : candidates;
   const position = stepNumber(step);
-  const finished = step === "summary";
 
   const modeDisabled = (option: SetupMode): boolean => {
     if (option === "faster") return !candidates.includes("light");
@@ -65,9 +66,13 @@ export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
     return false;
   };
 
-  const renderBody = () => {
-    if (step === "skipped") return <p className="field-hint">{t("setup.skipped")}</p>;
+  const retry = () => {
+    setOutcome(null);
+    setInstallDone(false);
+    setAttempt((count) => count + 1);
+  };
 
+  const renderBody = () => {
     if (step === "profile") {
       if (profile.status === "loading") return <p className="field-hint">{t("setup.loading")}</p>;
       if (profile.status === "unavailable") return <p className="field-hint">{t("setup.unavailable")}</p>;
@@ -114,16 +119,21 @@ export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
                   disabled={modeDisabled(option)}
                   onChange={() => setMode(option)}
                 />
-                {t(MODE_LABEL[option])}
+                <span>{t(MODE_LABEL[option])}</span>
               </label>
             ))}
           </fieldset>
           {profile.status === "ready" && candidates.length === 0 && <p className="field-hint">{t("setup.mode.noTier")}</p>}
-          {selected && (
+          {plannedTiers.length > 0 && (
+            <p className="field-hint">
+              {t("install.plan", { model: tierSpec(plannedTiers[0]).model, size: tierSpec(plannedTiers[0]).fileGiB })}
+            </p>
+          )}
+          {plannedTiers.length > 0 && (
             <p className="field-hint">
               {t("setup.mode.size", {
-                size: describeTier(selected).fileGiB,
-                params: describeTier(selected).parametersBillions,
+                size: describeTier(plannedTiers[0]).fileGiB,
+                params: describeTier(plannedTiers[0]).parametersBillions,
               })}
             </p>
           )}
@@ -131,42 +141,50 @@ export function FirstRunSetup({ bridge, t, onClose }: FirstRunSetupProps) {
       );
     }
 
-    if (step === "download") return <p className="field-hint">{t("setup.download.unavailable")}</p>;
-    if (step === "benchmark") return <p className="field-hint">{t("setup.benchmark.unavailable")}</p>;
-
-    return selected ? (
-      <p>{t("setup.summary.tier", { tier: t(TIER_LABEL[selected]) })}</p>
-    ) : (
-      <p>{t("setup.summary.rulesOnly")}</p>
+    // Installation : démarre seule à l'ouverture de l'étape. L'accord a été donné sur la page précédente.
+    if (plannedTiers.length === 0) return <p className="field-hint">{t("setup.download.none")}</p>;
+    return (
+      <ModelInstaller
+        key={attempt}
+        bridge={bridge}
+        t={t}
+        tiers={plannedTiers}
+        autoStart
+        onFinish={(result) => {
+          setOutcome(result);
+          setInstallDone(true);
+        }}
+      />
     );
   };
+
+  /** « Commencer » seulement quand le modèle est prêt, ou quand la machine ne peut en faire tourner aucun. */
+  const canStart = step === "download" && (outcome !== null || (installDone === false && plannedTiers.length === 0));
 
   return (
     <div className="setup-overlay" role="dialog" aria-modal="true" aria-label={t("setup.title")}>
       <div className="setup-card">
         <header className="setup-header">
           <h2>{t("setup.title")}</h2>
-          {!finished && step !== "skipped" && (
-            <button type="button" className="chip" onClick={onClose} aria-label={t("setup.close")}>
-              ×
-            </button>
-          )}
         </header>
         <p className="field-hint">{t("setup.intro")}</p>
-        {step !== "skipped" && <p className="field-hint">{t("setup.stepOf", { current: position.index, total: position.total })}</p>}
+        <p className="field-hint">{t("setup.stepOf", { current: position.index, total: position.total })}</p>
 
         {renderBody()}
 
         <div className="setup-actions">
-          {step === "skipped" || finished ? (
-            <button type="button" className="send" onClick={onClose}>
-              {finished ? t("setup.finish") : t("setup.close")}
-            </button>
+          {step === "download" ? (
+            canStart ? (
+              <button type="button" className="send" onClick={onClose}>
+                {t("setup.start")}
+              </button>
+            ) : installDone ? (
+              <button type="button" className="send" onClick={retry}>
+                {t("install.retry")}
+              </button>
+            ) : null
           ) : (
             <>
-              <button type="button" className="chip" onClick={() => setStep("skipped")}>
-                {t("setup.skip")}
-              </button>
               {step !== "profile" && (
                 <button type="button" className="chip" onClick={() => setStep((current) => previousStep(current))}>
                   {t("setup.back")}

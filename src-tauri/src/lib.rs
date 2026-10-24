@@ -3,6 +3,7 @@ pub mod grants;
 pub mod hardware;
 pub mod host;
 pub mod model_download;
+pub mod ollama;
 pub mod journal;
 pub mod permissions;
 pub mod plugin_store;
@@ -41,15 +42,57 @@ async fn system_info() -> Result<SystemInfo, AdapterError> {
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
 }
 
-/// Classement d'une demande par le modèle local. Pas encore de runtime : la réponse dit clairement que le modèle
-/// n'est pas installé, et l'interface retombe sur les règles (TODO §1, « Branchement »).
+/// Classement d'une demande par le modèle local choisi par l'utilisateur (Ollama, sur ce poste uniquement).
+/// Sans modèle, ou si Ollama ne répond pas, l'erreur fait retomber l'interface sur les règles.
 #[tauri::command]
-fn model_classify(caller: String, text: String) -> Result<serde_json::Value, AdapterError> {
+async fn model_classify(caller: String, text: String, model: String) -> Result<serde_json::Value, AdapterError> {
     require_core(&caller)?;
     if text.trim().is_empty() {
         return Err(AdapterError::InvalidTarget("demande vide".into()));
     }
-    Err(AdapterError::ModelMissing("modèle de langage local non installé".into()))
+    tauri::async_runtime::spawn_blocking(move || ollama::classify_at(ollama::ENDPOINT, &model, &text))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Télécharge un modèle via Ollama, avec progression émise vers l'interface. Réservé à l'interface, après accord
+/// explicite de l'utilisateur sur le parcours (taille affichée avant).
+#[tauri::command]
+async fn ollama_pull(app: AppHandle, caller: String, model: String) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let name = model.clone();
+        ollama::pull_at(ollama::ENDPOINT, &model, |step| {
+            let _ = app.emit(
+                ollama::PULL_EVENT,
+                serde_json::json!({ "model": name, "status": step.status, "completed": step.completed, "total": step.total }),
+            );
+        })
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Installe Ollama (winget) après accord de l'utilisateur dans le parcours. Les étapes arrivent par `ollama://install`.
+#[tauri::command]
+async fn ollama_install(app: AppHandle, caller: String) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        ollama::install_ollama(ollama::ENDPOINT, |stage| {
+            let _ = app.emit(ollama::INSTALL_EVENT, serde_json::json!({ "stage": stage }));
+        })
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// État d'Ollama et modèles installés, pour l'interface. Ne renvoie pas d'erreur : « non joignable » est une réponse.
+#[tauri::command]
+async fn ollama_status(caller: String) -> Result<ollama::OllamaStatus, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(|| ollama::status_at(ollama::ENDPOINT))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))
 }
 
 /// Profil pour le choix du modèle local : réservé à l'interface, lecture seule.
@@ -496,6 +539,9 @@ pub fn run() {
             system_info,
             hardware_profile,
             model_classify,
+            ollama_status,
+            ollama_pull,
+            ollama_install,
             launch_app,
             list_apps,
             commands::voice_status,

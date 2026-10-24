@@ -38,6 +38,14 @@ export interface DrawOptions {
   reduceMotion?: boolean;
 }
 
+/** Inclinaison des trois anneaux (1 = cercle, plus petit = plus aplati) : donne l'effet d'orbites en 3D. */
+const RING_TILT = [0.34, 0.5, 0.66];
+/** Points de chaque anneau. */
+const RING_DOTS = [40, 54, 68];
+/** Longueur de la traîne d'un arc orbital, en radians. Elle s'estompe vers l'arrière. */
+const ARC_LENGTH = 1.1;
+const ARC_SEGMENTS = 10;
+
 export function drawOrb(
   ctx: CanvasRenderingContext2D,
   time: number,
@@ -60,15 +68,19 @@ export function drawOrb(
 
   ctx.clearRect(0, 0, width, height);
 
-  const halo = ctx.createRadialGradient(cx, cy, unit * 0.2, cx, cy, unit * 0.98 * pulse);
+  // Halo large et doux, puis halo proche : la lueur se détache du fond sans bord visible.
+  const haloRadius = unit * 1.02 * pulse;
+  const halo = ctx.createRadialGradient(cx, cy, unit * 0.2, cx, cy, haloRadius);
   halo.addColorStop(0, color(0.42));
-  halo.addColorStop(0.6, color(0.12));
+  halo.addColorStop(0.55, color(0.14));
+  halo.addColorStop(0.85, color(0.04));
   halo.addColorStop(1, color(0));
   ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(cx, cy, unit * 0.98 * pulse, 0, Math.PI * 2);
+  ctx.arc(cx, cy, haloRadius, 0, Math.PI * 2);
   ctx.fill();
 
+  // Cœur : dégradé, reflet spéculaire et fine bordure lumineuse.
   const coreRadius = unit * 0.4 * pulse;
   const core = ctx.createRadialGradient(cx - coreRadius * 0.35, cy - coreRadius * 0.35, coreRadius * 0.1, cx, cy, coreRadius);
   core.addColorStop(0, "rgba(255, 255, 255, 0.95)");
@@ -79,34 +91,63 @@ export function drawOrb(
   ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  [0.6, 0.72, 0.84].forEach((ringRadius, index) => {
+  const highlightRadius = coreRadius * 0.3;
+  const highlightX = cx - coreRadius * 0.38;
+  const highlightY = cy - coreRadius * 0.38;
+  const highlight = ctx.createRadialGradient(highlightX, highlightY, 0, highlightX, highlightY, highlightRadius);
+  highlight.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+  highlight.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = highlight;
+  ctx.beginPath();
+  ctx.arc(highlightX, highlightY, highlightRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = color(0.5);
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreRadius * 1.01, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Anneaux inclinés : la moitié arrière est atténuée, la moitié avant brille.
+  RING_TILT.forEach((tilt, index) => {
+    const ringRadius = [0.6, 0.72, 0.84][index];
     const expansion = profile.expand ? 1 + 0.06 * Math.sin(t * 2.2 + index) : 1;
-    const dots = 40 + index * 14;
+    const dots = RING_DOTS[index];
     const direction = index % 2 === 0 ? 1 : -1;
     const rotation = t * profile.ringSpeed * direction * (1 - index * 0.2);
     for (let dot = 0; dot < dots; dot += 1) {
       const angle = rotation + (dot / dots) * Math.PI * 2;
       const major = dot % 4 === 0;
-      ctx.fillStyle = color((major ? 0.85 : 0.35) * (1 - index * 0.2));
+      const front = Math.sin(angle) > 0;
+      const depth = front ? 1 : 0.3;
+      const x = cx + Math.cos(angle) * unit * ringRadius * expansion;
+      const y = cy + Math.sin(angle) * unit * ringRadius * expansion * tilt;
+      ctx.fillStyle = color((major ? 0.85 : 0.35) * (1 - index * 0.2) * depth);
       ctx.beginPath();
-      ctx.arc(cx + Math.cos(angle) * unit * ringRadius * expansion, cy + Math.sin(angle) * unit * ringRadius * expansion, major ? 1.8 : 1.1, 0, Math.PI * 2);
+      ctx.arc(x, y, (major ? 1.8 : 1.1) * (front ? 1.15 : 0.85), 0, Math.PI * 2);
       ctx.fill();
     }
   });
 
-  ctx.lineWidth = 2;
+  // Arcs orbitaux en traîne : la tête est vive, la queue s'efface.
+  ctx.lineWidth = 2.2;
   ctx.lineCap = "round";
-  ctx.strokeStyle = color(0.85);
+  const segment = ARC_LENGTH / ARC_SEGMENTS;
   for (let index = 0; index < profile.arcs; index += 1) {
     const start = t * profile.ringSpeed * 1.6 + (index * Math.PI * 2) / profile.arcs;
-    ctx.beginPath();
-    ctx.arc(cx, cy, unit * ORB_OUTER_RADIUS, start, start + 0.7);
-    ctx.stroke();
+    for (let step = 0; step < ARC_SEGMENTS; step += 1) {
+      const from = start + step * segment;
+      ctx.strokeStyle = color(((step + 1) / ARC_SEGMENTS) * 0.9);
+      ctx.beginPath();
+      ctx.arc(cx, cy, unit * ORB_OUTER_RADIUS, from, from + segment);
+      ctx.stroke();
+    }
   }
 
   if (profile.wave > 0) {
     const steps = 160;
     ctx.lineWidth = 1.6;
+    ctx.strokeStyle = color(0.85);
     ctx.beginPath();
     for (let step = 0; step <= steps; step += 1) {
       const angle = (step / steps) * Math.PI * 2;

@@ -630,3 +630,31 @@ input {
   gap: 8px;
   margin-top: 16px;
 }
+
+/* Orbe affichée pendant l'installation dans le parcours : même orbe que l'écran principal, à taille fixe. */
+.installer-orb {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  margin: 8px auto 12px;
+}
+
+/* Choix du mode : une option par ligne, texte qui revient à la ligne proprement. */
+.setup-options .field {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  line-height: 1.35;
+}
+
+/* Avancement de l'installation : barre pleine largeur et pourcentage. */
+.installer-progress {
+  margin: 8px 0;
+}
+
+.installer-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}

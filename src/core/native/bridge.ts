@@ -5,6 +5,7 @@ import { isDesktopRuntime } from "./index";
 import { callNative } from "./tauri-adapter";
 import type { PluginPackData } from "../plugins/packs";
 import type { HardwareProfile } from "../language-model/hardware";
+import type { OllamaStatus, PullProgress } from "../language-model/ollama";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -179,8 +180,14 @@ export interface NativeBridge {
   onAutoApproval(listener: (approval: AutoApproval) => void): () => void;
   /** Profil de la machine pour le choix du modèle local. Lecture seule, réservée à l'interface. */
   hardwareProfile(): Promise<HardwareProfile>;
-  /** Classement d'une demande par le modèle local : JSON brut, validé ensuite. Échoue tant que le modèle n'est pas installé. */
-  classifyIntent(text: string): Promise<unknown>;
+  /** Classement d'une demande par le modèle choisi (Ollama) : JSON brut, validé ensuite. Échoue sans modèle ou sans Ollama. */
+  classifyIntent(text: string, model: string): Promise<unknown>;
+  /** État d'Ollama sur ce poste et modèles installés. Ne doit pas échouer : « non joignable » est une réponse. */
+  ollamaStatus(): Promise<OllamaStatus>;
+  /** Télécharge un modèle via Ollama. `onProgress` reçoit chaque étape ; la promesse n'aboutit qu'une fois le modèle prêt. */
+  pullModel(model: string, onProgress: (progress: PullProgress) => void): Promise<void>;
+  /** Installe Ollama via winget, après accord. `onStage` reçoit « installing », « starting » puis « ready ». */
+  installOllama(onStage: (stage: string) => void): Promise<void>;
 }
 
 /** Identité de l'interface principale : elle ne peut que répondre aux confirmations. */
@@ -188,6 +195,8 @@ export const CORE_CALLER = "core";
 const AGENT_CHANNEL = "agents://event";
 const CONFIRMATION_CHANNEL = "permissions://request";
 const AUTO_APPROVAL_CHANNEL = "permissions://auto";
+const OLLAMA_PULL_CHANNEL = "ollama://pull";
+const OLLAMA_INSTALL_CHANNEL = "ollama://install";
 
 export class TauriNativeBridge implements NativeBridge {
   readonly #caller: string;
@@ -327,8 +336,32 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<HardwareProfile>("hardware_profile");
   }
 
-  classifyIntent(text: string): Promise<unknown> {
-    return this.#call<unknown>("model_classify", { text });
+  classifyIntent(text: string, model: string): Promise<unknown> {
+    return this.#call<unknown>("model_classify", { text, model });
+  }
+
+  ollamaStatus(): Promise<OllamaStatus> {
+    return this.#call<OllamaStatus>("ollama_status");
+  }
+
+  async installOllama(onStage: (stage: string) => void): Promise<void> {
+    const unlisten = await listen<{ stage: string }>(OLLAMA_INSTALL_CHANNEL, (message) => onStage(message.payload.stage));
+    try {
+      await this.#call<void>("ollama_install");
+    } finally {
+      unlisten();
+    }
+  }
+
+  async pullModel(model: string, onProgress: (progress: PullProgress) => void): Promise<void> {
+    const unlisten = await listen<PullProgress>(OLLAMA_PULL_CHANNEL, (message) => {
+      if (message.payload.model === model) onProgress(message.payload);
+    });
+    try {
+      await this.#call<void>("ollama_pull", { model });
+    } finally {
+      unlisten();
+    }
   }
 }
 
@@ -365,6 +398,9 @@ export class UnavailableNativeBridge implements NativeBridge {
   listAudit = () => this.unavailable();
   hardwareProfile = () => this.unavailable();
   classifyIntent = () => this.unavailable();
+  ollamaStatus = () => this.unavailable();
+  pullModel = () => this.unavailable();
+  installOllama = () => this.unavailable();
   onAgentEvent = () => () => {};
   onConfirmationRequest = () => () => {};
   onAutoApproval = () => () => {};

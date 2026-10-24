@@ -159,3 +159,11 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Pourquoi** : un téléchargement au premier lancement imposerait plusieurs Go sans demande. Garder les règles évite qu'une panne du modèle rende NEXUS inutilisable, et garde les commandes simples instantanées et sans erreur possible du modèle.
 - **Garanties** : rien ne quitte la machine ; le modèle ne fait que classer la demande en intention connue ; les confirmations, racines autorisées et permissions restent appliquées par le moteur et le natif, comme pour les règles.
 - **Limites** : le choix des modèles candidats reste ouvert : licence et support du français à vérifier avant d'en proposer un. Les tailles des niveaux sont des ordres de grandeur. Le runtime llama.cpp et le téléchargement avec somme de contrôle ne sont pas encore implémentés côté natif.
+
+## ADR-026 — Modèle local via Ollama, choisi et affiché par l'utilisateur
+
+- **Choix** : le runtime est Ollama. Le parcours l'installe avec winget (paquet officiel `Ollama.Ollama`) après accord, puis le lance si besoin. NEXUS ne parle qu'à `127.0.0.1:11434`. Le parcours recommande un modèle selon la machine (Qwen2.5 1,5 B, 7 B ou 14 B, sous Apache 2.0 ; la taille 3 B est écartée à cause de sa licence), mais l'utilisateur voit le modèle utilisé dans les réglages et peut en choisir un autre parmi ceux qu'il a installés, ou aucun.
+- **Pourquoi** : pas de compilation de llama.cpp dans NEXUS, téléchargements et mises à jour gérés par Ollama, et le choix du modèle reste visible. Les modèles sont téléchargés par `ollama pull`, lancé par l'utilisateur, pas par NEXUS.
+- **Garanties** : la réponse est contrainte par un schéma (intentions connues ou `UNKNOWN`), validée avant usage, et jamais exécutée telle quelle. Sans modèle choisi, ou si Ollama ne répond pas, NEXUS reste sur les règles.
+- **Conséquences** : `model_download.rs` n'est plus utilisé par le parcours (Ollama gère les téléchargements). La grammaire GBNF de `grammar.ts` est remplacée par le schéma imposé à Ollama.
+- **Limites** : la première demande charge le modèle en mémoire et peut dépasser le délai de 3 s : la réponse arrive alors après le repli sur les règles. Les modèles candidats doivent être revérifiés à chaque nouvelle version.

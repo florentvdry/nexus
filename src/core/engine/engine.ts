@@ -12,6 +12,7 @@ import type { Intent } from "../intent/parse";
 import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
 import { nativeClassifier } from "../language-model/classifier";
+import { readSelectedModel } from "../language-model/selection";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
 import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
@@ -67,6 +68,9 @@ const DEFAULT_GRANTED: Permission[] = [
 ];
 
 /** Titre affiché pour chaque permission demandant une confirmation. */
+/** Salutations courantes, en français et en anglais. Une salutation reçoit une réponse aimable, jamais une erreur. */
+const GREETING = /^(salut|bonjour|bonsoir|coucou|slt|bjr|hello|hi|hey|yo)\b/i;
+
 const PERMISSION_TITLE: Record<string, MessageKey> = {
   "file.write": "confirm.title.fileWrite",
   "file.delete": "confirm.title.fileDelete",
@@ -129,7 +133,7 @@ export class Engine {
     this.#native = options.native ?? createNativeAdapter();
     this.#osint = options.osint ?? createOsintRunner();
     this.#bridge = options.bridge ?? createNativeBridge();
-    this.#classifier = nativeClassifier(this.#bridge);
+    this.#classifier = nativeClassifier(this.#bridge, readSelectedModel);
     this.#unsubscribeConfirmations = this.#bridge.onConfirmationRequest((request) => this.#presentConfirmation(request));
     this.#unsubscribeAutoApprovals = this.#bridge.onAutoApproval((approval) => this.#announceAutomatic(approval));
     this.#locale = options.locale;
@@ -320,7 +324,12 @@ export class Engine {
       }
       case "HELP":
         return this.#reply(reply, reply.t("intent.help"));
+      case "CHAT":
+        // La réponse du modèle, telle quelle : ce n'est pas une erreur.
+        return this.#reply(reply, intent.text);
       case "UNKNOWN":
+        // Sans modèle, une salutation reçoit tout de même une réponse aimable ; le reste est une vraie incompréhension.
+        if (GREETING.test(intent.text.trim())) return this.#reply(reply, reply.t("greet.reply"));
         return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
     }
   }

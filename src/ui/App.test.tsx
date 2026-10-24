@@ -45,16 +45,13 @@ beforeAll(() => {
 afterEach(() => cleanup());
 
 describe("App", () => {
-  it("ouvre le parcours de premier lancement une seule fois, puis le retient", async () => {
+  it("au premier lancement, le parcours bloque l'application : pas de « Passer », rien n'est marqué vu", async () => {
     window.localStorage.removeItem("nexus.modelSetup.seen");
     render(<App engine={createEngine({ native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
 
     expect(screen.getByRole("dialog", { name: "Configuration du modèle local" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
-    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
-
-    expect(window.localStorage.getItem("nexus.modelSetup.seen")).toBe("1");
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Passer" })).toBeNull();
+    expect(window.localStorage.getItem("nexus.modelSetup.seen")).toBeNull();
     window.localStorage.setItem("nexus.modelSetup.seen", "1");
   });
 

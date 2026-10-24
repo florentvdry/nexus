@@ -27,6 +27,7 @@ import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
+import { ModelSection } from "./ModelSection";
 import { hasSeenModelSetup, markModelSetupSeen } from "./setupMemory";
 import { PermissionsSection } from "./PermissionsSection";
 import { VoicePanel } from "./VoicePanel";
@@ -107,9 +108,12 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [answerBridge] = useState(() => createNativeBridge());
   // Premier lancement : le parcours s'ouvre une seule fois, puis reste accessible depuis les réglages.
   const [setupOpen, setSetupOpen] = useState(() => !hasSeenModelSetup());
+  // Le parcours peut changer le modèle choisi : la section Modèle des réglages se relit à la fermeture.
+  const [modelRevision, setModelRevision] = useState(0);
   const closeSetup = () => {
     markModelSetupSeen();
     setSetupOpen(false);
+    setModelRevision((revision) => revision + 1);
   };
   useEffect(() => {
     void engine.refreshPacks();
@@ -214,6 +218,7 @@ export function App({ engine: injectedEngine }: AppProps) {
       {panelOpen && (
         <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>
           <HardwareSection bridge={answerBridge} t={t} />
+          <ModelSection bridge={answerBridge} t={t} revision={modelRevision} />
           <PermissionsSection bridge={answerBridge} locale={locale} t={t} />
           <button type="button" className="chip" onClick={() => setSetupOpen(true)}>
             {t("setup.open")}

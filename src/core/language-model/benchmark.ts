@@ -46,7 +46,11 @@ export interface BenchmarkLimits {
   minSuccessRatio: number;
 }
 
-export const DEFAULT_LIMITS: BenchmarkLimits = { maxSecondsPerSentence: 3, minSuccessRatio: 0.8 };
+/**
+ * Le test ne refuse plus un modèle pour sa justesse (minimum retiré) : il mesure, et l'installation le retient s'il
+ * répond à temps. Seule la vitesse décide de passer au niveau suivant, plus léger.
+ */
+export const DEFAULT_LIMITS: BenchmarkLimits = { maxSecondsPerSentence: 3, minSuccessRatio: 0 };
 
 export interface TierResult {
   tier: ModelTier;

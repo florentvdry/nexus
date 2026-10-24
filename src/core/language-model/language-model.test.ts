@@ -78,9 +78,13 @@ describe("choix du niveau", () => {
     expect(chooseTier([result("precise", 19, 3.4), result("balanced", 18, 1), result("light", 15, 0.4)])).toBe("balanced");
   });
 
-  it("ne garde aucun modèle quand aucun niveau ne passe : les règles seules", () => {
-    expect(chooseTier([result("precise", 10, 1), result("balanced", 10, 1), result("light", 10, 1)])).toBeNull();
+  it("ne garde aucun modèle quand aucun niveau n'est assez rapide : les règles seules", () => {
+    expect(chooseTier([result("precise", 20, 5), result("balanced", 20, 5), result("light", 20, 5)])).toBeNull();
     expect(chooseTier([result("light", 19, 9)], DEFAULT_LIMITS)).toBeNull();
+  });
+
+  it("la justesse ne refuse plus un modèle : un modèle rapide qui répond mal reste retenu", () => {
+    expect(chooseTier([result("light", 0, 1)])).toBe("light");
   });
 });
 
@@ -166,6 +170,18 @@ describe("compréhension avec repli", () => {
     const classify = vi.fn(async () => ({ type: "OPEN_APPLICATION", appName: "logiciel-inconnu-zz" }));
     const understood = await understandWithModel("xyzzy plugh", { classify });
     expect(understood.intent).toEqual({ type: "OPEN_APPLICATION", appName: "logiciel-inconnu-zz" });
+  });
+
+  it("une réponse en texte du modèle (UNKNOWN avec reply) est renvoyée telle quelle, pas comme une erreur", async () => {
+    const classify = vi.fn(async () => ({ type: "UNKNOWN", reply: "Salut ! Que veux-tu faire ?" }));
+    const understood = await understandWithModel("salut", { classify });
+    expect(understood).toEqual({ intent: { type: "CHAT", text: "Salut ! Que veux-tu faire ?" }, source: "model" });
+  });
+
+  it("un UNKNOWN sans réponse reste une incompréhension des règles", async () => {
+    const classify = vi.fn(async () => ({ type: "UNKNOWN" }));
+    const understood = await understandWithModel("xyzzy plugh", { classify });
+    expect(understood).toEqual({ intent: { type: "UNKNOWN", text: "xyzzy plugh" }, source: "rules" });
   });
 
   it("fonctionne sans modèle installé", async () => {

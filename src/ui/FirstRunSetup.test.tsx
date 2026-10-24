@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { HardwareProfile } from "../core/language-model/hardware";
 import type { NativeBridge } from "../core/native/bridge";
@@ -21,6 +21,11 @@ function bridgeReturning(profile: HardwareProfile | Error) {
 }
 
 describe("parcours de premier lancement", () => {
+  beforeAll(() => {
+    // jsdom ne fournit pas de contexte 2D : l'orbe reste inactive dans les tests.
+    HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
+  });
+
   afterEach(cleanup);
 
   it("lit le profil de la machine et l'affiche à la première étape", async () => {
@@ -35,14 +40,20 @@ describe("parcours de premier lancement", () => {
     expect(await screen.findByText("Cette information n'est pas disponible sur cette installation.")).toBeTruthy();
   });
 
-  it("se passe à tout moment, et le passage ferme le parcours sans rien installer", async () => {
-    const onClose = vi.fn();
-    render(<FirstRunSetup bridge={bridgeReturning(machine)} t={t} onClose={onClose} />);
+  it("ne propose ni « Passer » ni fermeture : l'application reste bloquée tant que ce n'est pas prêt", async () => {
+    render(<FirstRunSetup bridge={bridgeReturning(machine)} t={t} onClose={vi.fn()} />);
     await screen.findByText("16.0 Go");
-    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
-    expect(screen.getByText("Parcours passé. NEXUS utilise les règles seules.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Passer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fermer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "×" })).toBeNull();
+  });
+
+  it("ne montre « Commencer » qu'une fois le modèle prêt", async () => {
+    render(<FirstRunSetup bridge={bridgeReturning(machine)} t={t} onClose={vi.fn()} />);
+    await screen.findByText("16.0 Go");
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    expect(screen.queryByRole("button", { name: "Commencer" })).toBeNull();
   });
 
   it("désactive les modes manuels quand aucun niveau ne tient sur la machine", async () => {
@@ -57,11 +68,19 @@ describe("parcours de premier lancement", () => {
     expect((screen.getByRole("radio", { name: "Automatique : un test sur votre machine décide" }) as HTMLInputElement).disabled).toBe(false);
   });
 
-  it("explique que le téléchargement n'existe pas encore, sans rien simuler", async () => {
-    render(<FirstRunSetup bridge={bridgeReturning(machine)} t={t} onClose={vi.fn()} />);
+  it("la page de mode annonce ce qui va être installé, puis l'étape de téléchargement démarre seule", async () => {
+    const bridge = {
+      hardwareProfile: vi.fn(async () => machine),
+      ollamaStatus: vi.fn(async () => ({ reachable: false, models: [] })),
+      installOllama: vi.fn(async () => {}),
+    } as unknown as NativeBridge & { ollamaStatus: ReturnType<typeof vi.fn> };
+    render(<FirstRunSetup bridge={bridge} t={t} onClose={vi.fn()} />);
     await screen.findByText("16.0 Go");
     fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    expect(screen.getByText(/installer Ollama s'il manque, télécharger qwen2\.5:14b \(9 Go\)/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
-    expect(screen.getByText(/Le téléchargement du modèle n'est pas encore disponible/)).toBeTruthy();
+    // Sans Ollama joignable dans ce pont de test, l'installation démarre et le dit : aucun clic n'a été nécessaire.
+    expect(await screen.findByText(/Ollama ne répond pas sur ce poste/)).toBeTruthy();
+    expect(bridge.ollamaStatus).toHaveBeenCalled();
   });
 });
