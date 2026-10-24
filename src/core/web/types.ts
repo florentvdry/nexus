@@ -5,6 +5,12 @@ export interface WebSummary {
   page: string;
 }
 
+/** Un élément de l'actualité du jour, avec sa page de référence. */
+export interface WebNewsItem {
+  text: string;
+  page: string;
+}
+
 /** Photo libre d'une source publique. L'image est déjà téléchargée, en data URL. */
 export interface WebPhoto {
   title: string;

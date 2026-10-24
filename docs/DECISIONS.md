@@ -208,3 +208,9 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Images** : le natif télécharge la miniature (3 Mo au plus, hôtes `upload.wikimedia.org` et `thumb.wikimedia.org` seulement) et la renvoie en data URL. La politique de l'interface (`img-src 'self' data:`) n'est pas élargie.
 - **Actualités** : aucun flux d'actualités n'a pu être vérifié (Le Monde, Radio France et France Info refusent la lecture depuis cet environnement). La demande « résume les actus » répond donc qu'il n'existe pas encore de source vérifiée, au lieu d'inventer une liste. À faire : que l'utilisateur choisisse ses médias, puis vérifier chaque flux avant de l'ajouter.
 - **Limites** : résultat de la première page Commons seulement ; pas de cache ; pas encore de résumé produit par le modèle à partir de plusieurs sources.
+
+## ADR-032 — Actualités : le flux « à la une » de Wikipédia fr, à défaut de médias
+
+- **Choix** : « résume les actus » ouvre une fenêtre liste avec les éléments du jour du flux « à la une » de Wikipédia fr (`/api/rest_v1/feed/featured/AAAA/MM/JJ`), chacun avec sa page de référence. Si la journée n'est pas encore publiée, la veille est affichée, avec sa date.
+- **Pourquoi** : les grands médias refusent la lecture depuis cet environnement, et une liste inventée serait pire. Ce flux est public, sans compte, et vérifié par lecture réelle le 24/10/2026.
+- **Limites** : une sélection éditoriale de Wikipédia, pas la couverture complète de l'actualité. Les médias de l'utilisateur restent à ajouter, après vérification de chaque flux.

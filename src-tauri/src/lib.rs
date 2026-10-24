@@ -572,6 +572,7 @@ pub fn run() {
             schedule::schedule_save,
             web::web_summary,
             web::web_photo,
+            web::web_news,
             ollama_status,
             ollama_pull,
             ollama_install,

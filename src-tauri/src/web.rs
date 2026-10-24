@@ -17,6 +17,7 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 3 * 1024 * 1024;
 const MAX_QUERY_CHARS: usize = 100;
+const MAX_NEWS: usize = 10;
 const USER_AGENT: &str = "NEXUS/0.1 (assistant personnel ; requêtes publiques)";
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -24,6 +25,14 @@ const USER_AGENT: &str = "NEXUS/0.1 (assistant personnel ; requêtes publiques)"
 pub struct Summary {
     pub title: String,
     pub extract: String,
+    pub page: String,
+}
+
+/// Un élément de l'actualité du jour (Wikipédia fr, « à la une » du jour) et sa page de référence.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NewsItem {
+    pub text: String,
     pub page: String,
 }
 
@@ -43,6 +52,17 @@ pub fn valid_query(query: &str) -> bool {
     let trimmed = query.trim();
     (2..=MAX_QUERY_CHARS).contains(&trimmed.chars().count())
         && trimmed.chars().all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '\'' | '’' | '(' | ')'))
+}
+
+/// Date au format AAAA-MM-JJ, avec des chiffres seulement : elle entre dans une URL.
+pub fn valid_date(date: &str) -> bool {
+    let bytes = date.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes.iter().enumerate().all(|(index, byte)| if index == 4 || index == 7 { *byte == b'-' } else { byte.is_ascii_digit() })
+        && date[5..7].parse::<u8>().is_ok_and(|month| (1..=12).contains(&month))
+        && date[8..10].parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
 }
 
 /// Encodage d'un segment d'URL : tout sauf les lettres ASCII, chiffres et `-_.~` est encodé en pour-cent.
@@ -196,6 +216,34 @@ pub fn photo_at(endpoint: &str, query: &str) -> Result<Photo, AdapterError> {
     })
 }
 
+/// Actualités d'une date (AAAA-MM-JJ) : le flux « à la une » de Wikipédia fr. Une date sans publication est une erreur.
+pub fn news_at(endpoint: &str, date: &str) -> Result<Vec<NewsItem>, AdapterError> {
+    if !valid_date(date) {
+        return Err(AdapterError::InvalidTarget("date invalide".into()));
+    }
+    let url = format!("{endpoint}/api/rest_v1/feed/featured/{}/{}/{}", &date[0..4], &date[5..7], &date[8..10]);
+    let value = json(&url)?.ok_or_else(|| AdapterError::Operation(format!("aucune actualité publiée pour le {date}")))?;
+    let items = value.get("news").and_then(Value::as_array).map(|news| {
+        news.iter()
+            .filter_map(|entry| {
+                let text = plain(entry.get("story").and_then(Value::as_str)?);
+                let page = entry.pointer("/links/0/content_urls/desktop/page").and_then(Value::as_str)?.to_string();
+                (!text.is_empty()).then_some(NewsItem { text, page })
+            })
+            .take(MAX_NEWS)
+            .collect::<Vec<_>>()
+    });
+    Ok(items.unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn web_news(caller: String, date: String) -> Result<Vec<NewsItem>, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || news_at(WIKIPEDIA, &date))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
 #[tauri::command]
 pub async fn web_summary(caller: String, query: String) -> Result<Summary, AdapterError> {
     require_core(&caller)?;
@@ -266,6 +314,37 @@ mod tests {
         assert_eq!(credit, "Simon Dawson");
         assert_eq!(license, "CC BY 2.0");
         assert!(page.ends_with("File:Macron.jpg"));
+    }
+
+    #[test]
+    fn dates_must_be_year_month_day() {
+        assert!(valid_date("2026-10-24"));
+        assert!(!valid_date("2026-13-01"));
+        assert!(!valid_date("2026/10/24"));
+        assert!(!valid_date("../2026-10-24"));
+    }
+
+    #[test]
+    fn the_day_news_keeps_its_text_and_its_page() {
+        let value: Value = serde_json::from_str(
+            r#"{"news":[
+                {"story":"<b>17 octobre</b> : manifestations.","links":[{"content_urls":{"desktop":{"page":"https://fr.wikipedia.org/wiki/Manifestations"}}}]},
+                {"story":"Sans lien.","links":[]}
+            ]}"#,
+        )
+        .unwrap();
+        let items: Vec<NewsItem> = value
+            .get("news")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .filter_map(|entry| {
+                let text = plain(entry.get("story").and_then(Value::as_str)?);
+                let page = entry.pointer("/links/0/content_urls/desktop/page").and_then(Value::as_str)?.to_string();
+                Some(NewsItem { text, page })
+            })
+            .collect();
+        assert_eq!(items, vec![NewsItem { text: "17 octobre : manifestations.".into(), page: "https://fr.wikipedia.org/wiki/Manifestations".into() }]);
     }
 
     #[test]

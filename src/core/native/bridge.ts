@@ -9,7 +9,7 @@ import type { OllamaStatus, PullProgress } from "../language-model/ollama";
 import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
 import type { Memory } from "../memory/types";
 import type { ScheduledTask } from "../schedule/controller";
-import type { WebPhoto, WebSummary } from "../web/types";
+import type { WebNewsItem, WebPhoto, WebSummary } from "../web/types";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -206,6 +206,8 @@ export interface NativeBridge {
   /** Sources publiques : résumé d'un sujet (Wikipédia) et photo libre (Wikimedia Commons). Aucun compte. */
   webSummary(query: string): Promise<WebSummary>;
   webPhoto(query: string): Promise<WebPhoto>;
+  /** Actualités d'une date (AAAA-MM-JJ) : le flux « à la une » de Wikipédia fr. */
+  webNews(date: string): Promise<WebNewsItem[]>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
   mcpInstalled(): Promise<InstalledConnector[]>;
@@ -401,6 +403,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebPhoto>("web_photo", { query });
   }
 
+  webNews(date: string): Promise<WebNewsItem[]> {
+    return this.#call<WebNewsItem[]>("web_news", { date });
+  }
+
   modelJson(model: string, system: string, user: string): Promise<unknown> {
     return this.#call<unknown>("model_json", { model, system, user });
   }
@@ -496,6 +502,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   scheduleSave = () => this.unavailable();
   webSummary = () => this.unavailable();
   webPhoto = () => this.unavailable();
+  webNews = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();

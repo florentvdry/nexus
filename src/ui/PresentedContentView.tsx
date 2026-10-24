@@ -117,6 +117,20 @@ export function PresentedContentView({
           <span>{content.message}</span>
         </p>
       );
+    case "news-list":
+      return (
+        <div className="news-list">
+          <ul>
+            {content.items.map((item, index) => (
+              <li key={index}>
+                <span>{item.text}</span>
+                <span className="field-hint">{item.page}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="field-hint">{content.source}</p>
+        </div>
+      );
     case "image-card":
       return (
         <figure className="image-card">

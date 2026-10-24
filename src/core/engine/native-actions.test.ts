@@ -138,6 +138,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     scheduleList: vi.fn(async () => []),
     scheduleSave: vi.fn(async () => {}),
     webSummary: vi.fn(async () => ({ title: "Emmanuel Macron", extract: "Homme d'État français.", page: "https://fr.wikipedia.org/wiki/Emmanuel_Macron" })),
+    webNews: vi.fn(async () => [{ text: "17 octobre : manifestations.", page: "https://fr.wikipedia.org/wiki/Manifestations" }]),
     webPhoto: vi.fn(async () => ({ title: "Macron.jpg", dataUrl: "data:image/jpeg;base64,AAAA", credit: "Simon Dawson", license: "CC BY 2.0", page: "https://commons.wikimedia.org/wiki/File:Macron.jpg" })),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
@@ -587,12 +588,13 @@ describe("fenêtres par demande : une demande, une fenêtre", () => {
     expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "article-card", extract: "Physicienne et chimiste." }));
   });
 
-  it("« résume les actus » n'invente pas de liste : il dit qu'aucune source n'est encore vérifiée", async () => {
+  it("« résume les actus » ouvre la liste du jour, avec sa source", async () => {
     const bridge = fakeBridge();
     const { engine, events } = setup(bridge);
     await engine.submit("fais un résumé des actus du jour");
     expect(presented(events).some((content) => content.kind === "image-card" || content.kind === "article-card")).toBe(false);
-    expect(assistant(events).join(" ")).toContain("source d'actualités vérifiée");
+    expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "news-list", source: expect.stringContaining("Wikipédia") }));
+    expect(assistant(events).join(" ")).toContain("1 actualité");
   });
 
   it("une source injoignable devient une carte d'erreur, pas une fenêtre vide", async () => {

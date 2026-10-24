@@ -394,8 +394,7 @@ export class Engine {
       case "SHOW_TOPIC":
         return this.#showTopic(intent.query, reply);
       case "NEWS_SUMMARY":
-        // Pas de source d'actualités vérifiée : NEXUS le dit plutôt que d'inventer une liste.
-        return this.#reply(reply, reply.t("web.news"), "error");
+        return this.#showNews(reply);
       case "CLOSE_WINDOW":
         this.#emit({ type: "window-command", command: "close-last" });
         return;
@@ -429,6 +428,33 @@ export class Engine {
         source: { capabilityId: "web.photo", locality: "network", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("web.photo", { title: photo.title }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
+    }
+  }
+
+  /**
+   * L'actualité du jour, dans une fenêtre liste. Si Wikipédia n'a pas encore publié la journée, la veille fait foi,
+   * et la date affichée est celle de la source.
+   */
+  async #showNews(reply: Reply): Promise<void> {
+    this.#reply(reply, reply.t("web.searching", { query: reply.t("web.newsQuery") }));
+    try {
+      const today = new Date();
+      let date = localDate(today);
+      let items = await this.#bridge.webNews(date).catch(() => []);
+      if (items.length === 0) {
+        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        date = localDate(yesterday);
+        items = await this.#bridge.webNews(date);
+      }
+      if (items.length === 0) return this.#reply(reply, reply.t("web.newsEmpty"), "error");
+      this.#emit({
+        type: "present",
+        content: { kind: "news-list", title: reply.t("web.newsTitle", { date }), items, source: reply.t("web.newsSource") },
+        source: { capabilityId: "web.news", locality: "network", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("web.newsReply", { count: items.length }));
     } catch (error) {
       this.#fail(toCapabilityError(error), reply);
     }
@@ -591,6 +617,12 @@ export class Engine {
   #emit(event: EngineEvent): void {
     for (const listener of this.#listeners) listener(event);
   }
+}
+
+/** Date locale au format AAAA-MM-JJ. */
+function localDate(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /** Date et heure locales au format « 2026-10-25T09:00 », lisible par le modèle et par la validation. */

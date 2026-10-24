@@ -26,6 +26,8 @@ export type PresentedContent =
   | { kind: "error-card"; title: string; code: string; message: string }
   /** Photo d'une source publique, avec son auteur et sa licence. L'image est déjà téléchargée (data URL). */
   | { kind: "image-card"; title: string; imageUrl: string; credit: string; license: string; page: string }
+  /** Actualités d'une date (Wikipédia fr), chacune avec sa page de référence. */
+  | { kind: "news-list"; title: string; items: { text: string; page: string }[]; source: string }
   /** Résumé d'un sujet (Wikipédia), avec la page d'origine. */
   | { kind: "article-card"; title: string; extract: string; page: string }
   /** Demande de confirmation : les boutons répondent au natif, qui décide de l'action. */
