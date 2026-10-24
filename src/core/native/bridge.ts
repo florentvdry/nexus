@@ -216,6 +216,8 @@ export interface NativeBridge {
   startupStatus(): Promise<boolean>;
   /** Batterie, en lecture seule. `null` pour un poste sans batterie. */
   batteryStatus(): Promise<{ percent: number; charging: boolean } | null>;
+  /** Contenu du fichier d'agenda (.ics) désigné par l'utilisateur, en lecture seule. */
+  agendaRead(path: string): Promise<string>;
   startupSet(enabled: boolean): Promise<void>;
   /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
   mcpSearch(query: string): Promise<ConnectorCandidate[]>;
@@ -428,6 +430,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<boolean>("startup_status");
   }
 
+  agendaRead(path: string): Promise<string> {
+    return this.#call<string>("agenda_read", { path });
+  }
+
   batteryStatus(): Promise<{ percent: number; charging: boolean } | null> {
     return this.#call<{ percent: number; charging: boolean } | null>("battery_status");
   }
@@ -536,6 +542,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   webNewsSearch = () => this.unavailable();
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();
+  agendaRead = () => this.unavailable();
   startupSet = () => this.unavailable();
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();

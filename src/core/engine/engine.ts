@@ -19,6 +19,7 @@ import { ScheduleController } from "../schedule/controller";
 import { describeRecurrence } from "../schedule/recurrence";
 import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
 import { AlertMonitor } from "../alerts/monitor";
+import { eventsOn, parseIcs } from "../agenda/ics";
 import type { SystemInfo } from "../native/adapter";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
@@ -46,6 +47,8 @@ export interface EngineOptions {
   grantedPermissions?: Permission[];
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
+  /** Chemin du fichier d'agenda (.ics), ou null. Lu seulement quand l'utilisateur demande son agenda. */
+  agendaPath?: () => string | null;
   /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */
   routineStorage?: RoutineStorage;
   /** Modèle local utilisé pour comprendre. Par défaut, celui choisi dans les réglages ; les tests le fixent. */
@@ -145,6 +148,7 @@ export class Engine {
   #alertTimer: ReturnType<typeof setInterval> | undefined;
   /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
   readonly #monitor = new AlertMonitor();
+  readonly #agendaPath: () => string | null;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -168,6 +172,7 @@ export class Engine {
       t: (key, params) => translate(this.#locale, key, params),
     });
     this.#routines = new RoutineDetector(options.routineStorage ?? (typeof window === "undefined" ? undefined : window.localStorage));
+    this.#agendaPath = options.agendaPath ?? (() => null);
     this.#schedule = new ScheduleController({
       bridge: this.#bridge,
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
@@ -374,6 +379,11 @@ export class Engine {
     return context;
   }
 
+  /** Ouvre la liste des tâches programmées (bouton de la barre). */
+  showSchedules(): Promise<void> {
+    return this.#showSchedules(replyFor(this.#locale));
+  }
+
   /** Première conversation, après le setup : NEXUS pose ses questions et garde les réponses en souvenirs. */
   startFirstConversation(): void {
     this.#onboarding.start();
@@ -454,6 +464,10 @@ export class Engine {
         return this.#schedule.add(intent.request, intent.recurrence);
       case "LIST_SCHEDULES":
         return this.#showSchedules(reply);
+      case "AGENDA_TODAY":
+        return this.#showAgenda(reply);
+      case "DRAFT_MESSAGE":
+        return this.#showDraft(intent.recipient, intent.text, reply);
       case "CANCEL_SCHEDULE":
         return this.#schedule.cancel(intent.query);
       case "NEEDS_CONNECTOR":
@@ -484,6 +498,43 @@ export class Engine {
         // Le modèle n'a rien reconnu et n'a rien répondu : c'est une vraie incompréhension.
         return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
     }
+  }
+
+  /** Les rendez-vous du jour, dans une fenêtre tableau. Sans fichier désigné, NEXUS le dit et ne lit rien. */
+  async #showAgenda(reply: Reply): Promise<void> {
+    const path = this.#agendaPath();
+    if (!path) return this.#reply(reply, reply.t("agenda.noFile"));
+    try {
+      const today = new Date();
+      const events = eventsOn(parseIcs(await this.#bridge.agendaRead(path)), today);
+      if (events.length === 0) return this.#reply(reply, reply.t("agenda.empty"));
+      this.#emit({
+        type: "present",
+        content: {
+          kind: "data-table",
+          title: reply.t("agenda.title", { date: today.toLocaleDateString(reply.locale) }),
+          columns: [reply.t("agenda.colWhen"), reply.t("agenda.colEvent")],
+          rows: events.map((event) => [
+            event.allDay ? reply.t("agenda.allDay") : event.start.toLocaleTimeString(reply.locale, { hour: "2-digit", minute: "2-digit" }),
+            event.title,
+          ]),
+        },
+        source: { capabilityId: "agenda", locality: "local", collectedAt: Date.now() },
+      });
+      this.#reply(reply, reply.t("agenda.reply", { count: events.length }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
+    }
+  }
+
+  /** Un brouillon de message, à copier. Rien n'est envoyé : c'est toujours l'utilisateur qui envoie. */
+  #showDraft(recipient: string | undefined, text: string, reply: Reply): void {
+    this.#emit({
+      type: "present",
+      content: { kind: "draft", title: reply.t("draft.title"), recipient, text, note: reply.t("draft.note") },
+      source: { capabilityId: "draft", locality: "local", collectedAt: Date.now() },
+    });
+    this.#reply(reply, reply.t("draft.reply"));
   }
 
   /** Les tâches programmées, dans une fenêtre tableau : demande, récurrence, prochaine exécution. */

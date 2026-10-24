@@ -22,6 +22,7 @@ const NO_PARAMETER = new Set<Intent["type"]>([
   "PLUGIN_LIST",
   "MEMORY_LIST",
   "LIST_SCHEDULES",
+  "AGENDA_TODAY",
 ]);
 
 /** Texte non vide, sans espaces autour, borné. Tout autre valeur est refusée. */
@@ -158,6 +159,12 @@ export function validateModelIntent(raw: unknown): Intent | null {
     case "CANCEL_SCHEDULE": {
       const query = text(candidate.query, 200);
       return query ? { type, query } : null;
+    }
+    case "DRAFT_MESSAGE": {
+      const body = text(candidate.text, 1000);
+      const recipient = optionalText(candidate.recipient, 100);
+      if (!body || recipient === null) return null;
+      return { type, text: body, ...(recipient !== undefined ? { recipient } : {}) };
     }
     case "NEEDS_CONNECTOR": {
       // Le modèle nomme le service et reformule la demande ; un connecteur MCP installé la prendra en charge.

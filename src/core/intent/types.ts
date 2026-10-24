@@ -45,6 +45,10 @@ export type Intent =
   | { type: "SHOW_TOPIC"; query: string }
   /** Un résumé de l'actualité du jour : pas encore de source d'actualités vérifiée. */
   | { type: "NEWS_SUMMARY"; topic?: string }
+  /** Les rendez-vous du jour, lus dans le fichier d'agenda désigné par l'utilisateur. */
+  | { type: "AGENDA_TODAY" }
+  /** Un brouillon de message : affiché pour être copié, jamais envoyé. */
+  | { type: "DRAFT_MESSAGE"; recipient?: string; text: string }
   /** Réponse en langage naturel du modèle, pour ce qui n'est pas une commande. */
   | { type: "CHAT"; text: string }
   | { type: "UNKNOWN"; text: string };

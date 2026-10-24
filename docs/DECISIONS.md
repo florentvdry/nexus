@@ -249,3 +249,10 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Choix** : l'état de la batterie est lu en lecture seule (`GetSystemPowerStatus`, Windows) et alimente les alertes proactives. Une batterie faible, non branchée, sous 15 % produit une alerte, une seule fois tant qu'elle dure. Un poste fixe n'a pas d'alerte batterie.
 - **Pourquoi** : lecture sans effet sur la machine, pas de compte, pas de réseau.
 - **Limites** : les mises à jour Windows restent à faire (interrogation du système de mise à jour, à faire avec ton accord).
+
+## ADR-038 — Agenda en lecture seule, brouillons de messages sans envoi, accès direct au planning
+
+- **Agenda** : NEXUS lit un fichier .ics que tu désignes dans les réglages (chemin saisi, seule l'extension .ics est acceptée, 2 Mo au plus). « Qu'est-ce que j'ai aujourd'hui ? » ouvre un tableau des rendez-vous du jour. Les heures sont lues dans le fuseau du fichier quand il est local, et en UTC quand il finit par Z. Les récurrences ne sont pas encore développées.
+- **Brouillons** : « écris à X que… » ouvre une fenêtre avec le texte et un bouton « Copier ». NEXUS n'envoie jamais un message : c'est toujours toi qui l'envoies.
+- **Accès direct** : un bouton « Planning » dans la barre ouvre la liste des tâches programmées.
+- **Limites** : pas de compte de messagerie ni d'agenda en ligne (il faudra un accord et une source) ; pas de récurrence d'agenda ; le modèle léger peut se tromper sur l'intention.

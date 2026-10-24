@@ -26,7 +26,7 @@ Chaque point : état, et ce qu'il faut pour le faire. « Accord » = ton accord 
 3. [ ] **Vision de l'écran** : comprendre ce qui est affiché. Demande un modèle multimodal local, à évaluer sur ta machine. Accord (capture d'écran) requis.
 4. [ ] **Contrôle des applications** : remplir et enchaîner des actions dans les logiciels, sans API. Demande une automatisation d'interface, étape par étape, avec confirmation.
 5. [~] **Alertes proactives** : disque presque plein, mémoire saturée. **Fait en partie** (ADR-036, ADR-037) : disque, mémoire, batterie. Mises à jour Windows restent à faire.
-6. [ ] **Agenda et messages** : lire un calendrier (fichier ICS ou compte) et préparer des messages, avec ta validation avant tout envoi. Accord et source requis.
+6. [~] **Agenda et messages** : **fait en partie** (ADR-038) : agenda du jour depuis un fichier .ics désigné, brouillons à copier (rien n'est envoyé). Reste : comptes de messagerie et d'agenda en ligne, avec accord.
 7. [ ] **Maison connectée** : lumières, prises, thermostat. Demande les appareils et leur protocole. Accord requis.
 8. [ ] **Équipe d'agents** : plusieurs tâches en parallèle, chacune confiée à un agent qui rend compte. Demande un ordonnanceur et des garde-fous par agent.
 9. [ ] **Auto-amélioration** : écrire ses propres outils quand il en manque un, avec ton accord à chaque ajout. Risque élevé : à cadrer avant.

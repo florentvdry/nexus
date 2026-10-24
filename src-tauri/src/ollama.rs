@@ -54,6 +54,8 @@ const INTENT_TYPES: &[&str] = &[
     "SCHEDULE",
     "CANCEL_SCHEDULE",
     "LIST_SCHEDULES",
+    "AGENDA_TODAY",
+    "DRAFT_MESSAGE",
     "SHOW_IMAGE",
     "SHOW_TOPIC",
     "NEWS_SUMMARY",
@@ -110,6 +112,7 @@ fn intent_schema() -> Value {
             "text": { "type": "string" },
             "reply": { "type": "string" },
             "query": { "type": "string" },
+            "recipient": { "type": "string" },
             "topic": { "type": "string" },
             "kind": { "type": "string", "enum": ["once", "daily", "weekly"] },
             "at": { "type": "string" },
@@ -134,7 +137,7 @@ fn base_prompt() -> String {
          Exemples : « ouvre le bloc-notes » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"bloc-notes\"}} ; « aide-moi » -> {{\"type\": \"HELP\"}} ; \
          « montre les processus lancés » -> {{\"type\": \"PROCESS_LIST\"}} ; « arrête la recherche en cours » -> {{\"type\": \"CANCEL_TASKS\"}} ; \
          « retiens que je préfère Firefox » -> {{\"type\": \"REMEMBER\", \"text\": \"je préfère Firefox\"}} ; « qu'est-ce que tu retiens de moi ? » -> {{\"type\": \"MEMORY_LIST\"}} ; \
-         « rappelle-moi demain à 9 h de appeler Anthony » -> {{\"type\": \"SCHEDULE\", \"request\": \"rappelle Anthony d'appeler\", \"kind\": \"once\", \"day\": \"tomorrow\", \"time\": \"09:00\"}} ; « chaque lundi à 8 h, résume mes actus » -> {{\"type\": \"SCHEDULE\", \"request\": \"résume mes actus\", \"kind\": \"weekly\", \"weekday\": 1, \"time\": \"08:00\"}} ; « annule la tâche des actus » -> {{\"type\": \"CANCEL_SCHEDULE\", \"query\": \"actus\"}} ; « quelles tâches sont programmées ? » -> {{\"type\": \"LIST_SCHEDULES\"}} ; « affiche une photo de Macron » -> {{\"type\": \"SHOW_IMAGE\", \"query\": \"Emmanuel Macron\"}} ; « qui est Marie Curie ? » -> {{\"type\": \"SHOW_TOPIC\", \"query\": \"Marie Curie\"}} ; « fais un résumé des actus du jour » -> {{\"type\": \"NEWS_SUMMARY\"}} ; \
+         « rappelle-moi demain à 9 h de appeler Anthony » -> {{\"type\": \"SCHEDULE\", \"request\": \"rappelle Anthony d'appeler\", \"kind\": \"once\", \"day\": \"tomorrow\", \"time\": \"09:00\"}} ; « chaque lundi à 8 h, résume mes actus » -> {{\"type\": \"SCHEDULE\", \"request\": \"résume mes actus\", \"kind\": \"weekly\", \"weekday\": 1, \"time\": \"08:00\"}} ; « annule la tâche des actus » -> {{\"type\": \"CANCEL_SCHEDULE\", \"query\": \"actus\"}} ; « quelles tâches sont programmées ? » -> {{\"type\": \"LIST_SCHEDULES\"}} ; « qu'est-ce que j'ai aujourd'hui ? » -> {{\"type\": \"AGENDA_TODAY\"}} ; « écris à Anthony que je serai en retard » -> {{\"type\": \"DRAFT_MESSAGE\", \"recipient\": \"Anthony\", \"text\": \"Je serai en retard.\"}} ; « affiche une photo de Macron » -> {{\"type\": \"SHOW_IMAGE\", \"query\": \"Emmanuel Macron\"}} ; « qui est Marie Curie ? » -> {{\"type\": \"SHOW_TOPIC\", \"query\": \"Marie Curie\"}} ; « fais un résumé des actus du jour » -> {{\"type\": \"NEWS_SUMMARY\"}} ; \
          « mets le fichier brouillon.doc à la corbeille » ->{{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; \
          « quelle est l'utilisation de la mémoire ? » -> {{\"type\": \"SYSTEM_INFO\"}} ; « renomme photo.jpg en vacances.jpg » -> {{\"type\": \"FILE_RENAME\", \"path\": \"photo.jpg\", \"newName\": \"vacances.jpg\"}} ; \
          « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}} ; \

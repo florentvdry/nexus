@@ -18,6 +18,8 @@ export function estimateSize(content: PresentedContent): Size {
       return { width: 420, height: Math.min(MAX_WINDOW_HEIGHT, 72 + (content.rows.length + 1) * 30) };
     case "error-card":
       return { width: 340, height: 130 };
+    case "draft":
+      return { width: 400, height: Math.min(MAX_WINDOW_HEIGHT, 150 + Math.ceil(content.text.length / 50) * 22) };
     case "news-list":
       return { width: 420, height: Math.min(MAX_WINDOW_HEIGHT, 96 + content.items.length * 56) };
     case "image-card":

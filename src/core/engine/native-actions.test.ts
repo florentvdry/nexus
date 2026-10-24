@@ -146,6 +146,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     startupStatus: vi.fn(async () => false),
     startupSet: vi.fn(async () => {}),
     batteryStatus: vi.fn(async () => null),
+    agendaRead: vi.fn(async () => ""),
     webPhoto: vi.fn(async () => ({ title: "Macron.jpg", dataUrl: "data:image/jpeg;base64,AAAA", credit: "Simon Dawson", license: "CC BY 2.0", page: "https://commons.wikimedia.org/wiki/File:Macron.jpg" })),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);

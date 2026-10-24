@@ -28,6 +28,8 @@ export type PresentedContent =
   | { kind: "image-card"; title: string; imageUrl: string; credit: string; license: string; page: string }
   /** Actualités d'une date (Wikipédia fr), chacune avec sa page de référence. */
   | { kind: "news-list"; title: string; items: { text: string; page: string }[]; source: string }
+  /** Brouillon de message : le texte se copie, rien n'est envoyé. */
+  | { kind: "draft"; title: string; recipient?: string; text: string; note: string }
   /** Résumé d'un sujet (Wikipédia), avec la page d'origine. */
   | { kind: "article-card"; title: string; extract: string; page: string }
   /** Demande de confirmation : les boutons répondent au natif, qui décide de l'action. */

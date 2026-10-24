@@ -117,6 +117,17 @@ export function PresentedContentView({
           <span>{content.message}</span>
         </p>
       );
+    case "draft":
+      return (
+        <div className="draft">
+          {content.recipient && <p className="field-hint">{content.recipient}</p>}
+          <textarea readOnly value={content.text} rows={6} aria-label={content.title} />
+          <p className="field-hint">{content.note}</p>
+          <button type="button" className="chip" onClick={() => void navigator.clipboard?.writeText(content.text)}>
+            {t("draft.copy")}
+          </button>
+        </div>
+      );
     case "news-list":
       return (
         <div className="news-list">

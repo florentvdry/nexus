@@ -29,6 +29,8 @@ import { JournalSection } from "./JournalSection";
 import { MemorySection } from "./MemorySection";
 import { AccessibilitySection } from "./AccessibilitySection";
 import { StartupSection } from "./StartupSection";
+import { AgendaSection } from "./AgendaSection";
+import { readAgendaPath } from "./agendaSettings";
 import { applyLargeText, readLargeText } from "./textScale";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
@@ -101,7 +103,7 @@ export interface AppProps {
 }
 
 export function App({ engine: injectedEngine }: AppProps) {
-  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale() }));
+  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath }));
   const [locale, setLocale] = useState<Locale>(() => engine.locale);
   const [messages, setMessages] = useState<Message[]>([]);
   const [orbState, setOrbState] = useState<OrbState>("idle");
@@ -234,6 +236,9 @@ export function App({ engine: injectedEngine }: AppProps) {
           t={t}
           onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
         />
+        <button type="button" className="chip" onClick={() => void engine.showSchedules()}>
+          {t("schedule.open")}
+        </button>
         {voiceSettings.enabled && (
           <button type="button" className="chip" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
             {t("voice.settings")}
@@ -255,6 +260,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           <MemorySection bridge={answerBridge} locale={locale} t={t} />
           <AccessibilitySection t={t} />
           <StartupSection bridge={answerBridge} t={t} />
+          <AgendaSection t={t} />
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}
