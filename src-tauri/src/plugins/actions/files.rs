@@ -39,7 +39,7 @@ pub struct SearchQuery {
 
 /// Résout un nom de dossier connu vers son emplacement réel, s'il existe.
 pub fn hinted_folder(hint: &str) -> Option<PathBuf> {
-    let folder = match hint {
+    let folder = match folder_alias(hint)? {
         "downloads" => dirs::download_dir(),
         "documents" => dirs::document_dir(),
         "desktop" => dirs::desktop_dir(),
@@ -47,6 +47,30 @@ pub fn hinted_folder(hint: &str) -> Option<PathBuf> {
         _ => None,
     };
     folder.filter(|path| path.is_dir())
+}
+
+/// Nom canonique d'un dossier, en anglais ou en français (sans accents, sans casse) : « bureau » vaut `desktop`.
+pub fn folder_alias(hint: &str) -> Option<&'static str> {
+    let normalized: String = hint
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'é' | 'è' | 'ê' => 'e',
+            'à' | 'â' => 'a',
+            'ô' => 'o',
+            'û' | 'ù' => 'u',
+            'ï' | 'î' => 'i',
+            other => other,
+        })
+        .collect();
+    match normalized.as_str() {
+        "downloads" | "telechargements" | "telechargement" => Some("downloads"),
+        "documents" | "document" => Some("documents"),
+        "desktop" | "bureau" => Some("desktop"),
+        "pictures" | "images" | "image" | "photos" => Some("pictures"),
+        _ => None,
+    }
 }
 
 /// Dossiers utilisateur autorisés : Documents, Téléchargements, Bureau, Images, quand ils existent.
@@ -284,6 +308,14 @@ pub fn apply(plan: &Plan) -> Result<String, AdapterError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn french_folder_names_resolve_to_the_same_folders() {
+        assert_eq!(folder_alias("bureau"), Some("desktop"));
+        assert_eq!(folder_alias("Téléchargements"), Some("downloads"));
+        assert_eq!(folder_alias("Images"), Some("pictures"));
+        assert_eq!(folder_alias("dans le jardin"), None);
+    }
+
     /// Test sur le vrai bureau : envoie un fichier temporaire à la corbeille. Il y reste ensuite, à vider à la main.
     /// `cargo test -- --ignored live_` sur Windows.
     #[cfg(windows)]

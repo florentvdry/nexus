@@ -265,3 +265,12 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Lecture** : un modèle de vision installé sur ce poste (noms reconnus : qwen2.5vl, llava, minicpm-v, moondream, gemma3). Aucun modèle de vision n'est installé sur cette machine : NEXUS l'indique et donne la commande, sans télécharger lui-même.
 - **Limites** : vérifiée par une capture réelle (PNG décodé), mais la réponse du modèle de vision n'a pas été testée faute de modèle. Pas de capture multi-écrans ; l'écran principal seulement.
 - **Écoute permanente (mot de réveil)** : non construite. Elle devra demander ton consentement explicite avant d'être activée ; elle n'est pas en place.
+
+## ADR-040 — Retours de test : noms de dossiers français, réponses vérifiées au premier lancement, fiche de compétences, NVIDIA NIM en option
+
+- **Dossiers** : « bureau », « téléchargements », « documents », « images » (sans accents, sans casse) sont reconnus comme les dossiers anglais. Lecture seule, sans demande d'autorisation supplémentaire.
+- **Premier lancement** : une salutation (« salut », « ok », « oui ») n'est jamais gardée comme prénom ni comme préférence. La question est reposée avec un indice. « passer » ignore une question.
+- **Fiche de compétences** (`src-tauri/src/skills/nexus.md`) : les règles et exemples par intention, lus par le modèle local avec sa consigne. « Tu sais faire quoi ? » donne l'aide, et non l'état du processeur.
+- **Chargement** : l'installation automatique affiche l'orbe et le libellé « Chargement… » dès son démarrage.
+- **NVIDIA NIM (option)** : désactivé par défaut. Quand il est activé avec une clé, les demandes sont envoyées à `integrate.api.nvidia.com` (seul hôte autorisé pour ce service) ; sans clé, en cas d'échec ou de quota dépassé, le modèle local sur ce poste répond. La clé est gardée dans le stockage local du navigateur, en clair ; à déplacer vers le stockage natif chiffré.
+- **Limites** : NIM n'a pas été testé avec une vraie clé (aucune n'est enregistrée). Le nom de modèle par défaut est à vérifier sur le catalogue NVIDIA.

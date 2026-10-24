@@ -218,6 +218,8 @@ export interface NativeBridge {
   batteryStatus(): Promise<{ percent: number; charging: boolean } | null>;
   /** Contenu du fichier d'agenda (.ics) désigné par l'utilisateur, en lecture seule. */
   agendaRead(path: string): Promise<string>;
+  /** NVIDIA NIM (option, clé de l'utilisateur) : même sortie que le modèle local. */
+  nimClassify(key: string, model: string, text: string, context: string[]): Promise<unknown>;
   /** Capture de l'écran principal, en PNG base64. Réservé à une demande confirmée. */
   screenCapture(): Promise<string>;
   /** Question sur une capture, par le modèle de vision choisi (local). */
@@ -442,6 +444,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<string>("vision_ask", { model, question, image });
   }
 
+  nimClassify(key: string, model: string, text: string, context: string[]): Promise<unknown> {
+    return this.#call<unknown>("nim_classify", { key, model, text, context });
+  }
+
   agendaRead(path: string): Promise<string> {
     return this.#call<string>("agenda_read", { path });
   }
@@ -555,6 +561,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();
   agendaRead = () => this.unavailable();
+  nimClassify = () => this.unavailable();
   screenCapture = () => this.unavailable();
   visionAsk = () => this.unavailable();
   startupSet = () => this.unavailable();

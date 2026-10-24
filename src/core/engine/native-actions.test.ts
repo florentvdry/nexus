@@ -147,6 +147,9 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     startupSet: vi.fn(async () => {}),
     batteryStatus: vi.fn(async () => null),
     agendaRead: vi.fn(async () => ""),
+    nimClassify: vi.fn(async () => {
+      throw new Error("NIM indisponible dans les tests");
+    }),
     screenCapture: vi.fn(async () => "AAAA"),
     visionAsk: vi.fn(async () => "Un bouton « Enregistrer »."),
     webPhoto: vi.fn(async () => ({ title: "Macron.jpg", dataUrl: "data:image/jpeg;base64,AAAA", credit: "Simon Dawson", license: "CC BY 2.0", page: "https://commons.wikimedia.org/wiki/File:Macron.jpg" })),

@@ -154,9 +154,11 @@ export function ModelInstaller({ bridge, t, tiers, onFinish, autoStart = false }
     <div className="model-installer">
       <p className="field-hint">{t("install.description")}</p>
 
-      {busy && (
+      {/* Dès que l'installation démarre (ou va démarrer), l'orbe tourne avec le libellé : jamais un écran muet. */}
+      {(busy || (autoStart && phase === "idle")) && (
         <div className="installer-orb" aria-live="polite">
           <Orb state="thinking" />
+          <p className="field-hint" role="status">{t("install.loading")}</p>
         </div>
       )}
 

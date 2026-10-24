@@ -3,28 +3,52 @@ import type { MemoryBridge } from "../memory/memory";
 
 /**
  * Première conversation, juste après l'installation du modèle : NEXUS pose quelques questions pour connaître
- * l'utilisateur (prénom, lieu, activité, ton, longueur des réponses…). Chaque réponse est gardée telle quelle comme
- * souvenir, « Libellé : réponse », et sert ensuite au modèle pour répondre comme l'utilisateur préfère.
+ * l'utilisateur. Chaque réponse est vérifiée : une salutation ou une réponse hors sujet n'est pas gardée, et la
+ * question est reposée avec une indication. Une réponse valide devient un souvenir « Libellé : réponse ».
  * Une question peut être passée ; rien n'est alors gardé pour elle.
  */
+
+type Check = "name" | "place" | "text" | "tone" | "length";
 
 interface Question {
   label: MessageKey;
   ask: MessageKey;
+  hint: MessageKey;
+  check: Check;
 }
 
 /** Questions dans l'ordre. Le nom d'abord, puis le contexte utile, puis la manière de répondre. */
 export const QUESTIONS: readonly Question[] = [
-  { label: "onboarding.label.name", ask: "onboarding.q.name" },
-  { label: "onboarding.label.place", ask: "onboarding.q.place" },
-  { label: "onboarding.label.job", ask: "onboarding.q.job" },
-  { label: "onboarding.label.use", ask: "onboarding.q.use" },
-  { label: "onboarding.label.tone", ask: "onboarding.q.tone" },
-  { label: "onboarding.label.length", ask: "onboarding.q.length" },
-  { label: "onboarding.label.never", ask: "onboarding.q.never" },
+  { label: "onboarding.label.name", ask: "onboarding.q.name", hint: "onboarding.hint.name", check: "name" },
+  { label: "onboarding.label.place", ask: "onboarding.q.place", hint: "onboarding.hint.place", check: "place" },
+  { label: "onboarding.label.job", ask: "onboarding.q.job", hint: "onboarding.hint.text", check: "text" },
+  { label: "onboarding.label.use", ask: "onboarding.q.use", hint: "onboarding.hint.text", check: "text" },
+  { label: "onboarding.label.tone", ask: "onboarding.q.tone", hint: "onboarding.hint.tone", check: "tone" },
+  { label: "onboarding.label.length", ask: "onboarding.q.length", hint: "onboarding.hint.length", check: "length" },
+  { label: "onboarding.label.never", ask: "onboarding.q.never", hint: "onboarding.hint.text", check: "text" },
 ];
 
 const SKIP = /^(?:passer|passe|skip|plus tard)$/i;
+/** Salutations et réponses de politesse : jamais une réponse à une question de profil. */
+const NOT_AN_ANSWER = /^(?:salut|slt|bonjour|bonsoir|bjr|coucou|hello|hi|hey|yo|ok|oui|non|yes|no|merci|d'accord)\b[\s!.?]*$/i;
+
+/** La réponse est-elle utilisable pour cette question ? */
+export function acceptable(check: Check, answer: string): boolean {
+  const text = answer.trim();
+  if (NOT_AN_ANSWER.test(text)) return false;
+  switch (check) {
+    case "name":
+      return /^[\p{L}][\p{L} '’-]{1,39}$/u.test(text);
+    case "place":
+      return text.length >= 2;
+    case "text":
+      return text.length >= 3;
+    case "tone":
+      return /tu|vous|tutoi|vouvoi|informel|formel|familier/i.test(text);
+    case "length":
+      return /court|brev|bref|concis|détaill|detaill|long|complet|précis|precis/i.test(text);
+  }
+}
 
 export interface FirstConversationOptions {
   bridge: MemoryBridge;
@@ -57,15 +81,29 @@ export class FirstConversation {
     if (!this.active) return false;
     const answer = text.trim();
     const question = QUESTIONS[this.#index];
-    this.#index += 1;
-    if (!SKIP.test(answer)) await this.#remember(question, answer);
+    if (SKIP.test(answer)) {
+      this.#advance();
+      return true;
+    }
+    if (!acceptable(question.check, answer)) {
+      // Pas de souvenir pour une réponse inutilisable : on repose la même question, avec une indication.
+      this.#options.say(this.#options.t("onboarding.retry"));
+      this.#options.say(this.#options.t("onboarding.hintLine", { hint: this.#options.t(question.hint) }));
+      this.#options.say(this.#options.t(question.ask));
+      return true;
+    }
+    await this.#remember(question, answer);
+    this.#advance();
+    return true;
+  }
 
+  #advance(): void {
+    this.#index += 1;
     if (this.active) {
       this.#ask();
     } else {
       this.#options.say(this.#options.t("onboarding.done"));
     }
-    return true;
   }
 
   #ask(): void {
@@ -73,7 +111,6 @@ export class FirstConversation {
   }
 
   async #remember(question: Question, answer: string): Promise<void> {
-    if (answer.length === 0) return;
     try {
       await this.#options.bridge.memoryAdd(`${this.#options.t(question.label)} : ${answer}`, "user");
     } catch (error) {

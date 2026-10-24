@@ -7,6 +7,7 @@ pub mod ollama;
 pub mod journal;
 pub mod mcp;
 pub mod memory;
+pub mod nim;
 pub mod permissions;
 pub mod schedule;
 pub mod screen;
@@ -593,6 +594,7 @@ pub fn run() {
             power::battery_status,
             agenda::agenda_read,
             screen::screen_capture,
+            nim::nim_classify,
             vision_ask,
             ollama_status,
             ollama_pull,

@@ -34,6 +34,11 @@ Chaque point : état, et ce qu'il faut pour le faire. « Accord » = ton accord 
 
 Hors périmètre : la reconnaissance faciale de personnes non volontaires et le suivi de leurs déplacements.
 
+## Retours de test (24/10, ADR-040)
+
+- [x] Dossiers français, premier lancement qui refuse les salutations, fiche de compétences, libellé « Chargement ».
+- [~] NVIDIA NIM en option : écrit et testé hors ligne ; reste à tester avec une vraie clé et à déplacer la clé vers le stockage natif chiffré.
+
 ## 1. Modèle de langage local
 
 Le modèle comprend toutes les demandes (ADR-029). Sans modèle prêt, NEXUS le dit et ne devine rien.

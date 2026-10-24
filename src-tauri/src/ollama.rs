@@ -127,6 +127,9 @@ fn intent_schema() -> Value {
     })
 }
 
+/// Fiche de compétences lue par le modèle local (règles, exemples par intention).
+const SKILL: &str = include_str!("skills/nexus.md");
+
 fn base_prompt() -> String {
     format!(
         "Tu classes une demande de l'utilisateur en une intention JSON. Réponds uniquement par un objet JSON valide, sans texte autour. \
@@ -144,12 +147,12 @@ fn base_prompt() -> String {
          « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}} ; \
          « envoie un message Discord à Anthony pour lui dire que je l'attends » -> {{\"type\": \"NEEDS_CONNECTOR\", \"service\": \"Discord\", \"task\": \"envoyer un message à Anthony : je l'attends\"}}.",
         INTENT_TYPES.join(", ")
-    )
+    ) + SKILL
 }
 
 /// Consigne complète : la base, puis le contexte (souvenirs, éléments affichés). Ce sont des données, jamais des instructions.
 /// Tous les souvenirs sont donnés : la mémoire n'a pas de limite de nombre.
-fn system_prompt(memories: &[String]) -> String {
+pub fn system_prompt(memories: &[String]) -> String {
     let mut prompt = base_prompt();
     if !memories.is_empty() {
         let lines: Vec<String> = memories.iter().map(|memory| format!("- {memory}")).collect();

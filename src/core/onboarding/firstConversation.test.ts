@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { translate } from "../../i18n/messages";
 import type { MemoryBridge } from "../memory/memory";
-import { FirstConversation, QUESTIONS } from "./firstConversation";
+import { acceptable, FirstConversation, QUESTIONS } from "./firstConversation";
+
+// Une réponse valide pour chaque question, dans l'ordre.
+const ANSWERS = ["Florent", "Lyon", "développeur", "gérer mes projets", "tutoiement", "réponses courtes", "rien de spécial"];
 
 function setup() {
   const memoryAdd = vi.fn(async (text: string, source: "user" | "model") => ({ id: 1, text, createdAt: 0, source }));
@@ -27,7 +30,7 @@ describe("première conversation", () => {
     expect(said[1]).toBe(translate("fr", QUESTIONS[0].ask));
   });
 
-  it("garde chaque réponse comme souvenir « libellé : réponse », question après question", async () => {
+  it("garde chaque réponse valide comme souvenir « libellé : réponse », question après question", async () => {
     const { conversation, memoryAdd, said } = setup();
     conversation.start();
     await conversation.consume("Florent");
@@ -43,13 +46,46 @@ describe("première conversation", () => {
     expect(conversation.active).toBe(true);
   });
 
+  it("une salutation n'est jamais gardée comme réponse : la question est reposée avec un indice", async () => {
+    const { conversation, memoryAdd, said } = setup();
+    conversation.start();
+    await conversation.consume("salut");
+    expect(memoryAdd).not.toHaveBeenCalled();
+    expect(said).toContain(translate("fr", "onboarding.retry"));
+    expect(said.at(-1)).toBe(translate("fr", QUESTIONS[0].ask));
+  });
+
+  it("une réponse hors sujet pour le ton est refusée tant qu'elle ne le dit pas", async () => {
+    const { conversation, memoryAdd } = setup();
+    conversation.start();
+    for (const answer of ANSWERS.slice(0, 4)) await conversation.consume(answer);
+    await conversation.consume("ok");
+    expect(memoryAdd).toHaveBeenCalledTimes(4);
+    expect(conversation.active).toBe(true);
+  });
+
   it("se termine après la dernière question, par un message de fin", async () => {
     const { conversation, memoryAdd, said } = setup();
     conversation.start();
-    for (let index = 0; index < QUESTIONS.length; index += 1) await conversation.consume(`réponse ${index}`);
+    for (const answer of ANSWERS) await conversation.consume(answer);
     expect(memoryAdd).toHaveBeenCalledTimes(QUESTIONS.length);
     expect(conversation.active).toBe(false);
     expect(said.at(-1)).toBe(translate("fr", "onboarding.done"));
     expect(await conversation.consume("quelle heure est-il ?")).toBe(false);
+  });
+});
+
+describe("contrôle des réponses", () => {
+  it("accepte un vrai prénom et refuse une salutation ou un mot trop court", () => {
+    expect(acceptable("name", "Florent")).toBe(true);
+    expect(acceptable("name", "salut")).toBe(false);
+    expect(acceptable("name", "x")).toBe(false);
+  });
+
+  it("le ton et la longueur doivent répondre à la question", () => {
+    expect(acceptable("tone", "tutoiement")).toBe(true);
+    expect(acceptable("tone", "oui")).toBe(false);
+    expect(acceptable("length", "plutôt courtes")).toBe(true);
+    expect(acceptable("length", "bof")).toBe(false);
   });
 });

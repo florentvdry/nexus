@@ -11,7 +11,7 @@ import type { PluginStatus } from "../plugins/types";
 import type { Intent } from "../intent/types";
 import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
-import { nativeClassifier } from "../language-model/classifier";
+import { fallbackClassifier, nativeClassifier, nimClassifier } from "../language-model/classifier";
 import { readSelectedModel } from "../language-model/selection";
 import { ConnectorFlow } from "../connectors/flow";
 import { MemoryController } from "../memory/memory";
@@ -47,6 +47,8 @@ export interface EngineOptions {
   grantedPermissions?: Permission[];
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
+  /** Clé et modèle NVIDIA NIM, si l'utilisateur les a activés. Sinon null : tout reste sur ce poste. */
+  onlineModel?: () => { key: string; model: string } | null;
   /** Chemin du fichier d'agenda (.ics), ou null. Lu seulement quand l'utilisateur demande son agenda. */
   agendaPath?: () => string | null;
   /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */
@@ -181,7 +183,10 @@ export class Engine {
       t: (key, params) => translate(this.#locale, key, params),
       run: (request) => this.#runScheduled(request),
     });
-    this.#classifier = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext());
+    const local = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext());
+    const online = options.onlineModel ?? (() => null);
+    // NIM d'abord si l'utilisateur l'a activé ; en cas d'échec, le modèle local sur ce poste.
+    this.#classifier = fallbackClassifier(nimClassifier(this.#bridge, online, () => this.classifierContext()), local);
     this.#connectors = new ConnectorFlow({
       bridge: this.#bridge,
       model: () => readSelectedModel(),

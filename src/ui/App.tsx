@@ -31,6 +31,8 @@ import { AccessibilitySection } from "./AccessibilitySection";
 import { StartupSection } from "./StartupSection";
 import { AgendaSection } from "./AgendaSection";
 import { readAgendaPath } from "./agendaSettings";
+import { NimSection } from "./NimSection";
+import { readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { HardwareSection } from "./HardwareSection";
@@ -103,7 +105,7 @@ export interface AppProps {
 }
 
 export function App({ engine: injectedEngine }: AppProps) {
-  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath }));
+  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath, onlineModel: readOnlineModel }));
   const [locale, setLocale] = useState<Locale>(() => engine.locale);
   const [messages, setMessages] = useState<Message[]>([]);
   const [orbState, setOrbState] = useState<OrbState>("idle");
@@ -261,6 +263,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           <AccessibilitySection t={t} />
           <StartupSection bridge={answerBridge} t={t} />
           <AgendaSection t={t} />
+          <NimSection t={t} />
           <JournalSection bridge={answerBridge} locale={locale} t={t} />
         </VoicePanel>
       )}
