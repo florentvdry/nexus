@@ -127,6 +127,13 @@ export function validateModelIntent(raw: unknown): Intent | null {
         ...(prompt !== undefined ? { prompt } : {}),
       };
     }
+    case "NEEDS_CONNECTOR": {
+      // Le modèle nomme le service et reformule la demande ; un connecteur MCP installé la prendra en charge.
+      const service = optionalText(candidate.service, 100);
+      const task = text(candidate.task);
+      if (service === null || task === null) return null;
+      return { type, task, ...(service !== undefined ? { service } : {}) };
+    }
     default:
       return null;
   }

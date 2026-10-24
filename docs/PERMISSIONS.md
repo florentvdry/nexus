@@ -178,3 +178,10 @@ Rien n'est silencieux :
 - Identité de plugin côté natif (voir ci-dessus).
 - Désactivation du microphone et de chaque module.
 - Arrêt immédiat des opérations en cours (l'annulation existe déjà dans le moteur de tâches).
+
+## Connecteurs MCP
+
+- **Installation** : seulement après « oui » à la proposition, qui montre le nom du connecteur, ses étoiles GitHub et son dépôt. Un connecteur absent du registre officiel, ou sans assez d'étoiles, n'est jamais proposé.
+- **Variables** : saisies une à une dans la conversation, puis gardées sur ce poste (fichier `mcp/installed.json` du dossier de données, en clair). L'interface ne les relit jamais.
+- **Appel d'un outil** : toujours précédé d'un récapitulatif (outil et arguments) et d'un « oui ». Un outil hors de la liste du serveur, ou des arguments qui ne sont pas un objet, sont refusés avant tout lancement.
+- **Non couvert** : le courtier de permissions natif ne contrôle pas ces appels (pas de `permission.*` dédiée) ; la confirmation est faite dans la conversation.

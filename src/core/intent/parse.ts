@@ -28,6 +28,7 @@ export type Intent =
   | { type: "PLUGIN_REMOVE"; id: string }
   | { type: "PLUGIN_ACTION"; pluginId: string; command: string; text: string }
   | { type: "AGENT_RUN"; project?: string; prompt?: string }
+  | { type: "NEEDS_CONNECTOR"; service?: string; task: string }
   /** Réponse en langage naturel du modèle, pour ce qui n'est pas une commande (salutation, bavardage). Jamais produite par les règles. */
   | { type: "CHAT"; text: string }
   | { type: "UNKNOWN"; text: string };

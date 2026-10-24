@@ -48,6 +48,7 @@ const INTENT_TYPES: &[&str] = &[
     "PLUGIN_REMOVE",
     "PLUGIN_ACTION",
     "AGENT_RUN",
+    "NEEDS_CONNECTOR",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -98,7 +99,9 @@ fn intent_schema() -> Value {
             "pluginId": { "type": "string" },
             "command": { "type": "string" },
             "text": { "type": "string" },
-            "reply": { "type": "string" }
+            "reply": { "type": "string" },
+            "service": { "type": "string" },
+            "task": { "type": "string" }
         },
         "required": ["type"]
     })
@@ -110,12 +113,14 @@ fn system_prompt() -> String {
          Le champ « type » est l'une de ces valeurs : {}. Si la demande ne correspond à aucune de ces intentions (salutation, question générale, bavardage), réponds {{\"type\": \"UNKNOWN\", \"reply\": \"une réponse courte et aimable, dans la langue de l'utilisateur\"}}. \
          Champs utiles : OPEN_APPLICATION (appName), OSINT_DOMAIN (domain), FILE_RENAME (path, newName), FILE_MOVE (path, toDir), \
          FILE_TRASH (path), FILE_SEARCH (extension, folderHint, withinDays), WINDOW_FOCUS et WINDOW_CLOSE (name), PLUGIN_REMOVE (id), \
-         AGENT_RUN (project, prompt). N'invente jamais de chemin : utilise uniquement ceux de la demande. \
+         AGENT_RUN (project, prompt). NEEDS_CONNECTOR (service, task) : la demande vise un service extérieur que NEXUS ne pilote pas seul \
+         (message Discord, Slack, agenda, etc.) ; service est le nom du service, task la demande reformulée. N'invente jamais de chemin : utilise uniquement ceux de la demande. \
          Exemples : « ouvre le bloc-notes » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"bloc-notes\"}} ; « aide-moi » -> {{\"type\": \"HELP\"}} ; \
          « montre les processus lancés » -> {{\"type\": \"PROCESS_LIST\"}} ; « arrête la recherche en cours » -> {{\"type\": \"CANCEL_TASKS\"}} ; \
          « mets le fichier brouillon.doc à la corbeille » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; \
          « quelle est l'utilisation de la mémoire ? » -> {{\"type\": \"SYSTEM_INFO\"}} ; « renomme photo.jpg en vacances.jpg » -> {{\"type\": \"FILE_RENAME\", \"path\": \"photo.jpg\", \"newName\": \"vacances.jpg\"}} ; \
-         « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}}.",
+         « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}} ; \
+         « envoie un message Discord à Anthony pour lui dire que je l'attends » -> {{\"type\": \"NEEDS_CONNECTOR\", \"service\": \"Discord\", \"task\": \"envoyer un message à Anthony : je l'attends\"}}.",
         INTENT_TYPES.join(", ")
     )
 }
@@ -174,17 +179,26 @@ pub fn parse_tags(text: &str) -> Result<Vec<InstalledModel>, AdapterError> {
 
 /// Demande au modèle une intention JSON pour `text`. Renvoie le JSON brut, à valider ensuite.
 pub fn classify_at(endpoint: &str, model: &str, text: &str) -> Result<Value, AdapterError> {
+    chat_json(endpoint, model, intent_schema(), &system_prompt(), text)
+}
+
+/// Réponse JSON libre du modèle, sans schéma d'intention : sert à choisir un outil parmi ceux d'un connecteur.
+pub fn answer_json_at(endpoint: &str, model: &str, system: &str, user: &str) -> Result<Value, AdapterError> {
+    chat_json(endpoint, model, json!("json"), system, user)
+}
+
+fn chat_json(endpoint: &str, model: &str, format: Value, system: &str, user: &str) -> Result<Value, AdapterError> {
     if !valid_model_name(model) {
         return Err(AdapterError::InvalidTarget("nom de modèle invalide".into()));
     }
     let body = json!({
         "model": model,
         "stream": false,
-        "format": intent_schema(),
+        "format": format,
         "options": { "temperature": 0 },
         "messages": [
-            { "role": "system", "content": system_prompt() },
-            { "role": "user", "content": text }
+            { "role": "system", "content": system },
+            { "role": "user", "content": user }
         ]
     });
     let mut response = agent(None)

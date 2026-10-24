@@ -13,6 +13,7 @@ import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
 import { nativeClassifier } from "../language-model/classifier";
 import { readSelectedModel } from "../language-model/selection";
+import { ConnectorFlow } from "../connectors/flow";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
 import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
@@ -121,6 +122,8 @@ export class Engine {
   readonly #unsubscribeAutoApprovals: () => void;
   /** Modèle local, interrogé seulement quand les règles ne comprennent pas (TODO §1). */
   readonly #classifier: Classifier;
+  /** Connecteurs MCP : installation et appel d'un service extérieur, étape par étape, après accord de l'utilisateur. */
+  readonly #connectors: ConnectorFlow;
   readonly #plugins: PluginStatus[];
   readonly #registry: CapabilityRegistry;
   readonly #tasks: TaskManager;
@@ -134,6 +137,12 @@ export class Engine {
     this.#osint = options.osint ?? createOsintRunner();
     this.#bridge = options.bridge ?? createNativeBridge();
     this.#classifier = nativeClassifier(this.#bridge, readSelectedModel);
+    this.#connectors = new ConnectorFlow({
+      bridge: this.#bridge,
+      model: () => readSelectedModel(),
+      say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
+      t: (key, params) => translate(this.#locale, key, params),
+    });
     this.#unsubscribeConfirmations = this.#bridge.onConfirmationRequest((request) => this.#presentConfirmation(request));
     this.#unsubscribeAutoApprovals = this.#bridge.onAutoApproval((approval) => this.#announceAutomatic(approval));
     this.#locale = options.locale;
@@ -200,7 +209,8 @@ export class Engine {
     await this.refreshPacks();
 
     const reply = replyFor(options.locale ?? this.#locale);
-    this.#emit({ type: "message", role: "user", text, tone: "info", locale: reply.locale });
+    // La valeur d'une variable secrète (jeton) n'est jamais réaffichée dans la conversation.
+    if (!this.#connectors.awaitsSecret) this.#emit({ type: "message", role: "user", text, tone: "info", locale: reply.locale });
     this.#setOrb("thinking");
 
     try {
@@ -215,6 +225,8 @@ export class Engine {
    * les références (« le deuxième », « ferme-le ») avant la compréhension.
    */
   async #handle(text: string, reply: Reply): Promise<void> {
+    // Une étape d'installation de connecteur en attente (oui/non, valeur, confirmation) reçoit la saisie d'abord.
+    if (await this.#connectors.consume(text)) return;
     const pending = this.#conversation.pending();
     if (pending) {
       this.#conversation.clearPending();
@@ -310,6 +322,9 @@ export class Engine {
           return this.#reply(reply, reply.t("agent.needsProject"), "error");
         }
         return this.#runCapability("agent.claude-code", { project: intent.project, prompt: intent.prompt }, { labelKey: "task.agent", labelParams: {} }, reply);
+      case "NEEDS_CONNECTOR":
+        // Le modèle a reconnu un service extérieur : on cherche un connecteur de confiance et on propose de l'installer.
+        return this.#connectors.start(intent.task, intent.service);
       case "UNSUPPORTED":
         return this.#reply(reply, reply.t(intent.reason === "email" ? "intent.emailUnsupported" : "intent.unknown", { text: intent.text }), "error");
       case "CLOSE_WINDOW":

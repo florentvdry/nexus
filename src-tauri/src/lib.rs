@@ -5,6 +5,7 @@ pub mod host;
 pub mod model_download;
 pub mod ollama;
 pub mod journal;
+pub mod mcp;
 pub mod permissions;
 pub mod plugin_store;
 pub mod plugins;
@@ -51,6 +52,16 @@ async fn model_classify(caller: String, text: String, model: String) -> Result<s
         return Err(AdapterError::InvalidTarget("demande vide".into()));
     }
     tauri::async_runtime::spawn_blocking(move || ollama::classify_at(ollama::ENDPOINT, &model, &text))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Réponse JSON libre du modèle local, pour choisir un outil d'un connecteur MCP. Même garde-fous que `model_classify` :
+/// la réponse est renvoyée à l'interface, qui la valide avant tout appel.
+#[tauri::command]
+async fn model_json(caller: String, model: String, system: String, user: String) -> Result<serde_json::Value, AdapterError> {
+    require_core(&caller)?;
+    tauri::async_runtime::spawn_blocking(move || ollama::answer_json_at(ollama::ENDPOINT, &model, &system, &user))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
@@ -533,12 +544,20 @@ pub fn run() {
             app.manage(Runs::default());
             app.manage(JournalStore(open_journal(app)));
             app.manage(PluginStore(open_plugin_store(app)));
+            app.manage(mcp::commands::open_state(app.path().app_data_dir().ok()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             system_info,
             hardware_profile,
             model_classify,
+            model_json,
+            mcp::commands::mcp_search,
+            mcp::commands::mcp_installed,
+            mcp::commands::mcp_install,
+            mcp::commands::mcp_set_value,
+            mcp::commands::mcp_tools,
+            mcp::commands::mcp_call,
             ollama_status,
             ollama_pull,
             ollama_install,

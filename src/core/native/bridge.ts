@@ -6,6 +6,7 @@ import { callNative } from "./tauri-adapter";
 import type { PluginPackData } from "../plugins/packs";
 import type { HardwareProfile } from "../language-model/hardware";
 import type { OllamaStatus, PullProgress } from "../language-model/ollama";
+import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
 
 // Pont vers les fonctions natives de la phase 4. Chaque appel passe par le courtier de permissions côté Rust :
 // l'interface ne peut pas contourner une confirmation.
@@ -188,6 +189,15 @@ export interface NativeBridge {
   pullModel(model: string, onProgress: (progress: PullProgress) => void): Promise<void>;
   /** Installe Ollama via winget, après accord. `onStage` reçoit « installing », « starting » puis « ready ». */
   installOllama(onStage: (stage: string) => void): Promise<void>;
+  /** Réponse JSON libre du modèle local, pour choisir un outil de connecteur. Validée ensuite par l'interface. */
+  modelJson(model: string, system: string, user: string): Promise<unknown>;
+  /** Connecteurs MCP : recherche dans le catalogue de confiance, installation et variables, outils et appels. */
+  mcpSearch(query: string): Promise<ConnectorCandidate[]>;
+  mcpInstalled(): Promise<InstalledConnector[]>;
+  mcpInstall(id: string): Promise<InstalledConnector>;
+  mcpSetValue(id: string, name: string, value: string): Promise<void>;
+  mcpTools(id: string): Promise<McpTool[]>;
+  mcpCall(id: string, tool: string, args: Record<string, unknown>): Promise<string>;
 }
 
 /** Identité de l'interface principale : elle ne peut que répondre aux confirmations. */
@@ -340,6 +350,34 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<unknown>("model_classify", { text, model });
   }
 
+  modelJson(model: string, system: string, user: string): Promise<unknown> {
+    return this.#call<unknown>("model_json", { model, system, user });
+  }
+
+  mcpSearch(query: string): Promise<ConnectorCandidate[]> {
+    return this.#call<ConnectorCandidate[]>("mcp_search", { query });
+  }
+
+  mcpInstalled(): Promise<InstalledConnector[]> {
+    return this.#call<InstalledConnector[]>("mcp_installed");
+  }
+
+  mcpInstall(id: string): Promise<InstalledConnector> {
+    return this.#call<InstalledConnector>("mcp_install", { id });
+  }
+
+  mcpSetValue(id: string, name: string, value: string): Promise<void> {
+    return this.#call<void>("mcp_set_value", { id, name, value });
+  }
+
+  mcpTools(id: string): Promise<McpTool[]> {
+    return this.#call<McpTool[]>("mcp_tools", { id });
+  }
+
+  mcpCall(id: string, tool: string, args: Record<string, unknown>): Promise<string> {
+    return this.#call<string>("mcp_call", { id, tool, arguments: args });
+  }
+
   ollamaStatus(): Promise<OllamaStatus> {
     return this.#call<OllamaStatus>("ollama_status");
   }
@@ -398,6 +436,13 @@ export class UnavailableNativeBridge implements NativeBridge {
   listAudit = () => this.unavailable();
   hardwareProfile = () => this.unavailable();
   classifyIntent = () => this.unavailable();
+  modelJson = () => this.unavailable();
+  mcpSearch = () => this.unavailable();
+  mcpInstalled = () => this.unavailable();
+  mcpInstall = () => this.unavailable();
+  mcpSetValue = () => this.unavailable();
+  mcpTools = () => this.unavailable();
+  mcpCall = () => this.unavailable();
   ollamaStatus = () => this.unavailable();
   pullModel = () => this.unavailable();
   installOllama = () => this.unavailable();

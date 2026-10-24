@@ -49,6 +49,15 @@ describe("validation de la sortie du modèle", () => {
     expect(validateModelIntent({ type: "FILE_SEARCH", withinDays: 7 })).toEqual({ type: "FILE_SEARCH", withinDays: 7 });
   });
 
+  it("accepte une demande de connecteur avec un service optionnel, et refuse une demande sans tâche", () => {
+    expect(validateModelIntent({ type: "NEEDS_CONNECTOR", service: "Discord", task: "message à Anthony" })).toEqual({
+      type: "NEEDS_CONNECTOR",
+      service: "Discord",
+      task: "message à Anthony",
+    });
+    expect(validateModelIntent({ type: "NEEDS_CONNECTOR", service: "Discord" })).toBeNull();
+  });
+
   it("refuse une valeur qui n'est pas du texte", () => {
     expect(validateModelIntent({ type: "OPEN_APPLICATION", appName: 42 })).toBeNull();
     expect(validateModelIntent("OPEN_APPLICATION")).toBeNull();

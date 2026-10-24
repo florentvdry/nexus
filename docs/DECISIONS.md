@@ -167,3 +167,14 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Garanties** : la réponse est contrainte par un schéma (intentions connues ou `UNKNOWN`), validée avant usage, et jamais exécutée telle quelle. Sans modèle choisi, ou si Ollama ne répond pas, NEXUS reste sur les règles.
 - **Conséquences** : `model_download.rs` n'est plus utilisé par le parcours (Ollama gère les téléchargements). La grammaire GBNF de `grammar.ts` est remplacée par le schéma imposé à Ollama.
 - **Limites** : la première demande charge le modèle en mémoire et peut dépasser le délai de 3 s : la réponse arrive alors après le repli sur les règles. Les modèles candidats doivent être revérifiés à chaque nouvelle version.
+
+## ADR-027 — Connecteurs MCP : un seul catalogue de confiance, installation après accord
+
+- **Choix** : quand le modèle local reconnaît un service extérieur (`NEEDS_CONNECTOR`, p. ex. « envoie un message Discord »), NEXUS cherche un serveur MCP dans le **registre officiel** (`registry.modelcontextprotocol.io`), seule source. Seuls les paquets **npm lancés en stdio** sont proposés, et seulement si leur dépôt GitHub a au moins 50 étoiles (`MIN_STARS`). Les 5 meilleurs sont classés par étoiles.
+- **Pourquoi un seul site** : le registre officiel est celui du protocole ; Smithery a été écarté comme source d'installation (ses serveurs sont hébergés à distance, avec leur propre clé) et son compteur d'utilisations ne suffit pas à juger un code. Aucune recherche sur le reste du web.
+- **Garanties** :
+  - Une installation ne peut viser qu'un identifiant trouvé par la dernière recherche (`Catalog::get`).
+  - Un serveur n'est lancé qu'après « oui » de l'utilisateur (proposition, puis confirmation de chaque appel d'outil) ; l'outil choisi par le modèle doit exister dans la liste du serveur, ses arguments sont un objet.
+  - Le nom du paquet et la version sont validés avant tout lancement ; `npx` ne reçoit que `paquet@version`.
+  - Les variables (jetons) ne sont jamais réaffichées dans la conversation ni renvoyées à l'interface.
+- **Limites connues** : le paquet npm s'exécute avec les droits de l'utilisateur, une fois accepté : la popularité ne vaut pas audit. Les valeurs des variables sont gardées **en clair** dans `mcp/installed.json` (le chiffrement DPAPI reste à faire). Node.js doit être présent. Aucun délai sur l'appel d'outil : un connecteur bloqué peut bloquer la tâche jusqu'à arrêt de NEXUS.

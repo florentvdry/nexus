@@ -27,6 +27,7 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "PLUGIN_REMOVE",
   "PLUGIN_ACTION",
   "AGENT_RUN",
+  "NEEDS_CONNECTOR",
 ];
 
 /**

@@ -4,6 +4,12 @@ import { NativeCallError, type NativeAdapter } from "../native/adapter";
 import type { AgentEvent, AutoApproval, ConfirmationRequest, NativeBridge } from "../native/bridge";
 import { createEngine, type EngineEvent } from "./engine";
 
+// Modèle choisi simulé : le moteur interroge alors le pont (qui répond ou échoue, selon le test).
+vi.mock("../language-model/selection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../language-model/selection")>()),
+  readSelectedModel: () => "qwen2.5:7b",
+}));
+
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
 function fakeBridge(overrides: Partial<NativeBridge> = {}) {
   const agentListeners = new Set<(runId: string, event: AgentEvent) => void>();
@@ -83,6 +89,17 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     ollamaStatus: vi.fn(async () => ({ reachable: false, models: [] })),
     pullModel: vi.fn(async () => {}),
     installOllama: vi.fn(async () => {}),
+    modelJson: vi.fn(async () => {
+      throw new Error("modèle non installé");
+    }),
+    mcpSearch: vi.fn(async () => []),
+    mcpInstalled: vi.fn(async () => []),
+    mcpInstall: vi.fn(async () => {
+      throw new Error("connecteur inconnu");
+    }),
+    mcpSetValue: vi.fn(async () => {}),
+    mcpTools: vi.fn(async () => []),
+    mcpCall: vi.fn(async () => ""),
     onAutoApproval: (listener) => {
       autoApprovalListeners.add(listener);
       return () => autoApprovalListeners.delete(listener);
@@ -492,5 +509,31 @@ describe("salutations : une réponse aimable, jamais une erreur", () => {
     const { engine, events } = setup(fakeBridge());
     await engine.submit("xyzzy plugh");
     expect(assistant(events).some((text) => text.includes("Je n'ai pas compris"))).toBe(true);
+  });
+});
+
+describe("connecteurs MCP : une demande hors des capacités propose un connecteur", () => {
+  it("le modèle reconnaît un service extérieur ; NEXUS cherche, propose, et n'installe rien sans « oui »", async () => {
+    const mcpSearch = vi.fn(async () => [
+      {
+        id: "app.example/discord",
+        title: "discord",
+        description: "Discord",
+        repository: "https://github.com/acme/discord-mcp",
+        stars: 120,
+        package: "@acme/discord-mcp",
+        version: "1.2.0",
+        env: [],
+      },
+    ]);
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "NEEDS_CONNECTOR", service: "Discord", task: "envoyer un message à Anthony" })),
+      mcpSearch,
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("envoie un message Discord à Anthony pour lui dire que je l'attends");
+    expect(mcpSearch).toHaveBeenCalledWith("Discord");
+    expect(assistant(events).some((text) => text.includes("discord") && text.includes("120"))).toBe(true);
+    expect(bridge.mcpInstall).not.toHaveBeenCalled();
   });
 });
