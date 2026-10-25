@@ -184,14 +184,88 @@ pub fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// Résolution DNS qui ne garde que les adresses publiques. Elle s'applique à chaque connexion, donc aussi à chaque
+/// redirection : un nom qui pointe vers une adresse locale ou privée est refusé, et seules les adresses retenues ici
+/// sont utilisées pour se connecter (pas de seconde résolution, donc pas de rebinding entre contrôle et connexion).
+#[derive(Debug)]
+struct PublicResolver;
+
+impl ureq::unversioned::resolver::Resolver for PublicResolver {
+    fn resolve(
+        &self,
+        uri: &ureq::http::Uri,
+        config: &ureq::config::Config,
+        timeout: ureq::unversioned::transport::NextTimeout,
+    ) -> Result<ureq::unversioned::resolver::ResolvedSocketAddrs, ureq::Error> {
+        let found = ureq::unversioned::resolver::DefaultResolver::default().resolve(uri, config, timeout)?;
+        let addresses: Vec<std::net::SocketAddr> = found.iter().copied().collect();
+        public_addresses(&addresses).ok_or_else(|| ureq::Error::Io(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "adresse non publique refusée")))
+    }
+}
+
+/// Adresses publiques parmi celles qu'un nom a donné, ou `None` si aucune ne l'est.
+fn public_addresses(found: &[std::net::SocketAddr]) -> Option<ureq::unversioned::resolver::ResolvedSocketAddrs> {
+    let placeholder = std::net::SocketAddr::from(([0, 0, 0, 0], 0));
+    let mut public = ureq::unversioned::resolver::ResolvedSocketAddrs::from_fn(|_| placeholder);
+    for address in found.iter().filter(|address| is_public_ip(address.ip())) {
+        let _ = public.try_push(*address);
+    }
+    (!public.is_empty()).then_some(public)
+}
+
+/// Vrai pour une adresse routable sur Internet. Les adresses IPv4 mappées en IPv6 sont jugées comme IPv4 ; les
+/// préfixes de transition (6to4, NAT64) sont refusés par prudence, car ils peuvent embarquer une adresse privée.
+pub fn is_public_ip(address: std::net::IpAddr) -> bool {
+    match address {
+        std::net::IpAddr::V4(v4) => is_public_v4(v4),
+        std::net::IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => is_public_v4(v4),
+            None => is_public_v6(v6),
+        },
+    }
+}
+
+fn is_public_v4(address: std::net::Ipv4Addr) -> bool {
+    let [first, second, third, _] = address.octets();
+    !(address.is_private()
+        || address.is_loopback()
+        || address.is_link_local()
+        || address.is_unspecified()
+        || address.is_broadcast()
+        || address.is_multicast()
+        || address.is_documentation()
+        || first == 0
+        || (first == 100 && (second & 0xc0) == 64) // 100.64.0.0/10, partage d'adresse opérateur
+        || (first == 192 && second == 0 && third == 0) // 192.0.0.0/24, affectations IETF
+        || (first == 198 && (second & 0xfe) == 18) // 198.18.0.0/15, tests de performance
+        || first >= 240) // 240.0.0.0/4, réservé
+}
+
+fn is_public_v6(address: std::net::Ipv6Addr) -> bool {
+    let segments = address.segments();
+    let first = segments[0];
+    let unicast_prefix_zero = segments[..6].iter().all(|segment| *segment == 0); // ::/96, dont ::1
+    !(address.is_loopback()
+        || address.is_unspecified()
+        || address.is_multicast()
+        || unicast_prefix_zero
+        || (first & 0xfe00) == 0xfc00 // fc00::/7, adresses locales uniques
+        || (first & 0xffc0) == 0xfe80 // fe80::/10, lien local
+        || (first & 0xffc0) == 0xfec0 // fec0::/10, site local (obsolète)
+        || (first == 0x2001 && segments[1] == 0x0db8) // 2001:db8::/32, documentation
+        || first == 0x2002 // 2002::/16, 6to4
+        || (first == 0x0064 && segments[1] == 0xff9b)) // 64:ff9b::/96, NAT64
+}
+
+/// Agent HTTP : une seule adresse publique par connexion, pas de proxy (il résoudrait la cible à sa place).
 fn agent() -> ureq::Agent {
-    ureq::Agent::new_with_config(
-        ureq::Agent::config_builder()
-            .timeout_global(Some(NETWORK_TIMEOUT))
-            .http_status_as_error(false)
-            .user_agent(USER_AGENT)
-            .build(),
-    )
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(NETWORK_TIMEOUT))
+        .http_status_as_error(false)
+        .user_agent(USER_AGENT)
+        .proxy(None)
+        .build();
+    ureq::Agent::with_parts(config, ureq::unversioned::transport::DefaultConnector::new(), PublicResolver)
 }
 
 /// Corps d'une réponse, borné. Un statut autre que 200 est une erreur, sauf pour le 404 que l'appelant traite.
@@ -474,7 +548,7 @@ pub fn search_at(endpoint: &str, question: &str) -> Result<Vec<SearchHit>, Adapt
 }
 
 /// Adresse acceptable pour la lecture : http(s), sans identifiants ni port, hors machines locales et réseaux privés.
-/// La vérification porte sur l'adresse écrite : une redirection vers une adresse privée n'est pas suivie par ce contrôle.
+/// Contrôle sur le texte seulement : la destination réelle (nom résolu, redirections) est filtrée par `PublicResolver`.
 pub fn public_url(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")) else {
         return false;
@@ -581,6 +655,44 @@ mod tests {
         assert!(!public_url("http://127.0.0.1:8080/"));
         assert!(!public_url("https://user@example.org/"));
         assert!(!public_url("https://example.org:8443/"));
+    }
+
+    #[test]
+    fn private_loopback_and_reserved_addresses_are_not_public() {
+        use std::net::IpAddr;
+        for address in ["10.1.2.3", "172.16.0.9", "192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "198.18.0.1", "0.0.0.0", "240.0.0.1", "224.0.0.1"] {
+            assert!(!is_public_ip(address.parse::<IpAddr>().unwrap()), "{address} doit être refusée");
+        }
+        for address in ["::1", "::", "fe80::1", "fc00::1", "fd12:3456::1", "ff02::1", "2002:c0a8:101::1", "64:ff9b::808:808"] {
+            assert!(!is_public_ip(address.parse::<IpAddr>().unwrap()), "{address} doit être refusée");
+        }
+        for address in ["::ffff:10.0.0.5", "::ffff:127.0.0.1", "::ffff:169.254.169.254"] {
+            assert!(!is_public_ip(address.parse::<IpAddr>().unwrap()), "IPv4 mappée {address} doit être refusée");
+        }
+        for address in ["8.8.8.8", "1.1.1.1", "151.101.1.140", "2606:4700:4700::1111", "2001:4860:4860::8888", "::ffff:8.8.8.8"] {
+            assert!(is_public_ip(address.parse::<IpAddr>().unwrap()), "{address} doit être acceptée");
+        }
+    }
+
+    #[test]
+    fn a_name_that_resolves_to_a_private_address_is_refused_before_connecting() {
+        // Le nom « localhost » est une adresse locale : la connexion doit être refusée sans jamais atteindre le port.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let error = fetch(&format!("http://localhost:{port}/page"), 1024).unwrap_err();
+        assert!(error.to_string().contains("non publique"), "refus attendu par le résolveur : {error}");
+        assert!(listener.accept().is_err(), "aucune connexion ne doit atteindre une adresse privée");
+    }
+
+    #[test]
+    fn the_public_addresses_of_a_name_are_kept_and_private_ones_dropped() {
+        use std::net::SocketAddr;
+        let found: Vec<SocketAddr> = ["10.0.0.4:443", "8.8.4.4:443", "127.0.0.1:443"].iter().map(|a| a.parse().unwrap()).collect();
+        let kept: Vec<SocketAddr> = public_addresses(&found).unwrap().iter().copied().collect();
+        assert_eq!(kept, vec!["8.8.4.4:443".parse::<SocketAddr>().unwrap()]);
+        let only_private: Vec<SocketAddr> = vec!["192.168.0.1:80".parse().unwrap()];
+        assert!(public_addresses(&only_private).is_none());
     }
 
     #[test]
