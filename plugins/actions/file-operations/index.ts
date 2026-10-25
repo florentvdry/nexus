@@ -7,7 +7,7 @@ export const FILE_OPERATIONS_MANIFEST: CapabilityManifest = {
   id: "files.operate",
   name: "Opérations sur fichiers",
   version: "1.0.0",
-  description: "Renommer, déplacer, copier et envoyer à la corbeille. Chaque action est confirmée par le natif avant exécution.",
+  description: "Renommer, déplacer, copier, envoyer à la corbeille et annuler la dernière action. Chaque action est confirmée par le natif avant exécution.",
   categories: ["files"],
   inputs: ["kind", "from", "newName", "toDir", "path"],
   outputs: ["path"],
@@ -31,6 +31,8 @@ function operationFrom(input: Record<string, string>): FileOperation {
       return { kind: "copy", from: input.from ?? "", toDir: input.toDir ?? "" };
     case "trash":
       return { kind: "trash", path: input.path ?? "" };
+    case "undo":
+      return { kind: "undo" };
     default:
       throw new CapabilityError("invalid-path", { details: input.kind ?? "opération inconnue" });
   }

@@ -7,7 +7,7 @@ import { recordCall } from "../diagnostics/metrics";
 import type { PluginPackData } from "../plugins/packs";
 import type { HardwareProfile } from "../language-model/hardware";
 import type { OllamaStatus, PullProgress } from "../language-model/ollama";
-import type { ConnectorCandidate, InstalledConnector, McpTool } from "../connectors/types";
+import type { ConnectorCandidate, ConnectorScope, InstalledConnector, McpTool } from "../connectors/types";
 import type { Memory } from "../memory/types";
 import type { ScheduledTask } from "../schedule/controller";
 import type { WebNewsItem, WebPage, WebPhoto, WebSearchHit, WebSummary } from "../web/types";
@@ -43,7 +43,9 @@ export type FileOperation =
   | { kind: "rename"; from: string; newName: string }
   | { kind: "move"; from: string; toDir: string }
   | { kind: "copy"; from: string; toDir: string }
-  | { kind: "trash"; path: string };
+  | { kind: "trash"; path: string }
+  /** Défait la dernière action réussie (natif : même aperçu et même confirmation). */
+  | { kind: "undo" };
 
 export interface AgentDetection {
   path: string | null;
@@ -268,6 +270,8 @@ export interface NativeBridge {
   mcpInstalled(): Promise<InstalledConnector[]>;
   mcpInstall(id: string): Promise<InstalledConnector>;
   mcpSetValue(id: string, name: string, value: string): Promise<void>;
+  /** Modifie les accès d'un connecteur : le courtier natif confirme avant toute écriture. */
+  mcpSetScopes(id: string, scopes: ConnectorScope[]): Promise<InstalledConnector>;
   mcpTools(id: string): Promise<McpTool[]>;
   mcpCall(id: string, tool: string, args: Record<string, unknown>): Promise<string>;
 }
@@ -565,6 +569,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<InstalledConnector[]>("mcp_installed");
   }
 
+  mcpSetScopes(id: string, scopes: ConnectorScope[]): Promise<InstalledConnector> {
+    return this.#call<InstalledConnector>("mcp_set_scopes", { id, scopes });
+  }
+
   mcpInstall(id: string): Promise<InstalledConnector> {
     return this.#call<InstalledConnector>("mcp_install", { id });
   }
@@ -673,6 +681,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   modelJson = () => this.unavailable();
   mcpSearch = () => this.unavailable();
   mcpInstalled = () => this.unavailable();
+  mcpSetScopes = () => this.unavailable();
   mcpInstall = () => this.unavailable();
   mcpSetValue = () => this.unavailable();
   mcpTools = () => this.unavailable();

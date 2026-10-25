@@ -17,6 +17,7 @@ import { buildContext, CONTEXT_SHARES, type ContextShare } from "../language-mod
 import { ConnectorFlow } from "../connectors/flow";
 import { ASK_PAGES, ASK_SYSTEM, parseWebAnswer, webSources } from "../web/ask";
 import { MemoryController } from "../memory/memory";
+import { MEMORY_CONTEXT_LIMIT } from "../memory/relevance";
 import { ScheduleController, type ScheduledTask } from "../schedule/controller";
 import { describeRecurrence } from "../schedule/recurrence";
 import { RoutineDetector, type RoutineProposal, type RoutineStorage } from "../routines/detector";
@@ -162,10 +163,10 @@ export class Engine {
       t: (key, params) => translate(this.#locale, key, params),
       run: (request) => this.#runScheduled(request),
     });
-    const local = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext(new Set(CONTEXT_SHARES)));
+    const local = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, (query) => this.classifierContext(new Set(CONTEXT_SHARES), query));
     const online = options.onlineModel ?? (() => null);
     // NIM d'abord si l'utilisateur l'a activé, avec seulement les catégories qu'il a cochées ; sinon, le modèle local.
-    const onlineContext = () => this.classifierContext(new Set(online()?.share ?? []));
+    const onlineContext = (query: string) => this.classifierContext(new Set(online()?.share ?? []), query);
     this.#classifier = fallbackClassifier(nimClassifier(this.#bridge, online, onlineContext), local);
     this.#connectors = new ConnectorFlow({
       bridge: this.#bridge,
@@ -353,7 +354,7 @@ export class Engine {
    * d'afficher (« ferme le deuxième »). Ce sont des données, jamais des instructions.
    */
   /** Contexte de la classification : seules les catégories demandées sont incluses (le modèle local demande tout). */
-  async classifierContext(share: ReadonlySet<ContextShare>): Promise<string[]> {
+  async classifierContext(share: ReadonlySet<ContextShare>, query: string): Promise<string[]> {
     const shown = this.#conversation.referents();
     const now = new Date();
     const commands = pluginCommandsForModel();
@@ -362,7 +363,7 @@ export class Engine {
     return buildContext(
       {
         conversation: this.#recentConversation(),
-        memories: share.has("memories") ? await this.#memory.texts() : [],
+        memories: share.has("memories") ? await this.#memory.relevantTexts(query, MEMORY_CONTEXT_LIMIT) : [],
         shown:
           shown.length > 0
             ? `Éléments affichés à l'utilisateur : ${shown.map((referent, index) => `${index + 1}) ${referent.label} (${referent.value})`).join(" · ")}`
@@ -430,6 +431,8 @@ export class Engine {
         return this.#runCapability("files.operate", { kind: "move", from: intent.path, toDir: intent.toDir }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
       case "FILE_TRASH":
         return this.#runCapability("files.operate", { kind: "trash", path: intent.path }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
+      case "FILE_UNDO":
+        return this.#runCapability("files.operate", { kind: "undo" }, { labelKey: "task.fileUndo" }, reply);
       case "PROCESS_LIST":
         return this.#runCapability("system.processes", { limit: "8" }, { labelKey: "task.processes" }, reply);
       case "PLUGIN_CATALOG":

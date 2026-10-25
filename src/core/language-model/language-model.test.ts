@@ -74,6 +74,21 @@ describe("niveaux selon la machine", () => {
     expect(candidateTiers(machine({ memoryGiB: 16, cores: 8, avx2: true }))).toEqual(["precise", "balanced", "light"]);
     expect(candidateTiers(machine({ memoryGiB: 16, cores: 4, avx2: true }))).toEqual(["balanced", "light"]);
   });
+
+  it("n'impose pas le niveau précis sur une carte de 8 Go : il déborderait dans la mémoire vive", () => {
+    const card = { name: "NVIDIA GeForce RTX 4060", vramGiB: 8 };
+    expect(candidateTiers(machine({ memoryGiB: 32, cores: 16, gpu: card }))).toEqual(["balanced", "light"]);
+  });
+
+  it("garde le niveau précis quand la carte le fait tenir en entier", () => {
+    const card = { name: "NVIDIA GeForce RTX 4090", vramGiB: 24 };
+    expect(candidateTiers(machine({ memoryGiB: 32, cores: 4, avx2: false, gpu: card }))).toEqual(["precise", "balanced", "light"]);
+  });
+
+  it("ne compte pas une carte intégrée (moins de 4 Go) : le processeur décide", () => {
+    const integrated = { name: "Intel UHD Graphics", vramGiB: 0 };
+    expect(candidateTiers(machine({ memoryGiB: 16, cores: 8, avx2: true, gpu: integrated }))).toEqual(["precise", "balanced", "light"]);
+  });
 });
 
 describe("choix du niveau", () => {

@@ -1,6 +1,9 @@
 import type { NativeBridge } from "../native/bridge";
 import type { Classifier } from "./benchmark";
 
+/** Souvenirs donnés au modèle pour une demande : seuls ceux qui s'y rapportent, dans une limite fixe. */
+export type MemoriesFor = (query: string) => Promise<string[]>;
+
 /**
  * Classifieur fourni par Ollama, via le pont natif. Le modèle est lu au moment de chaque demande : un changement de
  * choix dans les réglages prend effet tout de suite. Les souvenirs de l'utilisateur accompagnent la demande, pour
@@ -24,26 +27,22 @@ export function fallbackClassifier(primary: Classifier, fallback: Classifier): C
  * Classifieur NVIDIA NIM, si l'utilisateur l'a activé. La clé n'est pas dans l'interface : le natif la lit depuis son
  * stockage chiffré et rejette la demande si elle n'y est pas. Dans les deux cas, le repli prend le relais.
  */
-export function nimClassifier(bridge: NativeBridge, online: () => { model: string } | null, memories: () => Promise<string[]>): Classifier {
+export function nimClassifier(bridge: NativeBridge, online: () => { model: string } | null, memories: MemoriesFor): Classifier {
   return {
     classify: async (text: string) => {
       const config = online();
       if (!config) throw new Error("NVIDIA NIM non activé");
-      return bridge.nimClassify(config.model, text, await memories());
+      return bridge.nimClassify(config.model, text, await memories(text));
     },
   };
 }
 
-export function nativeClassifier(
-  bridge: NativeBridge,
-  selectedModel: () => string | null,
-  memories: () => Promise<string[]> = async () => [],
-): Classifier {
+export function nativeClassifier(bridge: NativeBridge, selectedModel: () => string | null, memories: MemoriesFor = async () => []): Classifier {
   return {
     classify: async (text: string) => {
       const model = selectedModel();
       if (!model) throw new Error("aucun modèle choisi");
-      return bridge.classifyIntent(text, model, await memories());
+      return bridge.classifyIntent(text, model, await memories(text));
     },
   };
 }

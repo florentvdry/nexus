@@ -4,6 +4,7 @@ pub mod hardware;
 pub mod host;
 pub mod model_download;
 pub mod ollama;
+pub mod audit;
 pub mod journal;
 pub mod mcp;
 pub mod secrets;
@@ -20,6 +21,8 @@ pub mod web;
 pub mod voice_tts;
 pub mod plugin_store;
 pub mod plugins;
+#[cfg(test)]
+mod comprehension_bench;
 
 use std::path::PathBuf;
 
@@ -203,18 +206,53 @@ async fn files_read(webview: tauri::Webview, path: String) -> Result<tauri::ipc:
 }
 
 /// Opération sur un fichier : aperçu, confirmation par le courtier, puis exécution. Rien n'est modifié sans accord.
+/// `Undo` défait la dernière action réussie : il passe par le même aperçu et la même confirmation, avec la permission
+/// de l'opération inverse (une restauration depuis la corbeille reste une écriture ; défaire une copie suppose une suppression).
+/// Chaque demande, confirmée ou refusée, laisse une empreinte dans le journal d'audit (`audit.rs`).
 #[tauri::command]
-async fn files_operate(app: AppHandle, broker: State<'_, Broker>, operation: Operation) -> Result<String, AdapterError> {
+async fn files_operate(app: AppHandle, broker: State<'_, Broker>, last: State<'_, files::LastAction>, operation: Operation) -> Result<String, AdapterError> {
     let broker = broker.inner().clone_handle();
-    let permission = if operation.is_deletion() { Permission::FileDelete } else { Permission::FileWrite };
+    let last = last.inner().clone();
+    let undo = operation == Operation::Undo;
+    let reversal = if undo {
+        Some(last.get().ok_or_else(|| AdapterError::Operation("rien à annuler : aucune action de fichier réussie depuis l'ouverture de NEXUS".into()))?)
+    } else {
+        None
+    };
+    let deletes = match &reversal {
+        Some(files::Reversal::Trash { .. }) => true,
+        Some(_) => false,
+        None => operation.is_deletion(),
+    };
+    let permission = if deletes { Permission::FileDelete } else { Permission::FileWrite };
     require(grants::FILE_OPERATIONS, permission)?;
     let roots = files::allowed_roots();
+    let data_dir = app.path().app_data_dir().ok();
+    let action = if undo { "files.undo" } else { "files.operate" };
     tauri::async_runtime::spawn_blocking(move || {
-        let plan = files::plan(operation, &roots)?;
+        let plan = match &reversal {
+            Some(reversal) => files::plan_reversal(reversal, &roots)?,
+            None => files::plan(operation, &roots)?,
+        };
         let mut rows: Vec<Row> = plan.rows.iter().map(|(key, value)| Row { key: key.clone(), value: value.clone() }).collect();
         rows.push(Row { key: "requester".into(), value: grants::FILE_OPERATIONS.into() });
-        permissions::confirm(&app, &broker, permission, &rows)?;
-        files::apply(&plan, &roots)
+        let fingerprint = audit::fingerprint(rows.iter().map(|row| (row.key.as_str(), row.value.as_str())));
+        if let Err(error) = permissions::confirm(&app, &broker, permission, &rows) {
+            audit::record(data_dir.as_deref(), action, &fingerprint, "refused");
+            return Err(error);
+        }
+        audit::record(data_dir.as_deref(), action, &fingerprint, "confirmed");
+        match files::apply(&plan, &roots) {
+            Ok(path) => {
+                last.set(if undo { None } else { files::reversal_of(&plan) });
+                audit::record(data_dir.as_deref(), action, &fingerprint, "done");
+                Ok(path)
+            }
+            Err(error) => {
+                audit::record(data_dir.as_deref(), action, &fingerprint, "failed");
+                Err(error)
+            }
+        }
     })
     .await
     .map_err(blocking_failed)?
@@ -614,6 +652,7 @@ pub fn run() {
             app.manage(Runs::default());
             app.manage(JournalStore(open_journal(app)));
             app.manage(PluginStore(open_plugin_store(app)));
+            app.manage(files::LastAction::default());
             app.manage(mcp::commands::open_state(app.path().app_data_dir().ok()));
             app.manage(nim::KeyStore::open(app.path().app_data_dir().ok()));
             resilience::configure(app.path().app_data_dir().ok());

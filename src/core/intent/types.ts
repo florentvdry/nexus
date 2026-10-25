@@ -19,6 +19,7 @@ export type Intent =
   | { type: "FILE_RENAME"; path: string; newName: string }
   | { type: "FILE_MOVE"; path: string; toDir: string }
   | { type: "FILE_TRASH"; path: string }
+  | { type: "FILE_UNDO" }
   | { type: "PROCESS_LIST" }
   | { type: "WINDOW_LIST" }
   | { type: "WINDOW_FOCUS"; name: string }

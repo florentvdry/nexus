@@ -26,6 +26,7 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "affiche C:/Users/ana/Documents/rapport.pdf": { type: "FILE_VIEW", path: "C:/Users/ana/Documents/rapport.pdf" },
   "Quelles applications sont ouvertes ?": { type: "PROCESS_LIST" },
   "supprime /home/ana/Documents/vieux.txt": { type: "FILE_TRASH", path: "/home/ana/Documents/vieux.txt" },
+  "annule la dernière action": { type: "FILE_UNDO" },
   "lance Claude Code dans /home/ana/projet : liste les fichiers": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "liste les fichiers" },
   "lance Claude Code dans /home/ana/projet : fais un test": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "fais un test" },
   "lance Claude Code dans /home/ana/projet : tâche longue": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "tâche longue" },
@@ -127,6 +128,9 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     }),
     mcpSearch: vi.fn(async () => []),
     mcpInstalled: vi.fn(async () => []),
+    mcpSetScopes: vi.fn(async () => {
+      throw new Error("aucun connecteur");
+    }),
     mcpInstall: vi.fn(async () => {
       throw new Error("connecteur inconnu");
     }),
@@ -356,6 +360,13 @@ describe("recherche et processus", () => {
 });
 
 describe("opérations sur fichiers : confirmation présentée, action native", () => {
+  it("annule la dernière action par l'opération native « undo » : le natif confirme avant de défaire", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("annule la dernière action");
+    expect(bridge.operateFile).toHaveBeenCalledWith({ kind: "undo" });
+  });
+
   it("envoie un fichier à la corbeille via l'opération native (la confirmation est faite côté natif)", async () => {
     const bridge = fakeBridge();
     const { engine, events } = setup(bridge);

@@ -1,4 +1,5 @@
 import type { MessageKey } from "../../i18n/messages";
+import { selectRelevantMemories } from "./relevance";
 import type { Memory } from "./types";
 
 /**
@@ -72,6 +73,11 @@ export class MemoryController {
     } catch {
       return [];
     }
+  }
+
+  /** Souvenirs pertinents pour une demande, au plus `limit` (voir relevance.ts). Une panne ne bloque jamais une demande. */
+  async relevantTexts(query: string, limit: number): Promise<string[]> {
+    return selectRelevantMemories(await this.texts(), query, limit);
   }
 
   get awaitsAnswer(): boolean {

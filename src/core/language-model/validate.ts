@@ -106,6 +106,8 @@ export function validateModelIntent(raw: unknown): Intent | null {
       const path = text(candidate.path, 1000);
       return path ? { type, path } : null;
     }
+    case "FILE_UNDO":
+      return { type };
     case "WINDOW_FOCUS":
     case "WINDOW_CLOSE": {
       const name = text(candidate.name, 100);

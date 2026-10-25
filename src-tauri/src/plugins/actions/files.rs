@@ -193,6 +193,10 @@ pub enum Operation {
     Move { from: String, to_dir: String },
     Copy { from: String, to_dir: String },
     Trash { path: String },
+    /// Remet un élément de la corbeille à son emplacement d'origine.
+    Restore { original: String },
+    /// Annule la dernière action réussie (voir `LastAction`). Le natif en déduit l'opération inverse.
+    Undo,
 }
 
 impl Operation {
@@ -264,7 +268,36 @@ pub fn plan(operation: Operation, roots: &[PathBuf]) -> Result<Plan, AdapterErro
                 target: None,
             })
         }
+        Operation::Restore { original } => plan_restore(Path::new(original.trim().trim_matches('"')), roots),
+        Operation::Undo => Err(AdapterError::Operation("l'annulation se prépare à part (voir files_operate)".into())),
     }
+}
+
+/// Aperçu d'une restauration : l'élément doit être dans la corbeille, et son emplacement d'origine doit être libre.
+fn plan_restore(original: &Path, roots: &[PathBuf]) -> Result<Plan, AdapterError> {
+    if !original.is_absolute() {
+        return Err(AdapterError::InvalidPath(original.display().to_string()));
+    }
+    ensure_free(original, roots)?;
+    latest_trash_item(original)?;
+    Ok(Plan {
+        rows: vec![("from".into(), "corbeille".into()), ("to".into(), original.display().to_string())],
+        operation: Operation::Restore { original: original.display().to_string() },
+        source: original.to_path_buf(),
+        source_real: original.to_path_buf(),
+        target: None,
+    })
+}
+
+/// Entrée de la corbeille envoyée depuis `original` la plus récente. Comparaison sans casse : Windows ne distingue pas.
+fn latest_trash_item(original: &Path) -> Result<trash::TrashItem, AdapterError> {
+    let wanted = original.to_string_lossy().to_lowercase();
+    let items = trash::os_limited::list().map_err(|error| AdapterError::Operation(format!("corbeille illisible ({error})")))?;
+    items
+        .into_iter()
+        .filter(|item| item.original_path().to_string_lossy().to_lowercase() == wanted)
+        .max_by_key(|item| item.time_deleted)
+        .ok_or_else(|| AdapterError::Operation("introuvable dans la corbeille : rien à restaurer".into()))
 }
 
 fn two_paths(operation: Operation, source: PathBuf, target: PathBuf) -> Result<Plan, AdapterError> {
@@ -295,6 +328,13 @@ fn ensure_free(target: &Path, roots: &[PathBuf]) -> Result<(), AdapterError> {
 /// autorisés, ou si la cible existe désormais (une écriture ne doit jamais écraser un fichier apparu entre-temps).
 fn revalidate(plan: &Plan, roots: &[PathBuf]) -> Result<(), AdapterError> {
     require_within(&plan.source, roots)?;
+    if let Operation::Restore { .. } = plan.operation {
+        // La source n'existe pas encore : la vérification porte sur l'emplacement d'origine, qui doit rester libre.
+        if plan.source.exists() {
+            return Err(AdapterError::Operation(format!("un élément existe déjà : {}", plan.source.display())));
+        }
+        return Ok(());
+    }
     if real_path(&plan.source)? != plan.source_real {
         return Err(AdapterError::Operation("la source a changé depuis l'aperçu : rien n'a été fait".into()));
     }
@@ -330,7 +370,68 @@ pub fn apply(plan: &Plan, roots: &[PathBuf]) -> Result<String, AdapterError> {
             trash::delete(&plan.source).map_err(|error| AdapterError::Operation(error.to_string()))?;
             Ok(plan.source.display().to_string())
         }
+        (Operation::Restore { .. }, None) => {
+            let item = latest_trash_item(&plan.source)?;
+            trash::os_limited::restore_all([item]).map_err(|error| AdapterError::Operation(format!("restauration impossible ({error})")))?;
+            Ok(plan.source.display().to_string())
+        }
         _ => Err(AdapterError::Operation("plan incohérent".into())),
+    }
+}
+
+/// Action réussie qu'on peut défaire. Une seule, en mémoire : elle disparaît avec NEXUS.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Reversal {
+    /// Renommage ou déplacement : `current` redevient `original`.
+    Move { current: PathBuf, original: PathBuf },
+    /// Copie : la copie part à la corbeille.
+    Trash { path: PathBuf },
+    /// Envoi à la corbeille : `original` revient de la corbeille.
+    Restore { original: PathBuf },
+}
+
+/// Dernière action réussie, partagée entre les commandes. Une seule : annuler la remplace par rien.
+#[derive(Debug, Clone, Default)]
+pub struct LastAction(std::sync::Arc<std::sync::Mutex<Option<Reversal>>>);
+
+impl LastAction {
+    pub fn get(&self) -> Option<Reversal> {
+        self.0.lock().ok().and_then(|slot| slot.clone())
+    }
+
+    pub fn set(&self, reversal: Option<Reversal>) {
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = reversal;
+        }
+    }
+}
+
+/// Ce qu'il faut défaire après une opération réussie. `None` : l'opération ne se défait pas.
+pub fn reversal_of(plan: &Plan) -> Option<Reversal> {
+    match (&plan.operation, &plan.target) {
+        (Operation::Rename { .. } | Operation::Move { .. }, Some(target)) => Some(Reversal::Move { current: target.clone(), original: plan.source.clone() }),
+        (Operation::Copy { .. }, Some(target)) => Some(Reversal::Trash { path: target.clone() }),
+        (Operation::Trash { .. }, None) => Some(Reversal::Restore { original: plan.source.clone() }),
+        _ => None,
+    }
+}
+
+/// Aperçu de l'annulation, avec les mêmes garanties que `plan` : chemins dans les dossiers autorisés, rien d'écrasé.
+pub fn plan_reversal(reversal: &Reversal, roots: &[PathBuf]) -> Result<Plan, AdapterError> {
+    match reversal {
+        Reversal::Move { current, original } => {
+            let current_text = current.display().to_string();
+            let operation = if current.parent() == original.parent() {
+                let name = original.file_name().and_then(|name| name.to_str()).ok_or_else(|| AdapterError::InvalidPath(original.display().to_string()))?;
+                Operation::Rename { from: current_text, new_name: name.to_string() }
+            } else {
+                let parent = original.parent().ok_or_else(|| AdapterError::InvalidPath(original.display().to_string()))?;
+                Operation::Move { from: current_text, to_dir: parent.display().to_string() }
+            };
+            plan(operation, roots)
+        }
+        Reversal::Trash { path } => plan(Operation::Trash { path: path.display().to_string() }, roots),
+        Reversal::Restore { original } => plan(Operation::Restore { original: original.display().to_string() }, roots),
     }
 }
 
@@ -549,6 +650,107 @@ mod tests {
     #[test]
     fn the_view_limit_is_the_documented_one() {
         assert_eq!(MAX_VIEW_BYTES, 100 * 1024 * 1024);
+    }
+
+    #[test]
+    fn a_rename_is_undone_by_renaming_back() {
+        let sandbox = Sandbox::new("undo-rename");
+        let roots = vec![sandbox.path()];
+        let original = sandbox.path().join("a.txt");
+        let current = sandbox.path().join("b.txt");
+        fs::write(&current, "x").unwrap();
+        let plan = plan_reversal(&Reversal::Move { current: current.clone(), original: original.clone() }, &roots).unwrap();
+        assert_eq!(apply(&plan, &roots).unwrap(), original.display().to_string());
+        assert!(original.exists() && !current.exists());
+    }
+
+    #[test]
+    fn a_move_is_undone_by_moving_back() {
+        let sandbox = Sandbox::new("undo-move");
+        let roots = vec![sandbox.path()];
+        let folder = sandbox.path().join("Archives");
+        fs::create_dir_all(&folder).unwrap();
+        let original = sandbox.path().join("rapport.txt");
+        let current = folder.join("rapport.txt");
+        fs::write(&current, "x").unwrap();
+        let plan = plan_reversal(&Reversal::Move { current: current.clone(), original: original.clone() }, &roots).unwrap();
+        apply(&plan, &roots).unwrap();
+        assert!(original.exists() && !current.exists());
+    }
+
+    #[test]
+    fn an_undo_never_overwrites_a_file_that_appeared_since() {
+        let sandbox = Sandbox::new("undo-occupied");
+        let roots = vec![sandbox.path()];
+        let original = sandbox.path().join("a.txt");
+        let current = sandbox.path().join("b.txt");
+        fs::write(&current, "x").unwrap();
+        fs::write(&original, "nouveau").unwrap();
+        assert!(plan_reversal(&Reversal::Move { current, original: original.clone() }, &roots).is_err());
+        assert_eq!(fs::read_to_string(&original).unwrap(), "nouveau");
+    }
+
+    #[test]
+    fn a_copy_is_undone_only_while_the_copy_exists() {
+        let sandbox = Sandbox::new("undo-copy");
+        let roots = vec![sandbox.path()];
+        let copy = sandbox.path().join("copie.txt");
+        assert!(plan_reversal(&Reversal::Trash { path: copy.clone() }, &roots).is_err());
+        fs::write(&copy, "x").unwrap();
+        assert!(plan_reversal(&Reversal::Trash { path: copy }, &roots).is_ok());
+    }
+
+    #[test]
+    fn a_restore_that_is_not_in_the_bin_is_refused() {
+        let sandbox = Sandbox::new("undo-restore");
+        let roots = vec![sandbox.path()];
+        let original = sandbox.path().join("jamais-supprime.txt");
+        assert!(plan_reversal(&Reversal::Restore { original }, &roots).is_err());
+    }
+
+    #[test]
+    fn only_some_actions_can_be_undone() {
+        let sandbox = Sandbox::new("undo-kinds");
+        let roots = vec![sandbox.path()];
+        let file = sandbox.path().join("a.txt");
+        fs::write(&file, "x").unwrap();
+        let renamed = sandbox.path().join("b.txt");
+        let rename = plan(Operation::Rename { from: file.display().to_string(), new_name: "b.txt".into() }, &roots).unwrap();
+        assert!(matches!(reversal_of(&rename), Some(Reversal::Move { .. })));
+        fs::write(&renamed, "y").unwrap();
+        let trash = plan(Operation::Trash { path: renamed.display().to_string() }, &roots).unwrap();
+        assert!(matches!(reversal_of(&trash), Some(Reversal::Restore { .. })));
+        assert!(plan(Operation::Undo, &roots).is_err());
+    }
+
+    #[test]
+    fn the_last_action_is_kept_until_it_is_replaced_or_cleared() {
+        let last = LastAction::default();
+        assert_eq!(last.get(), None);
+        let reversal = Reversal::Restore { original: PathBuf::from("/tmp/x") };
+        last.set(Some(reversal.clone()));
+        assert_eq!(last.get(), Some(reversal));
+        last.set(None);
+        assert_eq!(last.get(), None);
+    }
+
+    /// Test sur le vrai bureau : envoie un fichier à la corbeille, puis le restaure à son emplacement.
+    /// `cargo test -- --ignored live_restore` sur Windows.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn live_restore_brings_a_file_back_from_the_recycle_bin() {
+        let path = std::env::temp_dir().join(format!("nexus-restauration-{}.txt", std::process::id()));
+        std::fs::write(&path, "test NEXUS").expect("fichier temporaire");
+        let roots = vec![std::env::temp_dir()];
+        let trash_plan = plan(Operation::Trash { path: path.display().to_string() }, &roots).expect("aperçu");
+        let reversal = reversal_of(&trash_plan).expect("annulable");
+        apply(&trash_plan, &roots).expect("envoi à la corbeille");
+        assert!(!path.exists());
+        let restore = plan_reversal(&reversal, &roots).expect("aperçu de la restauration");
+        apply(&restore, &roots).expect("restauration");
+        assert!(path.exists());
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

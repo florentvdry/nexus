@@ -18,6 +18,7 @@ const candidate: ConnectorCandidate = {
 const installed = (isSet: boolean): InstalledConnector => ({
   id: candidate.id,
   title: candidate.title,
+  scopes: ["read"],
   package: candidate.package,
   version: candidate.version,
   variables: [{ ...candidate.env[0], isSet }],

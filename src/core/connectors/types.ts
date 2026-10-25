@@ -18,13 +18,17 @@ export interface ConnectorCandidate {
   env: ConnectorVariable[];
 }
 
-/** Connecteur installé, tel que l'interface le voit : les variables et si elles sont renseignées. */
+/** Classe d'outils d'un connecteur : lecture (accordée par défaut), écriture, suppression. */
+export type ConnectorScope = "read" | "write" | "delete";
+
+/** Connecteur installé, tel que l'interface le voit : les variables, si elles sont renseignées, et les accès accordés. */
 export interface InstalledConnector {
   id: string;
   title: string;
   package: string;
   version: string;
   variables: (ConnectorVariable & { isSet: boolean })[];
+  scopes: ConnectorScope[];
 }
 
 /** Outil exposé par un connecteur : son nom, sa description et le schéma de ses arguments. */

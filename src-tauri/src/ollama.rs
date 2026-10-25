@@ -41,6 +41,7 @@ const INTENT_TYPES: &[&str] = &[
     "FILE_RENAME",
     "FILE_MOVE",
     "FILE_TRASH",
+    "FILE_UNDO",
     "PROCESS_LIST",
     "WINDOW_LIST",
     "WINDOW_FOCUS",
@@ -139,7 +140,7 @@ fn base_prompt() -> String {
         "Tu classes une demande de l'utilisateur en une intention JSON. Réponds uniquement par un objet JSON valide, sans texte autour. \
          Le champ « type » est l'une de ces valeurs : {}. Si la demande ne correspond à aucune de ces intentions (salutation, question générale, bavardage), réponds {{\"type\": \"UNKNOWN\", \"reply\": \"une réponse courte et aimable, dans la langue de l'utilisateur\"}}. \
          Champs utiles : OPEN_APPLICATION (appName), OSINT_DOMAIN (domain), FILE_RENAME (path, newName), FILE_MOVE (path, toDir), \
-         FILE_TRASH (path), FILE_VIEW (path), FILE_SEARCH (extension, folderHint, withinDays), WINDOW_FOCUS et WINDOW_CLOSE (name), PLUGIN_REMOVE (id), \
+         FILE_TRASH (path), FILE_VIEW (path) affiche un fichier, DOCUMENT_INSPECT (path) analyse un document (taille, empreinte, métadonnées), FILE_SEARCH (extension, folderHint, withinDays), WINDOW_FOCUS et WINDOW_CLOSE (name) exigent le nom d'une fenêtre ; CLOSE_WINDOW sans nom ferme la fenêtre dont on parle (« cette fenêtre », « celle-ci »), PLUGIN_REMOVE (id),\
          AGENT_RUN (project, prompt). NEEDS_CONNECTOR (service, task) : la demande vise un service extérieur que NEXUS ne pilote pas seul \
          (message Discord, Slack, agenda, etc.) ; service est le nom du service, task la demande reformulée. Quand l'utilisateur te donne une information durable sur lui (prénom, ville, métier, goûts, habitudes, préférences de réponse), réponds REMEMBER avec text : NEXUS la garde sans rien demander. FORGET (query) oublie les souvenirs qui contiennent query ; sans query, il efface toute la mémoire. Pour reply, respecte les préférences de l'utilisateur présentes dans le contexte (tutoiement ou vouvoiement, réponses courtes ou détaillées). N'invente jamais de chemin : utilise uniquement ceux de la demande. \
          « lance X » et « ouvre X » où X est une application (Edge, Discord, Paint...) sont OPEN_APPLICATION ; AGENT_RUN seulement si l'utilisateur demande explicitement de lancer un agent ou un projet (Claude Code, un projet nommé). \
@@ -147,7 +148,7 @@ fn base_prompt() -> String {
          « montre les processus lancés » -> {{\"type\": \"PROCESS_LIST\"}} ; « arrête la recherche en cours » -> {{\"type\": \"CANCEL_TASKS\"}} ; \
          « retiens que je préfère Firefox » -> {{\"type\": \"REMEMBER\", \"text\": \"je préfère Firefox\"}} ; « qu'est-ce que tu retiens de moi ? » -> {{\"type\": \"MEMORY_LIST\"}} ; \
          « rappelle-moi demain à 9 h de appeler Anthony » -> {{\"type\": \"SCHEDULE\", \"request\": \"rappelle Anthony d'appeler\", \"kind\": \"once\", \"day\": \"tomorrow\", \"time\": \"09:00\"}} ; « chaque lundi à 8 h, résume mes actus » -> {{\"type\": \"SCHEDULE\", \"request\": \"résume mes actus\", \"kind\": \"weekly\", \"weekday\": 1, \"time\": \"08:00\"}} ; « annule la tâche des actus » -> {{\"type\": \"CANCEL_SCHEDULE\", \"query\": \"actus\"}} ; « quelles tâches sont programmées ? » -> {{\"type\": \"LIST_SCHEDULES\"}} ; « qu'est-ce que j'ai aujourd'hui ? » -> {{\"type\": \"AGENDA_TODAY\"}} ; « qu'est-ce qui est affiché à l'écran ? » -> {{\"type\": \"SCREEN_VIEW\", \"question\": \"Que vois-tu à l'écran ?\"}} ; « écris à Anthony que je serai en retard » -> {{\"type\": \"DRAFT_MESSAGE\", \"recipient\": \"Anthony\", \"text\": \"Je serai en retard.\"}} ; « affiche une photo de Macron » -> {{\"type\": \"SHOW_IMAGE\", \"query\": \"Emmanuel Macron\"}} ; « qui est Marie Curie ? » -> {{\"type\": \"SHOW_TOPIC\", \"query\": \"Marie Curie\"}} ; « tu connais GTA RP ? » -> {{\"type\": \"ASK_WEB\", \"question\": \"GTA RP\"}} ; « combien coûte un billet de train pour Lyon demain ? » -> {{\"type\": \"ASK_WEB\", \"question\": \"prix billet train Lyon demain\"}} ;« fais un résumé des actus du jour » -> {{\"type\": \"NEWS_SUMMARY\"}} ; \
-         « mets le fichier brouillon.doc à la corbeille » ->{{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; \
+         « mets le fichier brouillon.doc à la corbeille » ->{{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « annule la dernière action » -> {{\"type\": \"FILE_UNDO\"}} ; \
          « quelle est l'utilisation de la mémoire ? » -> {{\"type\": \"SYSTEM_INFO\"}} ; « renomme photo.jpg en vacances.jpg » -> {{\"type\": \"FILE_RENAME\", \"path\": \"photo.jpg\", \"newName\": \"vacances.jpg\"}} ; \
          « supprime le fichier brouillon.doc » -> {{\"type\": \"FILE_TRASH\", \"path\": \"brouillon.doc\"}} ; « lance Paint » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Paint\"}} ; \
          « envoie un message Discord à Anthony pour lui dire que je l'attends » -> {{\"type\": \"NEEDS_CONNECTOR\", \"service\": \"Discord\", \"task\": \"envoyer un message à Anthony : je l'attends\"}}.",

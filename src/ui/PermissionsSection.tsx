@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { AutoApproval, NativeBridge, PermissionRule } from "../core/native/bridge";
+import { ConnectorScopes } from "./ConnectorScopes";
 import { RULE_ACTION } from "../core/native/rules";
 import type { Locale, MessageKey } from "../i18n/messages";
 
@@ -84,6 +85,7 @@ export function PermissionsSection({ bridge, locale, t }: PermissionsSectionProp
               ))}
             </ul>
           )}
+          <ConnectorScopes bridge={bridge} t={t} />
         </>
       )}
     </section>

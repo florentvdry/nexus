@@ -17,12 +17,17 @@ export interface TierSpec {
   fileGiB: number;
   /** Mémoire vive minimale recommandée pour ce niveau, en gigaoctets. */
   minMemoryGiB: number;
+  /**
+   * Mémoire vidéo qui suffit à le faire tourner entièrement sur la carte (poids et contexte), en gigaoctets. Au-dessous,
+   * une partie du modèle reste dans la mémoire vive et la réponse ralentit fortement.
+   */
+  gpuFullGiB: number;
 }
 
 export const TIERS: readonly TierSpec[] = [
-  { tier: "light", model: "qwen2.5:1.5b", parametersBillions: 1.5, fileGiB: 1, minMemoryGiB: 4 },
-  { tier: "balanced", model: "qwen2.5:7b", parametersBillions: 7, fileGiB: 5, minMemoryGiB: 8 },
-  { tier: "precise", model: "qwen2.5:14b", parametersBillions: 14, fileGiB: 9, minMemoryGiB: 16 },
+  { tier: "light", model: "qwen2.5:1.5b", parametersBillions: 1.5, fileGiB: 1, minMemoryGiB: 4, gpuFullGiB: 2 },
+  { tier: "balanced", model: "qwen2.5:7b", parametersBillions: 7, fileGiB: 5, minMemoryGiB: 8, gpuFullGiB: 6 },
+  { tier: "precise", model: "qwen2.5:14b", parametersBillions: 14, fileGiB: 9, minMemoryGiB: 16, gpuFullGiB: 11 },
 ];
 
 /** Ordre de test : du plus précis au plus léger. Le premier niveau qui passe le test est gardé. */
