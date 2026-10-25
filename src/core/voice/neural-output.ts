@@ -6,10 +6,10 @@ import type { SpeakOptions, SpeechOutput } from "./types";
  * navigateur. Sans voix installée, ou si la synthèse échoue, la voix Windows prend le relais : la réponse est toujours lue.
  */
 
-/** Ce qu'il faut à la sortie pour parler : la présence de la voix, et la synthèse d'un texte en WAV (base64). */
+/** Ce qu'il faut à la sortie pour parler : la présence de la voix de la langue, et la synthèse en WAV (base64). */
 export interface NeuralVoiceSource {
-  installed(): Promise<boolean>;
-  synthesize(text: string, rate: number): Promise<string>;
+  installed(locale: string): Promise<boolean>;
+  synthesize(text: string, rate: number, locale: string): Promise<string>;
 }
 
 /** Sous-ensemble de l'AudioContext utilisé ici, pour pouvoir le remplacer dans les tests. */
@@ -21,9 +21,6 @@ export interface PlaybackContext {
   readonly currentTime: number;
   resume?(): Promise<void>;
 }
-
-/** Voix française naturelle. L'anglais reste sur la voix Windows : la voix installée ne parle que le français. */
-const NEURAL_LOCALE = "fr";
 
 function base64Bytes(text: string): ArrayBuffer {
   const binary = atob(text);
@@ -51,8 +48,8 @@ export class NeuralSpeechOutput implements SpeechOutput {
     return this.#fallback.available;
   }
 
+  /** La voix de la langue de la réponse ; sans elle, la voix Windows de cette langue. */
   speak(text: string, options: SpeakOptions): void {
-    if (options.locale !== NEURAL_LOCALE) return this.#fallback.speak(text, options);
     const sentences = spokenSentences(text);
     if (sentences.length === 0) return;
     const generation = this.#generation;
@@ -61,8 +58,8 @@ export class NeuralSpeechOutput implements SpeechOutput {
 
   async #speakNeural(text: string, options: SpeakOptions, generation: number, original: string): Promise<void> {
     try {
-      if (!(await this.#source.installed())) return this.#fallback.speak(original, options);
-      const wav = await this.#source.synthesize(text, options.rate);
+      if (!(await this.#source.installed(options.locale))) return this.#fallback.speak(original, options);
+      const wav = await this.#source.synthesize(text, options.rate, options.locale);
       if (generation !== this.#generation) return;
       const context = this.#playbackContext();
       await context.resume?.();

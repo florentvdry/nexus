@@ -215,9 +215,13 @@ export interface NativeBridge {
   /** Recherche web générale (DuckDuckGo, sans clé), puis lecture d'une page publique. Réservées au cœur. */
   webSearch(question: string): Promise<WebSearchHit[]>;
   webRead(url: string): Promise<WebPage>;
-  /** Voix naturelle locale (Piper, installée dans le dossier de données) : présence, puis synthèse en WAV (base64). */
-  speechNeuralAvailable(): Promise<boolean>;
-  speechNeuralSpeak(text: string, rate: number): Promise<string>;
+  /**
+   * Voix naturelle locale (Piper), une par langue : présence, installation sur accord de l'utilisateur, synthèse en WAV
+   * (base64). La langue est celle de la réponse.
+   */
+  speechNeuralAvailable(locale: string): Promise<boolean>;
+  speechNeuralInstall(locale: string): Promise<void>;
+  speechNeuralSpeak(text: string, rate: number, locale: string): Promise<string>;
   /** Démarrage avec Windows : lecture et réglage (clé de démarrage de l'utilisateur). */
   startupStatus(): Promise<boolean>;
   /** Batterie, en lecture seule. `null` pour un poste sans batterie. */
@@ -446,12 +450,16 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<WebPage>("web_read", { url });
   }
 
-  speechNeuralAvailable(): Promise<boolean> {
-    return this.#call<boolean>("speech_neural_available");
+  speechNeuralAvailable(locale: string): Promise<boolean> {
+    return this.#call<boolean>("speech_neural_available", { locale });
   }
 
-  speechNeuralSpeak(text: string, rate: number): Promise<string> {
-    return this.#call<string>("speech_neural_speak", { text, rate });
+  speechNeuralInstall(locale: string): Promise<void> {
+    return this.#call<void>("speech_neural_install", { locale });
+  }
+
+  speechNeuralSpeak(text: string, rate: number, locale: string): Promise<string> {
+    return this.#call<string>("speech_neural_speak", { text, rate, locale });
   }
 
   startupStatus(): Promise<boolean> {
@@ -583,6 +591,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   webSearch = () => this.unavailable();
   webRead = () => this.unavailable();
   speechNeuralAvailable = () => this.unavailable();
+  speechNeuralInstall = () => this.unavailable();
   speechNeuralSpeak = () => this.unavailable();
   startupStatus = () => this.unavailable();
   batteryStatus = () => this.unavailable();

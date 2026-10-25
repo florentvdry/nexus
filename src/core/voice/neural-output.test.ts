@@ -38,7 +38,7 @@ describe("voix naturelle", () => {
     output.speak("Bonjour.\nSources : https://example.org/a", { ...OPTIONS, rate: 1.2 });
     await flush();
 
-    expect(source.synthesize).toHaveBeenCalledWith("Bonjour.", 1.2);
+    expect(source.synthesize).toHaveBeenCalledWith("Bonjour.", 1.2, "fr");
     expect(context.decodeAudioData).toHaveBeenCalled();
     expect(sources[0].start).toHaveBeenCalled();
     expect(fallback.speak).not.toHaveBeenCalled();
@@ -72,15 +72,31 @@ describe("voix naturelle", () => {
     expect(fallback.speak).toHaveBeenCalledWith("Bonjour.", OPTIONS);
   });
 
-  it("l'anglais reste sur la voix Windows, sans synthèse", () => {
-    const source = { installed: vi.fn(async () => true), synthesize: vi.fn() };
+  it("chaque langue a sa voix : l'anglais utilise la voix anglaise installée", async () => {
+    const source = { installed: vi.fn(async () => true), synthesize: vi.fn(async () => btoa("RIFF")) };
+    const { context, sources } = fakeContext();
+    const fallback = fakeFallback();
+    const output = new NeuralSpeechOutput(source, fallback, () => context);
+
+    output.speak("Hello there.", { ...OPTIONS, locale: "en" });
+    await flush();
+
+    expect(source.installed).toHaveBeenCalledWith("en");
+    expect(source.synthesize).toHaveBeenCalledWith("Hello there.", 1, "en");
+    expect(sources[0].start).toHaveBeenCalled();
+    expect(fallback.speak).not.toHaveBeenCalled();
+  });
+
+  it("sans voix installée pour la langue, la voix Windows de cette langue lit", async () => {
+    const source = { installed: vi.fn(async () => false), synthesize: vi.fn() };
     const fallback = fakeFallback();
     const output = new NeuralSpeechOutput(source, fallback, () => fakeContext().context);
 
-    output.speak("Hello.", { ...OPTIONS, locale: "en" });
+    output.speak("Hello there.", { ...OPTIONS, locale: "en" });
+    await flush();
 
     expect(source.synthesize).not.toHaveBeenCalled();
-    expect(fallback.speak).toHaveBeenCalled();
+    expect(fallback.speak).toHaveBeenCalledWith("Hello there.", { ...OPTIONS, locale: "en" });
   });
 
   it("annuler avant la fin de la synthèse : rien n'est joué", async () => {

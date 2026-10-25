@@ -146,6 +146,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     webSearch: vi.fn(async () => []),
     webRead: vi.fn(async () => ({ url: "", text: "" })),
     speechNeuralAvailable: vi.fn(async () => false),
+    speechNeuralInstall: vi.fn(async () => {}),
     speechNeuralSpeak: vi.fn(async () => ""),
     startupStatus: vi.fn(async () => false),
     startupSet: vi.fn(async () => {}),

@@ -302,3 +302,12 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Fonctionnement** : la réponse est nettoyée (`src/core/voice/spoken.ts`), envoyée au moteur par son entrée standard, et rendue en WAV. L'interface la joue par Web Audio, qui n'est pas bloquée par la CSP. Le chemin du moteur et de la voix est fixe côté Rust : l'interface ne transmet que le texte et la vitesse.
 - **Repli** : sans voix installée, en cas d'erreur, ou pour l'anglais, la voix Windows (SAPI) lit la réponse.
 - **Limites** : la qualité n'a pas été écoutée par l'auteur du code : la synthèse a été vérifiée (WAV produit, lecture par l'application), pas le son. La voix est française seulement ; un poste sans ce dossier garde la voix Windows.
+
+## ADR-044 — Voix naturelle par langue, installée depuis l'app sur accord de l'utilisateur
+
+- **Choix** : une voix neurale par langue de l'interface. Le moteur Piper est commun ; chaque langue a sa voix (français : `fr_FR-siwis-medium`, 63 Mo ; anglais : `en_US-lessac-medium` prévue, 63 Mo, pas encore téléchargée).
+- **Installation** : dans les réglages vocaux, une ligne par langue, avec un bouton « Installer ». Le téléchargement ne démarre qu'à ce clic. Il passe par le téléchargeur vérifié de NEXUS (HTTPS, somme SHA-256, reprise). Les sommes sont fixées dans `src-tauri/src/voice_tts.rs` ; un test vérifie leur format.
+- **Adresses fixes** : seules les adresses codées en dur dans `voice_tts.rs` sont téléchargées. Le frontend ne transmet ni chemin ni adresse.
+- **Langue** : la voix lit la réponse dans la langue de la réponse. Sans voix installée pour cette langue, la voix Windows lit.
+- **Vérifié** : la somme de la voix française et de la configuration correspond aux fichiers publiés. L'installation d'une langue dont les fichiers sont présents ne retélécharge rien (1,6 s). La lecture française passe par la voix naturelle.
+- **Limites** : la voix anglaise n'est pas installée sur ce poste ; son téléchargement attend l'accord de l'utilisateur. Le son n'a pas été écouté par l'auteur du code. Les langues sont limitées à celles qui ont une voix dans `VOICES`.

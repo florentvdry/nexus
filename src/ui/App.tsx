@@ -28,6 +28,7 @@ import { TaskPanel } from "./TaskPanel";
 import { JournalSection } from "./JournalSection";
 import { MemorySection } from "./MemorySection";
 import { AccessibilitySection } from "./AccessibilitySection";
+import { NeuralVoiceSection } from "./NeuralVoiceSection";
 import { StartupSection } from "./StartupSection";
 import { AgendaSection } from "./AgendaSection";
 import { readAgendaPath } from "./agendaSettings";
@@ -264,6 +265,7 @@ export function App({ engine: injectedEngine }: AppProps) {
             {t("setup.open")}
           </button>
           <MemorySection bridge={answerBridge} locale={locale} t={t} />
+          <NeuralVoiceSection bridge={answerBridge} t={t} />
           <AccessibilitySection t={t} />
           <StartupSection bridge={answerBridge} t={t} />
           <AgendaSection t={t} />

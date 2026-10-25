@@ -598,6 +598,7 @@ pub fn run() {
             web::web_search,
             web::web_read,
             voice_tts::speech_neural_available,
+            voice_tts::speech_neural_install,
             voice_tts::speech_neural_speak,
             startup::startup_status,
             startup::startup_set,

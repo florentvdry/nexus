@@ -1,7 +1,9 @@
 //! Voix naturelle locale (Piper) : le texte devient un fichier WAV, que l'interface joue. Rien n'est envoyé en ligne.
-//! Le moteur et la voix sont installés dans le dossier de données de NEXUS (`voices/`), après accord de l'utilisateur.
-//! Le frontend ne donne jamais de chemin : seuls le texte et la vitesse sont transmis, le texte passe par l'entrée du
-//! moteur (jamais dans la ligne de commande).
+//!
+//! Une voix par langue de l'utilisateur. Le moteur (Piper) et la voix de la langue sont téléchargés sur demande, depuis
+//! l'adresse fixée ici, vérifiés par leur somme SHA-256, puis rangés dans `voices/` du dossier de données de NEXUS.
+//! Le frontend ne donne jamais de chemin ni d'adresse : seuls la langue, le texte et la vitesse sont transmis, et le
+//! texte passe par l'entrée du moteur (jamais dans la ligne de commande).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -11,29 +13,128 @@ use tauri::{AppHandle, Manager};
 
 use crate::error::AdapterError;
 use crate::grants::require_core;
+use crate::model_download::{self, DownloadPlan};
 use crate::web::base64;
 
-/// Fichiers installés dans `voices/` : le moteur (dans son dossier, avec ses bibliothèques) et la voix française.
-const ENGINE_DIR: &str = "piper/piper";
-const ENGINE_FILE: &str = "piper.exe";
-const VOICE_FILE: &str = "fr_FR-siwis-medium.onnx";
+/// Moteur Piper (Windows x64). Son archive contient le moteur, ses bibliothèques et les données de phonétique.
+pub struct EngineSpec {
+    pub url: &'static str,
+    pub sha256: &'static str,
+    pub size_bytes: u64,
+}
+
+pub const ENGINE: EngineSpec = EngineSpec {
+    url: "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
+    sha256: "f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea",
+    size_bytes: 22_477_236,
+};
+
+/// Voix d'une langue : le modèle (`.onnx`) et sa configuration (`.onnx.json`), chacun avec sa somme.
+pub struct VoiceModel {
+    pub locale: &'static str,
+    pub file: &'static str,
+    pub url: &'static str,
+    pub sha256: &'static str,
+    pub size_bytes: u64,
+    pub config_url: &'static str,
+    pub config_sha256: &'static str,
+    pub config_size_bytes: u64,
+}
+
+/// Les voix de NEXUS, une par langue d'interface. Une langue absente d'ici n'a pas de voix naturelle : la voix Windows lit.
+pub const VOICES: &[VoiceModel] = &[VoiceModel {
+    locale: "fr",
+    file: "fr_FR-siwis-medium.onnx",
+    url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
+    sha256: "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
+    size_bytes: 63_201_294,
+    config_url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json",
+    config_sha256: "39479916c2db192b5ac9764daddd0c744d83e023ad890c6976c0633ae4df8959",
+    config_size_bytes: 4_875,
+}];
+
 /// Un texte de réponse tient largement dans cette limite ; au-delà, la synthèse serait longue pour rien.
 const MAX_TEXT_CHARS: usize = 2000;
 const SYNTH_TIMEOUT: Duration = Duration::from_secs(30);
 /// Silence entre deux phrases, en secondes : la réponse respire comme une phrase parlée.
 const SENTENCE_SILENCE: &str = "0.2";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const ENGINE_ARCHIVE: &str = "piper-engine.zip";
+const ENGINE_DIR: &str = "piper";
+/// Chemin du moteur dans `voices/` : l'archive contient un dossier `piper/` qui range `piper.exe` et ses bibliothèques.
+const ENGINE_EXE: &str = "piper/piper/piper.exe";
 
-/// Le moteur et la voix, à leurs emplacements fixes dans le dossier de données.
-pub fn voice_paths(root: &Path) -> (PathBuf, PathBuf) {
-    let voices = root.join("voices");
-    (voices.join(ENGINE_DIR).join(ENGINE_FILE), voices.join(VOICE_FILE))
+pub fn voice_for(locale: &str) -> Option<&'static VoiceModel> {
+    VOICES.iter().find(|voice| voice.locale == locale)
 }
 
-/// Vrai quand le moteur et la voix sont présents.
-pub fn installed(root: &Path) -> bool {
-    let (engine, voice) = voice_paths(root);
-    engine.is_file() && voice.is_file()
+fn voices_dir(root: &Path) -> PathBuf {
+    root.join("voices")
+}
+
+/// Le moteur installé, et le fichier de la voix de cette langue.
+pub fn voice_paths(root: &Path, voice: &VoiceModel) -> (PathBuf, PathBuf) {
+    let voices = voices_dir(root);
+    (voices.join(ENGINE_EXE), voices.join(voice.file))
+}
+
+/// Vrai quand le moteur et la voix de cette langue sont présents, avec leur configuration.
+pub fn installed(root: &Path, locale: &str) -> bool {
+    let Some(voice) = voice_for(locale) else {
+        return false;
+    };
+    let (engine, model) = voice_paths(root, voice);
+    engine.is_file() && model.is_file() && voices_dir(root).join(format!("{}.json", voice.file)).is_file()
+}
+
+/// Télécharge et vérifie le moteur puis la voix de la langue. Ce qui est déjà présent et juste n'est pas refait.
+pub fn install_at(root: &Path, locale: &str) -> Result<(), AdapterError> {
+    let voice = voice_for(locale).ok_or_else(|| AdapterError::InvalidTarget("aucune voix naturelle pour cette langue".into()))?;
+    let dir = voices_dir(root);
+    let agent = model_download::agent();
+
+    let (engine, _) = voice_paths(root, voice);
+    if !engine.is_file() {
+        let archive = model_download::download(
+            &DownloadPlan { url: ENGINE.url.into(), file_name: ENGINE_ARCHIVE.into(), sha256: ENGINE.sha256.into(), size_bytes: ENGINE.size_bytes },
+            &dir,
+            &agent,
+            |_, _| {},
+        )?;
+        let target = dir.join(ENGINE_DIR);
+        std::fs::create_dir_all(&target).map_err(|error| AdapterError::Operation(format!("dossier du moteur ({error})")))?;
+        // `tar` (intégré à Windows) lit les archives zip. Le contenu est celui de l'archive vérifiée ci-dessus.
+        let status = Command::new("tar")
+            .arg("-xf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&target)
+            .status()
+            .map_err(|error| AdapterError::Operation(format!("extraction du moteur impossible ({error})")))?;
+        let _ = std::fs::remove_file(&archive);
+        if !status.success() || !engine.is_file() {
+            return Err(AdapterError::Operation("le moteur vocal n'a pas pu être installé".into()));
+        }
+    }
+
+    model_download::download(
+        &DownloadPlan { url: voice.url.into(), file_name: voice.file.into(), sha256: voice.sha256.into(), size_bytes: voice.size_bytes },
+        &dir,
+        &agent,
+        |_, _| {},
+    )?;
+    model_download::download(
+        &DownloadPlan {
+            url: voice.config_url.into(),
+            file_name: format!("{}.json", voice.file),
+            sha256: voice.config_sha256.into(),
+            size_bytes: voice.config_size_bytes,
+        },
+        &dir,
+        &agent,
+        |_, _| {},
+    )?;
+    Ok(())
 }
 
 /// Texte accepté : non vide, borné, sans caractère de contrôle. Les retours à la ligne séparent les phrases.
@@ -57,27 +158,28 @@ pub fn length_scale(rate: f64) -> f64 {
     (1.0 / rate).clamp(0.6, 2.0)
 }
 
-/// Synthèse du texte en WAV, par le moteur installé. Le fichier temporaire est supprimé dans tous les cas.
-pub fn synthesize_at(root: &Path, text: &str, rate: f64) -> Result<Vec<u8>, AdapterError> {
+/// Synthèse du texte en WAV, avec la voix de la langue. Le fichier temporaire est supprimé dans tous les cas.
+pub fn synthesize_at(root: &Path, text: &str, rate: f64, locale: &str) -> Result<Vec<u8>, AdapterError> {
+    let voice = voice_for(locale).ok_or_else(|| AdapterError::InvalidTarget("aucune voix naturelle pour cette langue".into()))?;
     let text = valid_text(text)?;
-    let (engine, voice) = voice_paths(root);
-    if !engine.is_file() || !voice.is_file() {
+    let (engine, model) = voice_paths(root, voice);
+    if !installed(root, locale) {
         return Err(AdapterError::ModelMissing("voix naturelle non installée".into()));
     }
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let output = std::env::temp_dir().join(format!("nexus-voice-{}-{nanos}.wav", std::process::id()));
-    let outcome = run_piper(&engine, &voice, &text, &output, length_scale(rate)).and_then(|()| {
+    let outcome = run_piper(&engine, &model, &text, &output, length_scale(rate)).and_then(|()| {
         std::fs::read(&output).map_err(|error| AdapterError::Operation(format!("audio illisible ({error})")))
     });
     let _ = std::fs::remove_file(&output);
     outcome
 }
 
-fn run_piper(engine: &Path, voice: &Path, text: &str, output: &Path, scale: f64) -> Result<(), AdapterError> {
+fn run_piper(engine: &Path, model: &Path, text: &str, output: &Path, scale: f64) -> Result<(), AdapterError> {
     let mut command = Command::new(engine);
     command
         .arg("-m")
-        .arg(voice)
+        .arg(model)
         .arg("-f")
         .arg(output)
         .arg("--length_scale")
@@ -117,19 +219,29 @@ fn data_root(app: &AppHandle) -> Result<PathBuf, AdapterError> {
     app.path().app_data_dir().map_err(|error| AdapterError::Operation(format!("dossier de données introuvable ({error})")))
 }
 
-/// Vrai si la voix naturelle est installée sur ce poste.
+/// Vrai si la voix naturelle de cette langue est installée sur ce poste.
 #[tauri::command]
-pub async fn speech_neural_available(app: AppHandle, caller: String) -> Result<bool, AdapterError> {
+pub async fn speech_neural_available(app: AppHandle, caller: String, locale: String) -> Result<bool, AdapterError> {
     require_core(&caller)?;
-    Ok(installed(&data_root(&app)?))
+    Ok(installed(&data_root(&app)?, &locale))
 }
 
-/// Le texte, lu par la voix naturelle, en WAV encodé en base64.
+/// Installe la voix naturelle de cette langue (moteur et voix, vérifiés). Long : le frontend attend le résultat.
 #[tauri::command]
-pub async fn speech_neural_speak(app: AppHandle, caller: String, text: String, rate: f64) -> Result<String, AdapterError> {
+pub async fn speech_neural_install(app: AppHandle, caller: String, locale: String) -> Result<(), AdapterError> {
     require_core(&caller)?;
     let root = data_root(&app)?;
-    tauri::async_runtime::spawn_blocking(move || synthesize_at(&root, &text, rate).map(|bytes| base64(&bytes)))
+    tauri::async_runtime::spawn_blocking(move || install_at(&root, &locale))
+        .await
+        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Le texte, lu par la voix naturelle de cette langue, en WAV encodé en base64.
+#[tauri::command]
+pub async fn speech_neural_speak(app: AppHandle, caller: String, text: String, rate: f64, locale: String) -> Result<String, AdapterError> {
+    require_core(&caller)?;
+    let root = data_root(&app)?;
+    tauri::async_runtime::spawn_blocking(move || synthesize_at(&root, &text, rate, &locale).map(|bytes| base64(&bytes)))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
@@ -137,6 +249,13 @@ pub async fn speech_neural_speak(app: AppHandle, caller: String, text: String, r
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("nexus-voice-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
 
     #[test]
     fn speed_maps_to_piper_length_scale() {
@@ -155,26 +274,56 @@ mod tests {
     }
 
     #[test]
-    fn the_voice_is_installed_only_when_engine_and_voice_are_present() {
-        let root = std::env::temp_dir().join(format!("nexus-voice-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        assert!(!installed(&root));
+    fn every_voice_and_the_engine_are_pinned_to_https_and_a_full_hash() {
+        let hashes = std::iter::once(ENGINE.sha256).chain(VOICES.iter().flat_map(|voice| [voice.sha256, voice.config_sha256]));
+        for hash in hashes {
+            assert_eq!(hash.len(), 64, "somme SHA-256 attendue : {hash}");
+            assert!(hash.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        }
+        assert!(ENGINE.url.starts_with("https://"));
+        for voice in VOICES {
+            assert!(voice.url.starts_with("https://") && voice.config_url.starts_with("https://"));
+        }
+    }
 
-        let (engine, voice) = voice_paths(&root);
+    #[test]
+    fn each_language_has_at_most_one_voice() {
+        let mut locales: Vec<&str> = VOICES.iter().map(|voice| voice.locale).collect();
+        locales.sort_unstable();
+        locales.dedup();
+        assert_eq!(locales.len(), VOICES.len());
+    }
+
+    #[test]
+    fn the_voice_is_installed_only_when_engine_voice_and_config_are_present() {
+        let root = scratch("installed");
+        assert!(!installed(&root, "fr"));
+
+        let voice = voice_for("fr").unwrap();
+        let (engine, model) = voice_paths(&root, voice);
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         std::fs::write(&engine, b"").unwrap();
-        assert!(!installed(&root));
-        std::fs::write(&voice, b"").unwrap();
-        assert!(installed(&root));
+        std::fs::write(&model, b"").unwrap();
+        assert!(!installed(&root, "fr"), "sans la configuration, la voix n'est pas utilisable");
+        std::fs::write(voices_dir(&root).join(format!("{}.json", voice.file)), b"{}").unwrap();
+        assert!(installed(&root, "fr"));
+        assert!(!installed(&root, "de"), "une langue sans voix n'est jamais installée");
 
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
-    fn synthesis_refuses_when_nothing_is_installed() {
-        let root = std::env::temp_dir().join(format!("nexus-voice-missing-{}", std::process::id()));
-        let error = synthesize_at(&root, "Bonjour", 1.0).unwrap_err();
-        assert!(matches!(error, AdapterError::ModelMissing(_)));
+    fn synthesis_and_install_refuse_a_language_without_voice() {
+        let root = scratch("unknown");
+        assert!(matches!(synthesize_at(&root, "Bonjour", 1.0, "de"), Err(AdapterError::InvalidTarget(_))));
+        assert!(matches!(install_at(&root, "de"), Err(AdapterError::InvalidTarget(_))));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn synthesis_refuses_when_the_voice_is_not_installed() {
+        let root = scratch("missing");
+        assert!(matches!(synthesize_at(&root, "Bonjour", 1.0, "fr"), Err(AdapterError::ModelMissing(_))));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
