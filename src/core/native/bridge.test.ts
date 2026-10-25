@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TauriNativeBridge } from "./bridge";
+import { operationStats, resetStats } from "../diagnostics/metrics";
 
 const callNative = vi.fn(async (_command: string, _args?: Record<string, unknown>) => undefined as never);
 
@@ -73,6 +74,14 @@ describe("pont natif attribué", () => {
       command: "convertit",
       text: "1 km en mi",
     });
+  });
+
+  it("mesure chaque appel localement : durée et échec, sans rien envoyer", async () => {
+    resetStats();
+    callNative.mockRejectedValueOnce(new Error("hors service"));
+    await expect(new TauriNativeBridge().listProcesses(2)).rejects.toThrow("hors service");
+    const measured = operationStats().find((item) => item.command === "processes_list");
+    expect(measured).toMatchObject({ count: 1, failures: 1 });
   });
 
   it("n'envoie jamais d'identité : aucun appel ne porte de champ caller, ce que le JavaScript prétendrait être", async () => {

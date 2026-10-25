@@ -12,13 +12,14 @@ import { MemorySection } from "./MemorySection";
 import { ModelSection } from "./ModelSection";
 import { NeuralVoiceSection } from "./NeuralVoiceSection";
 import { NimSection } from "./NimSection";
+import { DiagnosticSection } from "./DiagnosticSection";
 import { PermissionsSection } from "./PermissionsSection";
 import { StartupSection } from "./StartupSection";
 import { VoiceSettingsFields } from "./VoiceSettings";
 
 type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
-type PaneId = "general" | "model" | "voice" | "permissions" | "memory" | "journal" | "accessibility" | "startup" | "agenda" | "online";
+type PaneId = "general" | "model" | "voice" | "permissions" | "memory" | "journal" | "accessibility" | "startup" | "agenda" | "online" | "diagnostic";
 
 const PANES: { id: PaneId; label: MessageKey }[] = [
   { id: "general", label: "settings.nav.general" },
@@ -31,6 +32,7 @@ const PANES: { id: PaneId; label: MessageKey }[] = [
   { id: "startup", label: "settings.nav.startup" },
   { id: "agenda", label: "settings.nav.agenda" },
   { id: "online", label: "settings.nav.online" },
+  { id: "diagnostic", label: "settings.nav.diagnostic" },
 ];
 
 interface SettingsViewProps {
@@ -153,6 +155,12 @@ export function SettingsView({
         return (
           <div className="card">
             <NimSection bridge={bridge} t={t} />
+          </div>
+        );
+      case "diagnostic":
+        return (
+          <div className="card">
+            <DiagnosticSection bridge={bridge} t={t} />
           </div>
         );
     }

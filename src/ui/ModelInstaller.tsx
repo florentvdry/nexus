@@ -223,6 +223,12 @@ export function ModelInstaller({ bridge, t, tiers, onFinish, autoStart = false }
           stage && <StageLine stage={stage} t={t} />
         ))}
 
+      {phase === "running" && !pending && stage?.kind === "pulling" && (
+        <button type="button" className="chip" onClick={() => void bridge.cancelPull()}>
+          {t("install.cancel")}
+        </button>
+      )}
+
       {phase === "done" && <p>{outcome ? t("install.ready", { model: outcome.model }) : t("install.none")}</p>}
 
       {phase === "failed" && (

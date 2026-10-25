@@ -14,6 +14,7 @@ pub mod schedule;
 pub mod screen;
 pub mod agenda;
 pub mod power;
+pub mod resilience;
 pub mod startup;
 pub mod web;
 pub mod voice_tts;
@@ -89,11 +90,13 @@ async fn model_json(webview: tauri::Webview, model: String, system: String, user
 /// Télécharge un modèle via Ollama, avec progression émise vers l'interface. Réservé à l'interface, après accord
 /// explicite de l'utilisateur sur le parcours (taille affichée avant).
 #[tauri::command]
-async fn ollama_pull(app: AppHandle, webview: tauri::Webview, model: String) -> Result<(), AdapterError> {
+async fn ollama_pull(app: AppHandle, webview: tauri::Webview, control: State<'_, resilience::PullControl>, model: String) -> Result<(), AdapterError> {
     require_main(&webview)?;
+    let cancel = control.0.clone();
+    cancel.store(false, std::sync::atomic::Ordering::SeqCst);
     tauri::async_runtime::spawn_blocking(move || {
         let name = model.clone();
-        ollama::pull_at(ollama::ENDPOINT, &model, |step| {
+        ollama::pull_at(ollama::ENDPOINT, &model, &cancel, |step| {
             let _ = app.emit(
                 ollama::PULL_EVENT,
                 serde_json::json!({ "model": name, "status": step.status, "completed": step.completed, "total": step.total }),
@@ -602,6 +605,8 @@ pub fn run() {
             app.manage(PluginStore(open_plugin_store(app)));
             app.manage(mcp::commands::open_state(app.path().app_data_dir().ok()));
             app.manage(nim::KeyStore::open(app.path().app_data_dir().ok()));
+            resilience::configure(app.path().app_data_dir().ok());
+            app.manage(resilience::PullControl::default());
             app.manage(memory::open_store(app.path().app_data_dir().ok()));
             app.manage(schedule::open_store(app.path().app_data_dir().ok()));
             Ok(())
@@ -642,6 +647,10 @@ pub fn run() {
             agenda::agenda_read,
             screen::screen_capture,
             nim::nim_classify,
+            resilience::budgets_get,
+            resilience::budgets_set,
+            resilience::resources_status,
+            resilience::ollama_pull_cancel,
             nim::nim_key_status,
             nim::nim_key_save,
             nim::nim_key_clear,

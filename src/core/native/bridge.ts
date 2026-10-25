@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { NativeUnavailableError } from "./adapter";
 import { isDesktopRuntime } from "./index";
 import { callNative } from "./tauri-adapter";
+import { recordCall } from "../diagnostics/metrics";
 import type { PluginPackData } from "../plugins/packs";
 import type { HardwareProfile } from "../language-model/hardware";
 import type { OllamaStatus, PullProgress } from "../language-model/ollama";
@@ -152,6 +153,13 @@ export interface WindowEntry {
   pid: number;
 }
 
+/** Délai d'une opération, en secondes, avec sa valeur par défaut. */
+export interface BudgetView {
+  key: string;
+  seconds: number;
+  defaultSeconds: number;
+}
+
 export interface NativeBridge {
   listWindows(): Promise<WindowEntry[]>;
   focusWindow(id: number): Promise<void>;
@@ -194,6 +202,13 @@ export interface NativeBridge {
   ollamaStatus(): Promise<OllamaStatus>;
   /** Télécharge un modèle via Ollama. `onProgress` reçoit chaque étape ; la promesse n'aboutit qu'une fois le modèle prêt. */
   pullModel(model: string, onProgress: (progress: PullProgress) => void): Promise<void>;
+  /** Interrompt le téléchargement en cours : il s'arrête entre deux étapes, et l'échec le dit. */
+  cancelPull(): Promise<void>;
+  /** Délais des opérations qui attendent un service, en secondes, et leurs valeurs par défaut. */
+  budgets(): Promise<BudgetView[]>;
+  setBudget(key: string, seconds: number): Promise<BudgetView[]>;
+  /** Mémoire vive de NEXUS, en Mo, mesurée localement. */
+  resources(): Promise<{ processMemoryMb: number | null }>;
   /** Installe Ollama via winget, après accord. `onStage` reçoit « installing », « starting » puis « ready ». */
   installOllama(onStage: (stage: string) => void): Promise<void>;
   /** Réponse JSON libre du modèle local, pour choisir un outil de connecteur. Validée ensuite par l'interface. */
@@ -267,7 +282,19 @@ const OLLAMA_INSTALL_CHANNEL = "ollama://install";
  */
 export class TauriNativeBridge implements NativeBridge {
   #call<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-    return callNative<T>(command, args);
+    // Mesure locale : durée et réussite de chaque appel. Les appels qui attendent une confirmation incluent ce temps.
+    const started = performance.now();
+    const measured = (ok: boolean) => recordCall(command, performance.now() - started, ok);
+    return callNative<T>(command, args).then(
+      (value) => {
+        measured(true);
+        return value;
+      },
+      (error: unknown) => {
+        measured(false);
+        throw error;
+      },
+    );
   }
 
   listProcesses(limit: number): Promise<ProcessEntry[]> {
@@ -414,6 +441,22 @@ export class TauriNativeBridge implements NativeBridge {
 
   memoryExport(): Promise<string> {
     return this.#call<string>("memory_export");
+  }
+
+  cancelPull(): Promise<void> {
+    return this.#call<void>("ollama_pull_cancel");
+  }
+
+  budgets(): Promise<BudgetView[]> {
+    return this.#call<BudgetView[]>("budgets_get");
+  }
+
+  setBudget(key: string, seconds: number): Promise<BudgetView[]> {
+    return this.#call<BudgetView[]>("budgets_set", { key, seconds });
+  }
+
+  resources(): Promise<{ processMemoryMb: number | null }> {
+    return this.#call<{ processMemoryMb: number | null }>("resources_status");
   }
 
   scheduleList(): Promise<ScheduledTask[]> {
@@ -594,6 +637,10 @@ export class UnavailableNativeBridge implements NativeBridge {
   memoryForget = () => this.unavailable();
   memoryClear = () => this.unavailable();
   memoryExport = () => this.unavailable();
+  cancelPull = () => this.unavailable();
+  budgets = () => this.unavailable();
+  setBudget = () => this.unavailable();
+  resources = () => this.unavailable();
   scheduleList = () => this.unavailable();
   scheduleSave = () => this.unavailable();
   webSummary = () => this.unavailable();

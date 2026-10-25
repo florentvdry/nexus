@@ -243,3 +243,11 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 - **Sur case cochée seulement** : les derniers échanges de la conversation, les souvenirs, et ce qui est affiché (fichiers, pages, applications). Aucune case n'est cochée par défaut.
 - **Local strict** : décocher « Utiliser NVIDIA NIM en premier » : rien ne quitte ce poste.
 - Les catégories sont appliquées avant l'envoi, dans l'interface : le natif transmet ce qu'il reçoit. Un test vérifie que les souvenirs ne partent pas sans case cochée.
+
+## Délais, interruption et diagnostic local (phase A5)
+
+- **Délais réglables** (réglages, section Diagnostic) : classification par le modèle local (60 s par défaut), lecture de l'écran (120 s), chaque requête web (15 s), plafond d'un connecteur d'observation (120 s). Bornes : 5 s à 10 min. Les valeurs sont dans `budgets.json`, dans le dossier de données.
+- **Modèles bloqués** : une réponse qui n'arrive pas dans le délai est arrêtée, et le message le dit (« n'a pas répondu dans le délai »). Testé avec un faux serveur qui ne répond jamais.
+- **Téléchargement d'un modèle** : pas de délai total, mais interruption si Ollama ne produit plus rien pendant 2 min. Le bouton « Interrompre le téléchargement » arrête la boucle entre deux étapes ; Ollama arrête le téléchargement de son côté en fermant la connexion. Testé.
+- **Non couvert** : le délai de la réponse NVIDIA (30 s, fixe) ; la limite côté interface de la classification (`withLimit`) n'est pas reliée au réglage, donc l'interface peut abandonner avant que le natif n'atteigne son délai.
+- **Mesures locales** : durée et réussite de chaque appel au natif, mémoire de NEXUS (processus courant). Gardées en mémoire, 200 mesures par commande, effacées à la fermeture. Aucune envoi, aucune télémétrie. Les appels qui attendent une confirmation incluent le temps de réponse.

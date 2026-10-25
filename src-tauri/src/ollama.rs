@@ -7,12 +7,14 @@
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::AdapterError;
+use crate::resilience::{delay_for, Budget, STALL_TIMEOUT};
 
 pub const ENDPOINT: &str = "http://127.0.0.1:11434";
 /// Événement émis pendant un téléchargement : progression, à afficher dans le parcours.
@@ -181,6 +183,15 @@ fn unreachable(error: impl std::fmt::Display) -> AdapterError {
     AdapterError::Operation(format!("Ollama ne répond pas sur ce poste ({error}) : lancez-le, ou installez-le depuis ollama.com"))
 }
 
+/// Échec d'un appel de réponse : un délai dépassé le dit (modèle trop lent ou bloqué), le reste est traité comme absent.
+fn delayed_or_unreachable(error: ureq::Error, what: &str) -> AdapterError {
+    if matches!(error, ureq::Error::Timeout(_)) {
+        AdapterError::ConnectorTimeout(format!("{what} n'a pas répondu dans le délai : le modèle est peut-être bloqué, ou trop lent (réglable dans les réglages)"))
+    } else {
+        unreachable(error)
+    }
+}
+
 fn read_body(response: &mut ureq::http::Response<ureq::Body>) -> Result<String, AdapterError> {
     response
         .body_mut()
@@ -220,15 +231,16 @@ pub fn parse_tags(text: &str) -> Result<Vec<InstalledModel>, AdapterError> {
 
 /// Demande au modèle une intention JSON pour `text`. Renvoie le JSON brut, à valider ensuite.
 pub fn classify_at(endpoint: &str, model: &str, text: &str, memories: &[String]) -> Result<Value, AdapterError> {
-    chat_json(endpoint, model, intent_schema(), &system_prompt(memories), text)
+    chat_json(endpoint, model, intent_schema(), &system_prompt(memories), text, delay_for(Budget::Classify))
 }
 
 /// Réponse JSON libre du modèle, sans schéma d'intention : sert à choisir un outil parmi ceux d'un connecteur.
 pub fn answer_json_at(endpoint: &str, model: &str, system: &str, user: &str) -> Result<Value, AdapterError> {
-    chat_json(endpoint, model, json!("json"), system, user)
+    chat_json(endpoint, model, json!("json"), system, user, delay_for(Budget::Classify))
 }
 
-fn chat_json(endpoint: &str, model: &str, format: Value, system: &str, user: &str) -> Result<Value, AdapterError> {
+/// Appel de chat qui attend une réponse complète, au plus `timeout` : un modèle bloqué ne bloque pas NEXUS.
+fn chat_json(endpoint: &str, model: &str, format: Value, system: &str, user: &str, timeout: Duration) -> Result<Value, AdapterError> {
     if !valid_model_name(model) {
         return Err(AdapterError::InvalidTarget("nom de modèle invalide".into()));
     }
@@ -242,11 +254,11 @@ fn chat_json(endpoint: &str, model: &str, format: Value, system: &str, user: &st
             { "role": "user", "content": user }
         ]
     });
-    let mut response = agent(None)
+    let mut response = agent(Some(timeout))
         .post(&format!("{endpoint}/api/chat"))
         .header("Content-Type", "application/json")
         .send(body.to_string())
-        .map_err(unreachable)?;
+        .map_err(|error| delayed_or_unreachable(error, "la classification"))?;
     if response.status().as_u16() != 200 {
         return Err(AdapterError::Inference(format!("Ollama a refusé la demande (statut HTTP {})", response.status().as_u16())));
     }
@@ -263,6 +275,10 @@ const MAX_IMAGE_BASE64: usize = 8 * 1024 * 1024;
 
 /// Question sur une image (capture d'écran) : le modèle de vision choisi répond en texte, sur ce poste.
 pub fn vision_at(endpoint: &str, model: &str, question: &str, image_base64: &str) -> Result<String, AdapterError> {
+    vision_within(endpoint, model, question, image_base64, delay_for(Budget::Vision))
+}
+
+fn vision_within(endpoint: &str, model: &str, question: &str, image_base64: &str, timeout: Duration) -> Result<String, AdapterError> {
     if !valid_model_name(model) {
         return Err(AdapterError::InvalidTarget("nom de modèle invalide".into()));
     }
@@ -278,11 +294,11 @@ pub fn vision_at(endpoint: &str, model: &str, question: &str, image_base64: &str
             { "role": "user", "content": question, "images": [image_base64] }
         ]
     });
-    let mut response = agent(None)
+    let mut response = agent(Some(timeout))
         .post(&format!("{endpoint}/api/chat"))
         .header("Content-Type", "application/json")
         .send(body.to_string())
-        .map_err(unreachable)?;
+        .map_err(|error| delayed_or_unreachable(error, "la lecture de l'écran"))?;
     if response.status().as_u16() != 200 {
         return Err(AdapterError::Inference(format!("le modèle de vision a refusé la demande (statut HTTP {})", response.status().as_u16())));
     }
@@ -321,13 +337,20 @@ pub fn parse_pull_line(line: &str) -> Result<PullStep, AdapterError> {
 }
 
 /// Télécharge un modèle via Ollama, en signalant chaque étape. Le téléchargement n'est réussi qu'à l'étape « success ».
-pub fn pull_at(endpoint: &str, model: &str, mut on_step: impl FnMut(&PullStep)) -> Result<(), AdapterError> {
+/// Pas de délai total (un modèle de plusieurs Go dure longtemps), mais une interruption si Ollama ne dit plus rien
+/// pendant `STALL_TIMEOUT`, et un arrêt dès que `cancel` est levé par l'utilisateur.
+pub fn pull_at(endpoint: &str, model: &str, cancel: &AtomicBool, mut on_step: impl FnMut(&PullStep)) -> Result<(), AdapterError> {
     if !valid_model_name(model) {
         return Err(AdapterError::InvalidTarget("nom de modèle invalide".into()));
     }
     let body = json!({ "model": model, "stream": true }).to_string();
-    // Pas de délai global : un modèle de plusieurs Go met longtemps. L'arrêt se fait en fermant l'application.
-    let agent = ureq::Agent::new_with_config(ureq::Agent::config_builder().http_status_as_error(false).user_agent("NEXUS-ollama/0.1").build());
+    let agent = ureq::Agent::new_with_config(
+        ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .user_agent("NEXUS-ollama/0.1")
+            .timeout_per_read(Some(STALL_TIMEOUT))
+            .build(),
+    );
     let mut response = agent
         .post(&format!("{endpoint}/api/pull"))
         .header("Content-Type", "application/json")
@@ -339,6 +362,10 @@ pub fn pull_at(endpoint: &str, model: &str, mut on_step: impl FnMut(&PullStep)) 
     let reader = std::io::BufReader::new(response.body_mut().as_reader());
     let mut succeeded = false;
     for line in std::io::BufRead::lines(reader) {
+        if cancel.load(Ordering::SeqCst) {
+            // Quitter la boucle ferme la réponse : Ollama arrête le téléchargement de son côté.
+            return Err(AdapterError::Operation("téléchargement interrompu par l'utilisateur".into()));
+        }
         let line = line.map_err(|error| AdapterError::Operation(format!("téléchargement interrompu : {error}")))?;
         if line.trim().is_empty() {
             continue;
@@ -480,6 +507,35 @@ mod tests {
         format!("http://{address}")
     }
 
+    /// Un modèle qui ne répond jamais : la classification s'arrête au délai, avec un message qui le dit.
+    #[test]
+    fn a_model_that_never_answers_is_stopped_by_the_delay() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("port libre");
+        let endpoint = format!("http://{}", listener.local_addr().expect("adresse"));
+        // Le serveur accepte la connexion, lit la demande, puis se tait.
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer);
+                std::thread::sleep(Duration::from_secs(30));
+            }
+        });
+        let started = std::time::Instant::now();
+        let error = chat_json(&endpoint, "qwen2.5:1.5b", json!("json"), "s", "u", Duration::from_secs(2)).unwrap_err();
+        assert!(matches!(error, AdapterError::ConnectorTimeout(_)), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(15), "le délai doit être respecté");
+    }
+
+    /// Un téléchargement annulé s'arrête entre deux étapes, sans attendre la fin.
+    #[test]
+    fn a_cancelled_pull_stops_at_the_next_step() {
+        let body = "{\"status\":\"pulling manifest\"}\n{\"status\":\"downloading\"}\n{\"status\":\"success\"}\n";
+        let endpoint = serve_once(body);
+        let cancel = AtomicBool::new(true);
+        let result = pull_at(&endpoint, "qwen2.5:1.5b", &cancel, |_| {});
+        assert!(matches!(result, Err(AdapterError::Operation(ref text)) if text.contains("interrompu")), "{result:?}");
+    }
+
     #[test]
     fn model_names_must_be_plain_identifiers() {
         assert!(valid_model_name("qwen2.5:7b"));
@@ -544,14 +600,14 @@ mod tests {
     fn a_completed_pull_reports_every_step_and_succeeds() {
         let endpoint = serve_once("{\"status\":\"pulling manifest\"}\n{\"status\":\"downloading\",\"completed\":4,\"total\":8}\n{\"status\":\"success\"}\n");
         let mut steps = Vec::new();
-        pull_at(&endpoint, "qwen2.5:1.5b", |step| steps.push(step.status.clone())).unwrap();
+        pull_at(&endpoint, "qwen2.5:1.5b", &AtomicBool::new(false), |step| steps.push(step.status.clone())).unwrap();
         assert_eq!(steps, vec!["pulling manifest", "downloading", "success"]);
     }
 
     #[test]
     fn a_pull_that_ends_without_success_is_an_error() {
         let endpoint = serve_once("{\"status\":\"pulling manifest\"}\n{\"error\":\"model not found\"}\n");
-        assert!(matches!(pull_at(&endpoint, "qwen2.5:1.5b", |_| {}), Err(AdapterError::Operation(_))));
+        assert!(matches!(pull_at(&endpoint, "qwen2.5:1.5b", &AtomicBool::new(false), |_| {}), Err(AdapterError::Operation(_))));
     }
 
     #[test]

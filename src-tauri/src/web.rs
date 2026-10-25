@@ -5,8 +5,6 @@
 //! Recherche générale : DuckDuckGo (version HTML, sans clé), puis lecture des pages trouvées, en HTTP(S), bornée, sans
 //! suivre les adresses locales ou privées écrites dans la demande. Aucun compte, aucune clé.
 
-use std::time::Duration;
-
 use serde::Serialize;
 use serde_json::Value;
 
@@ -22,7 +20,6 @@ pub const FRANCE24_RSS: &str = "https://www.france24.com/fr/rss";
 pub const DUCKDUCKGO: &str = "https://html.duckduckgo.com";
 const MAX_RSS_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_HEADLINES: usize = 8;
-const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 3 * 1024 * 1024;
 const MAX_QUERY_CHARS: usize = 100;
@@ -260,7 +257,7 @@ fn is_public_v6(address: std::net::Ipv6Addr) -> bool {
 /// Agent HTTP : une seule adresse publique par connexion, pas de proxy (il résoudrait la cible à sa place).
 fn agent() -> ureq::Agent {
     let config = ureq::Agent::config_builder()
-        .timeout_global(Some(NETWORK_TIMEOUT))
+        .timeout_global(Some(crate::resilience::delay_for(crate::resilience::Budget::Web)))
         .http_status_as_error(false)
         .user_agent(USER_AGENT)
         .proxy(None)

@@ -79,13 +79,15 @@ pub struct ConnectorReport {
     pub partial: bool,
 }
 
+/// Délai d'un connecteur : son délai propre, plafonné par le réglage « plugins » (voir `resilience.rs`).
 pub fn timeout_for(connector: &str) -> Duration {
-    match connector {
+    let own = match connector {
         "domain.dns" => Duration::from_secs(15),
         "domain.certificates" => Duration::from_secs(30),
         "username.profiles" => Duration::from_secs(90),
         _ => Duration::from_secs(30),
-    }
+    };
+    own.min(crate::resilience::delay_for(crate::resilience::Budget::Plugins))
 }
 
 pub struct Collector {
