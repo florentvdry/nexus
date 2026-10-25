@@ -310,7 +310,7 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 *Statut : le point « Edge ajouté au catalogue » est remplacé par ADR-042 (plus de catalogue). Edge reste reconnu par le scan du PC.*
 
 - **Recherche générale** : DuckDuckGo, version HTML, sans clé ni compte. Le choix est le plus simple à maintenir ; il dépend d'un service tiers qui peut changer sa mise en page ou limiter les requêtes. Une clé Brave Search ou un SearXNG auto-hébergé restent possibles si ce service devient insuffisant.
-- **Lecture des pages** : 3 résultats au plus, HTTP ou HTTPS seulement, 1 Mo au plus par page, 6000 caractères de texte. Les adresses sans nom de domaine public, les ports, les identifiants et les adresses locales ou privées sont refusés. Une redirection vers une adresse privée n'est pas bloquée (voir `docs/ANALYSE-CAUSES.md`).
+- **Lecture des pages** : 3 résultats au plus, HTTP ou HTTPS seulement, 1 Mo au plus par page, 6000 caractères de texte. Les adresses sans nom de domaine public, les ports, les identifiants et les adresses locales ou privées sont refusés. Une redirection vers une adresse privée n'est pas bloquée.
 - **Réponse** : le modèle local répond à partir de ces sources seules, en JSON, et ses sources sont listées. Les pages sont traitées comme des données : une consigne écrite dans une page ne change pas la tâche. Les réponses sont en français.
 - **Planning** : le bouton « Planning » ouvre un panneau avec toutes les tâches programmées et un bouton « Annuler » pour chacune.
 - **Lecture vocale** : le bouton « Répondre à voix haute » lit toutes les réponses (mode `always`). Le mode `voice`, qui ne lit que les commandes vocales, reste disponible dans les réglages vocaux.
