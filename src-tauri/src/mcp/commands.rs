@@ -63,6 +63,9 @@ pub fn mcp_installed(state: State<'_, McpState>, webview: tauri::Webview) -> Res
 }
 
 /// Lignes affichées au courtier pour une installation : ce qui sera lancé sur ce poste, sans troncature.
+/// Ce que NEXUS ne limite pas, dit avant l'accord : un connecteur reste du code tiers avec les droits de l'utilisateur.
+pub const ISOLATION_NOTE: &str = "job object et environnement réduits ; réseau et fichiers non restreints (il agit avec vos droits)";
+
 fn install_rows(candidate: &Candidate) -> Vec<Row> {
     let names: Vec<&str> = candidate.env.iter().map(|spec| spec.name.as_str()).collect();
     vec![
@@ -71,6 +74,7 @@ fn install_rows(candidate: &Candidate) -> Vec<Row> {
         Row { key: "command".into(), value: format!("npx -y {}@{}", candidate.package, candidate.version) },
         Row { key: "variables".into(), value: if names.is_empty() { "aucune".into() } else { names.join(", ") } },
         Row { key: "scope".into(), value: "lecture seule, écriture et suppression refusées jusqu'à accord".into() },
+        Row { key: "isolation".into(), value: ISOLATION_NOTE.into() },
     ]
 }
 
@@ -210,6 +214,8 @@ mod tests {
         assert_eq!(value("command"), "npx -y @acme/discord-mcp@1.2.0");
         assert_eq!(value("variables"), "DISCORD_BOT_TOKEN, DISCORD_GUILD");
         assert_eq!(value("repository"), "https://github.com/acme/discord-mcp");
+        // La limite de l'isolation est dite avant l'accord : pas de promesse de sandbox qui n'existe pas.
+        assert!(value("isolation").contains("réseau et fichiers non restreints"), "{}", value("isolation"));
     }
 
     #[test]

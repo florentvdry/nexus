@@ -46,6 +46,7 @@ const ROW_LABEL: Record<string, MessageKey> = {
   commands: "confirm.row.commands",
   previous: "confirm.row.previous",
   scope: "confirm.row.scope",
+  isolation: "confirm.row.isolation",
 };
 
 export function permissionTitle(locale: Locale, permission: string): string {

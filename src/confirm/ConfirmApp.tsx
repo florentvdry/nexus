@@ -40,9 +40,15 @@ export function ConfirmApp({ locale }: { locale: Locale }) {
   }
   return (
     <div className="confirm-queue">
-      {queue.map((request) => (
-        <ConfirmationCard key={request.id} content={confirmationContent(request, locale)} onAnswer={answer} t={t} />
-      ))}
+      {queue.map((request) => {
+        const content = confirmationContent(request, locale);
+        return (
+          <section key={request.id} className="confirm-request" aria-label={content.title}>
+            <h2>{content.title}</h2>
+            <ConfirmationCard content={content} onAnswer={answer} t={t} />
+          </section>
+        );
+      })}
     </div>
   );
 }
