@@ -15,7 +15,7 @@ Ordre, sans commit ni test sur le PC :
 
 Accessibilité : réglage « texte plus grand » (section Accessibilité des réglages), mouvement réduit déjà géré. Clavier : Échap ferme la dernière fenêtre ordinaire (jamais une confirmation). Contraste audité : tous les textes passent WCAG AA (4,5) sur le fond sombre, à vérifier à l'écran.
 
-État au 24/10 : tâches programmées, photo, fiche sujet, actualités du jour, retour immédiat et messages d'aide sont faits et testés (voir `docs/JOURNAL-NUIT.md`). Rien n'est vérifié dans l'application lancée : à faire avec ton accord.
+État au 24/10 : tâches programmées, photo, fiche sujet, actualités du jour, retour immédiat et messages d'aide sont faits et testés. Rien n'est vérifié dans l'application lancée : à faire avec ton accord.
 
 ## 0bis. Fonctionnalités « Jarvis » (demandées le 24/10)
 
