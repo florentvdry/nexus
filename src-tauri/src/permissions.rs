@@ -11,14 +11,18 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::AdapterError;
+use crate::grants::{CONFIRMATION_WINDOW, MAIN_WINDOW};
 
+/// Demande complète, envoyée seulement à la fenêtre de confirmation : elle seule voit les paramètres.
 pub const REQUEST_EVENT: &str = "permissions://request";
+/// Avis envoyé à l'interface principale : il dit qu'une confirmation attend, sans ses paramètres ni ses boutons.
+pub const NOTICE_EVENT: &str = "permissions://notice";
 pub const AUTO_EVENT: &str = "permissions://auto";
 pub const CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_AUDIT: usize = 200;
@@ -108,16 +112,37 @@ pub struct Row {
     pub value: String,
 }
 
-#[derive(Clone, Serialize)]
+/// Demande de confirmation telle qu'affichée par la fenêtre dédiée.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestPayload<'a> {
-    id: &'a str,
-    permission: &'static str,
-    rows: &'a [Row],
-    expires_in_secs: u64,
-    rememberable: bool,
+pub struct PermissionRequest {
+    pub id: String,
+    pub permission: &'static str,
+    pub rows: Vec<Row>,
+    pub expires_in_secs: u64,
+    pub rememberable: bool,
     /// Dossier ou projet que « toujours autoriser » couvrirait, si l'utilisateur le choisit.
-    scope: Option<String>,
+    pub scope: Option<String>,
+}
+
+/// Ce que voit l'interface principale d'une confirmation : qu'elle attend, et depuis combien de temps. Aucun paramètre.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmationNotice {
+    pub id: String,
+    pub permission: &'static str,
+    pub expires_in_secs: u64,
+}
+
+fn permission_request(id: String, permission: Permission, rows: Vec<Row>, expires_in_secs: u64) -> PermissionRequest {
+    PermissionRequest {
+        scope: scope_for(permission, &rows),
+        rememberable: permission.rememberable(),
+        id,
+        permission: permission.id(),
+        rows,
+        expires_in_secs,
+    }
 }
 
 /// Autorisation mémorisée : une permission, bornée à un dossier (écriture) ou un projet (agent).
@@ -180,9 +205,11 @@ fn covers(permission: Permission, scope: &str, rows: &[Row]) -> bool {
 
 #[derive(Clone)]
 struct Pending {
+    id: String,
     sender: Sender<bool>,
     permission: Permission,
     rows: Vec<Row>,
+    deadline: Instant,
 }
 
 /// Courtier partagé : demandes en attente, règles mémorisées et journal des actions automatiques.
@@ -250,6 +277,21 @@ impl Broker {
     /// Demandes en attente. Utile pour l'affichage et les tests.
     pub fn pending_count(&self) -> usize {
         self.pending.lock().map(|pending| pending.len()).unwrap_or(0)
+    }
+
+    /// Demandes en attente, pour la fenêtre de confirmation : au chargement, elle reprend ce qui attend déjà.
+    pub fn pending_requests(&self) -> Vec<PermissionRequest> {
+        let now = Instant::now();
+        let Ok(pending) = self.pending.lock() else { return Vec::new() };
+        let mut requests: Vec<PermissionRequest> = pending
+            .values()
+            .map(|entry| {
+                let left = entry.deadline.saturating_duration_since(now).as_secs();
+                permission_request(entry.id.clone(), entry.permission, entry.rows.clone(), left)
+            })
+            .collect();
+        requests.sort_by(|a, b| a.id.cmp(&b.id));
+        requests
     }
 
     fn add_rule(&self, permission: Permission, scope: String) -> Result<(), AdapterError> {
@@ -339,7 +381,7 @@ pub fn confirm_with(
         .pending
         .lock()
         .map_err(|_| AdapterError::TaskFailed("verrou des permissions".into()))?
-        .insert(id.clone(), Pending { sender, permission, rows: rows.to_vec() });
+        .insert(id.clone(), Pending { id: id.clone(), sender, permission, rows: rows.to_vec(), deadline: Instant::now() + timeout });
 
     let outcome = match emit(&id, permission, rows, timeout.as_secs()) {
         Err(error) => Err(error),
@@ -363,21 +405,35 @@ pub fn confirm(app: &AppHandle, broker: &Broker, permission: Permission, rows: &
     }
     confirm_with(
         |id, permission, rows, expires_in_secs| {
-            let payload = RequestPayload {
-                id,
-                permission: permission.id(),
-                rows,
-                expires_in_secs,
-                rememberable: permission.rememberable(),
-                scope: scope_for(permission, rows),
-            };
-            app.emit(REQUEST_EVENT, payload).map_err(|error| AdapterError::TaskFailed(error.to_string()))
+            // Sans fenêtre de confirmation, la demande échoue : l'action n'a pas lieu.
+            let request = permission_request(id.to_string(), permission, rows.to_vec(), expires_in_secs);
+            show_confirmation_window(app);
+            app.emit_to(CONFIRMATION_WINDOW, REQUEST_EVENT, &request).map_err(|error| AdapterError::TaskFailed(error.to_string()))?;
+            let notice = ConfirmationNotice { id: id.to_string(), permission: permission.id(), expires_in_secs };
+            app.emit_to(MAIN_WINDOW, NOTICE_EVENT, &notice).map_err(|error| AdapterError::TaskFailed(error.to_string()))
         },
         broker,
         permission,
         rows,
         CONFIRMATION_TIMEOUT,
     )
+}
+
+/// Fait apparaître la fenêtre de confirmation, sans la laisser se fermer : elle se cache seulement.
+fn show_confirmation_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(CONFIRMATION_WINDOW) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Cache la fenêtre de confirmation quand plus rien n'attend.
+pub fn hide_confirmation_window_when_idle(app: &AppHandle, broker: &Broker) {
+    if broker.pending_count() == 0 {
+        if let Some(window) = app.get_webview_window(CONFIRMATION_WINDOW) {
+            let _ = window.hide();
+        }
+    }
 }
 
 /// Chaque permission et son niveau, pour l'affichage des réglages.
@@ -471,6 +527,37 @@ mod tests {
         assert_eq!(Permission::WindowControl.tier(), Tier::Confirmation);
         assert_eq!(Permission::ConnectorCall.tier(), Tier::Confirmation);
         assert_eq!(Permission::ConnectorInstall.tier(), Tier::Confirmation);
+    }
+
+    /// L'interface principale reçoit un avis : elle sait qu'une confirmation attend, pas ce qu'elle autorise.
+    #[test]
+    fn the_notice_for_the_main_window_carries_no_parameters() {
+        let notice = ConfirmationNotice { id: "perm-1".into(), permission: "file.delete", expires_in_secs: 120 };
+        let text = serde_json::to_string(&notice).unwrap();
+        assert!(!text.contains("rows") && !text.contains("value"), "{text}");
+        assert!(text.contains("\"expiresInSecs\":120"), "{text}");
+    }
+
+    /// La fenêtre de confirmation reprend ce qui attend : une demande reste visible tant que personne n'a répondu.
+    #[test]
+    fn a_waiting_request_is_listed_for_the_confirmation_window_until_answered() {
+        let broker = Broker::default();
+        let worker = broker.clone_handle();
+        let rows = vec![row("path", "C:\\Users\\flore\\Documents\\devis.pdf")];
+        let rows_for_thread = rows.clone();
+        let waiting = thread::spawn(move || confirm_with(|_, _, _, _| Ok(()), &worker, Permission::FileDelete, &rows_for_thread, Duration::from_secs(10)));
+        let started = std::time::Instant::now();
+        while broker.pending_count() == 0 && started.elapsed() < Duration::from_secs(5) {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let listed = broker.pending_requests();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].permission, "file.delete");
+        assert_eq!(listed[0].rows, rows);
+        assert!(!listed[0].rememberable, "la suppression n'est jamais mémorisable");
+        broker.answer(&listed[0].id, true).unwrap();
+        assert!(waiting.join().unwrap().is_ok());
+        assert!(broker.pending_requests().is_empty());
     }
 
     #[test]

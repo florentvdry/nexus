@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "confirmation",
+  "description": "Fenêtre de confirmation : seule fenêtre qui peut répondre à une demande. Aucune permission supplémentaire.",
+  "windows": ["confirm"],
+  "permissions": ["core:default"]
+}

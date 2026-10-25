@@ -88,13 +88,18 @@ Chaque commande native a une politique, dans la table `POLICIES` de `src-tauri/s
 Tests : chaque commande exposée figure dans `POLICIES` et inversement ; la table des permissions correspond aux
 `plugin.json` ; la CSP interdit les scripts en ligne et l'évaluation de chaîne ; la capacité Tauri ne vise que `main`.
 
-**Limite connue.** Le JavaScript de la fenêtre `main` est celui de NEXUS, et il peut appeler toute commande de sa fenêtre.
-Un script injecté dans cette fenêtre (XSS) pourrait donc répondre à une confirmation. Les protections restantes :
-la CSP, l'absence de plugin à code exécuté dans la fenêtre (les WebAssembly tournent côté natif), et des confirmations
-qui affichent les paramètres exacts. Isoler davantage exige une seconde fenêtre pour les confirmations : décision à prendre.
+**Fenêtre de confirmation, séparée.** Les demandes de confirmation ne s'affichent que dans une seconde fenêtre, `confirm`
+(`tauri.conf.json`, et sa capacité dans `capabilities/confirmation.json`). Seule cette fenêtre peut répondre
+(`permission_answer`, `confirmation_pending`). L'interface principale reçoit seulement un avis : « une confirmation attend »,
+sans paramètres ni boutons. Elle ne peut donc pas approuver sa propre demande. La fenêtre se cache au lieu de se fermer ;
+une demande sans fenêtre de confirmation échoue, et l'action n'a pas lieu.
 
-Chaque plugin ne reçoit qu'un pont attribué à son identifiant : il ne peut pas agir au nom d'un autre plugin
-en passant par ce pont. Une confirmation affiche « Demandé par » avec l'identifiant de l'appelant.
+**Limites restantes.** Le JavaScript de la fenêtre principale peut déclencher des demandes, lire et révoquer les
+autorisations mémorisées, et lire les réglages. Il ne peut ni approuver une demande, ni modifier ce qui est affiché dans la
+fenêtre de confirmation. Cette fenêtre n'affiche que du texte (aucun HTML), et son JavaScript est celui de NEXUS.
+
+Il n'existe plus de pont par plugin : chaque commande porte sa politique (voir ci-dessus). « Demandé par » affiche
+l'identité native de la capacité appelée, par exemple `actions.file-operations`.
 
 Un plugin ne peut pas approuver sa propre demande : seul `core` peut répondre à `permission_answer`.
 

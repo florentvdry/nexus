@@ -20,6 +20,19 @@
         "minHeight": 600,
         "center": true,
         "backgroundColor": "#060912"
+      },
+      {
+        "label": "confirm",
+        "title": "NEXUS — Confirmation",
+        "url": "confirm.html",
+        "width": 480,
+        "height": 420,
+        "minWidth": 400,
+        "minHeight": 300,
+        "center": true,
+        "visible": false,
+        "alwaysOnTop": true,
+        "backgroundColor": "#060912"
       }
     ],
     "security": {

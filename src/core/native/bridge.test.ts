@@ -20,15 +20,6 @@ describe("pont natif attribué", () => {
     expect(callNative).toHaveBeenCalledWith("processes_list", { limit: 3 });
   });
 
-  it("transmet l'identité de l'interface pour les réponses aux confirmations", async () => {
-    await new TauriNativeBridge().answerConfirmation("perm-1", true);
-    expect(callNative).toHaveBeenCalledWith("permission_answer", { id: "perm-1", approved: true, remember: false });
-  });
-
-  it("transmet « toujours autoriser » au natif quand l'utilisateur coche la case", async () => {
-    await new TauriNativeBridge().answerConfirmation("perm-2", true, true);
-    expect(callNative).toHaveBeenCalledWith("permission_answer", { id: "perm-2", approved: true, remember: true });
-  });
 
   it("envoie la demande et le modèle choisi au classement local, au nom de l'interface", async () => {
     await new TauriNativeBridge().classifyIntent("ouvre la calculatrice", "qwen2.5:7b");
@@ -88,7 +79,6 @@ describe("pont natif attribué", () => {
     const bridge = new TauriNativeBridge();
     await bridge.closeWindow(42);
     await bridge.listProcesses(3);
-    await bridge.answerConfirmation("perm-9", false);
     for (const [, args] of vi.mocked(callNative).mock.calls) {
       expect(args).not.toHaveProperty("caller");
     }

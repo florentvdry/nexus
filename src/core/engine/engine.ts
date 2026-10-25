@@ -24,7 +24,8 @@ import { eventsOn, parseIcs } from "../agenda/ics";
 import type { SystemInfo } from "../native/adapter";
 import { createNativeAdapter, type NativeAdapter } from "../native";
 import { createOsintRunner } from "../osint/runner";
-import { createNativeBridge, type AutoApproval, type ConfirmationRequest, type NativeBridge } from "../native/bridge";
+import { createNativeBridge, type AutoApproval, type ConfirmationNotice, type NativeBridge } from "../native/bridge";
+import { permissionTitle } from "../confirmations/content";
 import { RULE_ACTION } from "../native/rules";
 import type { OsintRunner } from "../osint/types";
 import type { PresentedContent } from "../presentation/types";
@@ -85,45 +86,6 @@ const DEFAULT_GRANTED: Permission[] = [
   "connector.install",
   "connector.call",
 ];
-
-/** Titre affiché pour chaque permission demandant une confirmation. */
-
-const PERMISSION_TITLE: Record<string, MessageKey> = {
-  "file.write": "confirm.title.fileWrite",
-  "file.delete": "confirm.title.fileDelete",
-  "agent.run": "confirm.title.agentRun",
-  "window.control": "confirm.title.windowControl",
-  "plugin.manage": "confirm.title.pluginManage",
-  "connector.install": "confirm.title.connectorInstall",
-  "connector.call": "confirm.title.connectorCall",
-};
-
-/** Libellé de chaque ligne de détail d'une demande de confirmation. */
-const ROW_LABEL: Record<string, MessageKey> = {
-  from: "confirm.row.from",
-  to: "confirm.row.to",
-  path: "confirm.row.path",
-  project: "confirm.row.project",
-  prompt: "confirm.row.prompt",
-  window: "confirm.row.window",
-  process: "confirm.row.process",
-  requester: "confirm.row.requester",
-  connector: "confirm.row.connector",
-  tool: "confirm.row.tool",
-  arguments: "confirm.row.arguments",
-  command: "confirm.row.command",
-  repository: "confirm.row.repository",
-  variables: "confirm.row.variables",
-  plugin: "confirm.row.plugin",
-  version: "confirm.row.version",
-  commit: "confirm.row.commit",
-  kinds: "confirm.row.kinds",
-  digest: "confirm.row.digest",
-  source: "confirm.row.source",
-  permissions: "confirm.row.permissions",
-  commands: "confirm.row.commands",
-  previous: "confirm.row.previous",
-};
 
 function basename(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
@@ -209,7 +171,7 @@ export class Engine {
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
       t: (key, params) => translate(this.#locale, key, params),
     });
-    this.#unsubscribeConfirmations = this.#bridge.onConfirmationRequest((request) => this.#presentConfirmation(request));
+    this.#unsubscribeConfirmations = this.#bridge.onConfirmationNotice((notice) => this.#presentConfirmation(notice));
     this.#unsubscribeAutoApprovals = this.#bridge.onAutoApproval((approval) => this.#announceAutomatic(approval));
     this.#locale = options.locale;
     this.#holdMs = options.responseHoldMs ?? 2500;
@@ -778,32 +740,15 @@ export class Engine {
     this.#bridge.recordJournal(kind, text).catch(() => {});
   }
 
-  /** Une demande de confirmation venue du natif devient une fenêtre visible, avec ses deux réponses. */
-  #presentConfirmation(request: ConfirmationRequest): void {
+  /**
+   * Une demande de confirmation attend. Le natif la présente dans sa fenêtre dédiée, la seule qui peut y répondre :
+   * la conversation annonce seulement qu'elle attend, avec son titre.
+   */
+  #presentConfirmation(notice: ConfirmationNotice): void {
     const reply = replyFor(this.#locale);
-    const title = reply.t(PERMISSION_TITLE[request.permission] ?? "confirm.title.generic");
+    const title = permissionTitle(this.#locale, notice.permission);
     this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.asked", { title }), tone: "info", locale: reply.locale });
-    this.#emit({
-      type: "present",
-      content: {
-        kind: "confirmation",
-        requestId: request.id,
-        title,
-        rows: request.rows.map((row) => ({ label: reply.t(ROW_LABEL[row.key] ?? "confirm.row.generic"), value: row.value })),
-        approve: reply.t("confirm.approve"),
-        refuse: reply.t("confirm.refuse"),
-        ...(request.rememberable && request.scope
-          ? {
-              remember: {
-                label: reply.t(request.permission === "agent.run" ? "confirm.remember.project" : "confirm.remember.folder", {
-                  scope: request.scope,
-                }),
-              },
-            }
-          : {}),
-      },
-      source: { capabilityId: "permissions", locality: "local", collectedAt: Date.now() },
-    });
+    this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.answerInWindow"), tone: "info", locale: reply.locale });
   }
 
   /** Une règle mémorisée a approuvé une action sans question : la conversation le dit, le natif le journalise. */

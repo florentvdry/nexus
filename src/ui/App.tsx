@@ -312,7 +312,6 @@ export function App({ engine: injectedEngine }: AppProps) {
             onMove={(id, rect) => dispatch({ type: "move", id, rect, context: readWindowContext() })}
             onFocus={(id) => dispatch({ type: "focus", id })}
             onClose={(id) => dispatch({ type: "close", id, now: Date.now() })}
-            onAnswer={(requestId, approved, remember) => answerBridge.answerConfirmation(requestId, approved, remember)}
           />
         ))}
       </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { NativeCallError, type NativeAdapter } from "../native/adapter";
-import type { AgentEvent, AutoApproval, ConfirmationRequest, NativeBridge } from "../native/bridge";
+import type { AgentEvent, AutoApproval, ConfirmationNotice, NativeBridge } from "../native/bridge";
 import { createEngine, type EngineEvent } from "./engine";
 import { TEST_MODEL } from "../testing/scripted";
 
@@ -44,11 +44,11 @@ const MODEL_ANSWERS: Record<string, unknown> = {
 // Pont natif SIMULÉ : réponses fixes, sans toucher au disque, aux processus ni au CLI réel.
 function fakeBridge(overrides: Partial<NativeBridge> = {}) {
   const agentListeners = new Set<(runId: string, event: AgentEvent) => void>();
-  const confirmationListeners = new Set<(request: ConfirmationRequest) => void>();
+  const confirmationListeners = new Set<(notice: ConfirmationNotice) => void>();
   const autoApprovalListeners = new Set<(approval: AutoApproval) => void>();
   const bridge: NativeBridge & {
     emitAgent(runId: string, event: AgentEvent): void;
-    emitConfirmation(request: ConfirmationRequest): void;
+    emitConfirmationNotice(notice: ConfirmationNotice): void;
     emitAutoApproval(approval: AutoApproval): void;
   } = {
     pluginPrepare: vi.fn(async (source: string) => ({
@@ -104,11 +104,10 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
       agentListeners.add(listener);
       return () => agentListeners.delete(listener);
     },
-    onConfirmationRequest: (listener) => {
+    onConfirmationNotice: (listener) => {
       confirmationListeners.add(listener);
       return () => confirmationListeners.delete(listener);
     },
-    answerConfirmation: vi.fn(async () => {}),
     listRules: vi.fn(async () => []),
     revokeRule: vi.fn(async () => true),
     listAudit: vi.fn(async () => []),
@@ -167,8 +166,8 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     emitAgent(runId, event) {
       for (const listener of agentListeners) listener(runId, event);
     },
-    emitConfirmation(request) {
-      for (const listener of confirmationListeners) listener(request);
+    emitConfirmationNotice(notice) {
+      for (const listener of confirmationListeners) listener(notice);
     },
     emitAutoApproval(approval) {
       for (const listener of autoApprovalListeners) listener(approval);
@@ -348,66 +347,15 @@ describe("opérations sur fichiers : confirmation présentée, action native", (
     expect(assistant(events)).toEqual(["Envoyé à la corbeille : /home/ana/Documents/vieux.txt"]);
   });
 
-  it("présente une demande de confirmation reçue du natif, avec ses deux réponses", () => {
+  it("annonce qu'une confirmation attend, avec son titre, et renvoie à la fenêtre dédiée : aucune carte ici", () => {
     const bridge = fakeBridge();
     const { events } = setup(bridge);
-    bridge.emitConfirmation({
-      id: "perm-1",
-      permission: "file.delete",
-      rows: [{ key: "path", value: "/home/ana/Documents/vieux.txt" }],
-      expiresInSecs: 120,
-      rememberable: false,
-      scope: null,
-    });
-    const card = presented(events).find((content) => content.kind === "confirmation");
-    expect(card).toEqual({
-      kind: "confirmation",
-      requestId: "perm-1",
-      title: "Envoyer à la corbeille ?",
-      rows: [{ label: "Élément", value: "/home/ana/Documents/vieux.txt" }],
-      approve: "Autoriser",
-      refuse: "Refuser",
-    });
-    expect(assistant(events)).toContain("Confirmation demandée : Envoyer à la corbeille ?");
-  });
-
-  it("propose « toujours autoriser » pour une écriture, avec le dossier que la règle couvrirait", () => {
-    const bridge = fakeBridge();
-    const { events } = setup(bridge);
-    bridge.emitConfirmation({
-      id: "perm-2",
-      permission: "file.write",
-      rows: [{ key: "from", value: "/home/ana/Documents/a.pdf" }],
-      expiresInSecs: 120,
-      rememberable: true,
-      scope: "/home/ana/Documents",
-    });
-    const card = presented(events).find((content) => content.kind === "confirmation");
-    expect(card).toMatchObject({ remember: { label: "Toujours autoriser dans ce dossier : /home/ana/Documents" } });
-  });
-
-  it("propose « toujours autoriser » pour un projet Claude Code, et jamais pour une suppression", () => {
-    const bridge = fakeBridge();
-    const { events } = setup(bridge);
-    bridge.emitConfirmation({
-      id: "perm-3",
-      permission: "agent.run",
-      rows: [{ key: "project", value: "/home/ana/projet" }],
-      expiresInSecs: 120,
-      rememberable: true,
-      scope: "/home/ana/projet",
-    });
-    bridge.emitConfirmation({
-      id: "perm-4",
-      permission: "file.delete",
-      rows: [{ key: "path", value: "/home/ana/a.txt" }],
-      expiresInSecs: 120,
-      rememberable: false,
-      scope: "/home/ana",
-    });
-    const cards = presented(events).filter((content) => content.kind === "confirmation");
-    expect(cards[0]).toMatchObject({ remember: { label: "Toujours autoriser pour ce projet : /home/ana/projet" } });
-    expect(cards[1]).not.toHaveProperty("remember");
+    bridge.emitConfirmationNotice({ id: "perm-1", permission: "file.delete", expiresInSecs: 120 });
+    expect(assistant(events)).toEqual([
+      "Confirmation demandée : Envoyer à la corbeille ?",
+      "Réponds dans la fenêtre de confirmation de NEXUS : rien n'est fait sans ton accord.",
+    ]);
+    expect(presented(events).filter((content) => content.kind === "confirmation")).toEqual([]);
   });
 
   it("annonce dans la conversation une action approuvée par une règle, sans question", () => {

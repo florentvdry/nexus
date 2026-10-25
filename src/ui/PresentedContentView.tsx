@@ -5,7 +5,7 @@ import type { MessageKey } from "../i18n/messages";
 
 export type ConfirmationAnswer = (id: string, approved: boolean, remember?: boolean) => Promise<void>;
 
-function ConfirmationCard({
+export function ConfirmationCard({
   content,
   onAnswer,
   t,

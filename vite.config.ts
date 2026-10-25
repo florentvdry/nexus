@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -17,5 +18,12 @@ export default defineConfig({
     target: "es2022",
     outDir: "dist",
     emptyOutDir: true,
+    // Deux pages : l'interface principale, et la fenêtre de confirmation, seule à pouvoir répondre aux demandes.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        confirm: fileURLToPath(new URL("./confirm.html", import.meta.url)),
+      },
+    },
   },
 });

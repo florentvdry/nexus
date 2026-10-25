@@ -57,6 +57,13 @@ export type AgentEvent =
   | { kind: "error"; message: string }
   | { kind: "cancelled" };
 
+/** Avis envoyé à l'interface principale : une confirmation attend dans la fenêtre dédiée. Sans paramètres ni réponse. */
+export interface ConfirmationNotice {
+  id: string;
+  permission: string;
+  expiresInSecs: number;
+}
+
 export interface ConfirmationRequest {
   id: string;
   /** Identifiant de permission, p. ex. `file.delete`. */
@@ -172,9 +179,8 @@ export interface NativeBridge {
   runAgent(runId: string, project: string, prompt: string): Promise<void>;
   cancelAgent(runId: string): Promise<boolean>;
   onAgentEvent(listener: (runId: string, event: AgentEvent) => void): () => void;
-  onConfirmationRequest(listener: (request: ConfirmationRequest) => void): () => void;
-  /** `remember` : « toujours autoriser » pour le dossier ou le projet proposé. Ignoré si l'action ne peut pas être mémorisée. */
-  answerConfirmation(id: string, approved: boolean, remember?: boolean): Promise<void>;
+  /** L'interface principale est avertie qu'une confirmation attend. Elle ne peut pas y répondre : seule la fenêtre dédiée le peut. */
+  onConfirmationNotice(listener: (notice: ConfirmationNotice) => void): () => void;
   /** Autorisations mémorisées et leur révocation. Réservé à l'interface. */
   listRules(): Promise<PermissionRule[]>;
   revokeRule(id: string): Promise<boolean>;
@@ -248,7 +254,7 @@ export interface NativeBridge {
 }
 
 const AGENT_CHANNEL = "agents://event";
-const CONFIRMATION_CHANNEL = "permissions://request";
+const CONFIRMATION_NOTICE_CHANNEL = "permissions://notice";
 const AUTO_APPROVAL_CHANNEL = "permissions://auto";
 const OLLAMA_PULL_CHANNEL = "ollama://pull";
 const OLLAMA_INSTALL_CHANNEL = "ollama://install";
@@ -354,13 +360,9 @@ export class TauriNativeBridge implements NativeBridge {
     return () => void unlisten.then((stop) => stop());
   }
 
-  onConfirmationRequest(listener: (request: ConfirmationRequest) => void): () => void {
-    const unlisten = listen<ConfirmationRequest>(CONFIRMATION_CHANNEL, (message) => listener(message.payload));
+  onConfirmationNotice(listener: (notice: ConfirmationNotice) => void): () => void {
+    const unlisten = listen<ConfirmationNotice>(CONFIRMATION_NOTICE_CHANNEL, (message) => listener(message.payload));
     return () => void unlisten.then((stop) => stop());
-  }
-
-  answerConfirmation(id: string, approved: boolean, remember = false): Promise<void> {
-    return this.#call<void>("permission_answer", { id, approved, remember });
   }
 
   listRules(): Promise<PermissionRule[]> {
@@ -575,7 +577,6 @@ export class UnavailableNativeBridge implements NativeBridge {
   detectAgent = () => this.unavailable();
   runAgent = () => this.unavailable();
   cancelAgent = () => this.unavailable();
-  answerConfirmation = () => this.unavailable();
   listRules = () => this.unavailable();
   revokeRule = () => this.unavailable();
   listAudit = () => this.unavailable();
@@ -619,7 +620,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   pullModel = () => this.unavailable();
   installOllama = () => this.unavailable();
   onAgentEvent = () => () => {};
-  onConfirmationRequest = () => () => {};
+  onConfirmationNotice = () => () => {};
   onAutoApproval = () => () => {};
 }
 
