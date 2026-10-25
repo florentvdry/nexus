@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 /// Batterie : charge en pourcentage et branchement secteur.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -39,8 +39,8 @@ pub fn read_battery() -> Result<Option<BatteryStatus>, AdapterError> {
 }
 
 #[tauri::command]
-pub async fn battery_status(caller: String) -> Result<Option<BatteryStatus>, AdapterError> {
-    require_core(&caller)?;
+pub async fn battery_status(webview: tauri::Webview) -> Result<Option<BatteryStatus>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(read_battery)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?

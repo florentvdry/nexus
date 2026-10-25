@@ -1,49 +1,149 @@
-//! Qui peut utiliser quelle permission côté natif.
+//! Qui peut faire quoi côté natif. Une seule table, la même pour toutes les commandes.
 //!
-//! Chaque commande native reçoit l'identifiant de son appelant : `core` pour l'interface, `type.dossier` pour un
-//! plugin (p. ex. `actions.file-search`). Elle vérifie la permission correspondante avant toute action. La table
-//! doit rester identique aux `plugin.json` : un test le vérifie.
+//! L'interface n'envoie plus son identité : aucune commande ne lit une chaîne `caller` fournie par le JavaScript. Chaque
+//! commande a une politique décidée ici, par le natif :
+//! - `MainWindow` : seule la fenêtre principale peut l'appeler. Tauri atteste le libellé de la fenêtre appelante ; une
+//!   autre fenêtre (qui n'existe pas aujourd'hui) est refusée.
+//! - `Capability(identité)` : la commande exerce une capacité d'un plugin, et l'identité est une constante du natif. Les
+//!   permissions de cette identité sont celles de son manifeste (`plugin.json`, vérifié par un test).
 //!
-//! Limite : l'identifiant est fourni par la fenêtre. Il empêche un plugin de dépasser son manifeste lorsqu'il passe
-//! par le pont de NEXUS, mais pas un script hostile qui appellerait directement Tauri. Voir `docs/PERMISSIONS.md`.
+//! Limite : le JavaScript de la fenêtre principale est celui de NEXUS. Il peut appeler toute commande de cette fenêtre.
+//! La protection repose donc sur la CSP (aucun script tiers ni évaluation de chaîne, testé), sur les confirmations du
+//! courtier (réponse explicite, jamais mémorisée pour les actions sensibles) et sur l'absence de plugin à code exécuté
+//! dans la fenêtre : les plugins WebAssembly tournent côté natif. Voir `docs/PERMISSIONS.md`.
 
 use crate::error::AdapterError;
 use crate::permissions::Permission;
 
-/// Appelant de l'interface principale. Il ne peut que répondre aux confirmations.
-pub const CORE: &str = "core";
+/// Libellé de la seule fenêtre de l'interface principale (`tauri.conf.json`).
+pub const MAIN_WINDOW: &str = "main";
 
+pub const PROCESS_LIST: &str = "actions.process-list";
+pub const FILE_SEARCH: &str = "actions.file-search";
+pub const FILE_OPERATIONS: &str = "actions.file-operations";
+pub const CLAUDE_CODE: &str = "agents.claude-code";
+pub const WINDOW_CONTROL: &str = "actions.window-control";
+pub const PLUGIN_MANAGER: &str = "actions.plugin-manager";
+
+/// Permissions accordées à chaque identité de capacité, d'après leurs manifestes.
 const GRANTS: &[(&str, &[Permission])] = &[
-    ("actions.process-list", &[Permission::SystemRead]),
-    ("actions.file-search", &[Permission::FileRead]),
-    ("actions.file-operations", &[Permission::FileWrite, Permission::FileDelete]),
-    ("agents.claude-code", &[Permission::AgentRun]),
-    ("actions.window-control", &[Permission::WindowRead, Permission::WindowControl]),
-    ("actions.plugin-manager", &[Permission::PluginManage]),
+    (PROCESS_LIST, &[Permission::SystemRead]),
+    (FILE_SEARCH, &[Permission::FileRead]),
+    (FILE_OPERATIONS, &[Permission::FileWrite, Permission::FileDelete]),
+    (CLAUDE_CODE, &[Permission::AgentRun]),
+    (WINDOW_CONTROL, &[Permission::WindowRead, Permission::WindowControl]),
+    (PLUGIN_MANAGER, &[Permission::PluginManage]),
 ];
 
-/// Refuse l'action si l'appelant n'a pas reçu cette permission dans son manifeste.
-pub fn require(caller: &str, permission: Permission) -> Result<(), AdapterError> {
-    let granted = GRANTS.iter().find(|(id, _)| *id == caller).map(|(_, permissions)| *permissions).unwrap_or(&[]);
-    if granted.contains(&permission) {
+/// Politique de chaque commande native. Toute commande exposée doit figurer ici : un test le vérifie.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Policy {
+    MainWindow,
+    Capability(&'static str),
+}
+
+pub const POLICIES: &[(&str, Policy)] = &[
+    // Commandes de l'interface : identité de la fenêtre principale.
+    ("system_info", Policy::MainWindow),
+    ("hardware_profile", Policy::MainWindow),
+    ("model_classify", Policy::MainWindow),
+    ("model_json", Policy::MainWindow),
+    ("vision_ask", Policy::MainWindow),
+    ("ollama_status", Policy::MainWindow),
+    ("ollama_pull", Policy::MainWindow),
+    ("ollama_install", Policy::MainWindow),
+    ("mcp_search", Policy::MainWindow),
+    ("mcp_installed", Policy::MainWindow),
+    ("mcp_install", Policy::MainWindow),
+    ("mcp_set_value", Policy::MainWindow),
+    ("mcp_tools", Policy::MainWindow),
+    ("mcp_call", Policy::MainWindow),
+    ("memory_list", Policy::MainWindow),
+    ("memory_add", Policy::MainWindow),
+    ("memory_remove", Policy::MainWindow),
+    ("memory_forget", Policy::MainWindow),
+    ("memory_clear", Policy::MainWindow),
+    ("schedule_list", Policy::MainWindow),
+    ("schedule_save", Policy::MainWindow),
+    ("web_summary", Policy::MainWindow),
+    ("web_photo", Policy::MainWindow),
+    ("web_news", Policy::MainWindow),
+    ("web_headlines", Policy::MainWindow),
+    ("web_news_search", Policy::MainWindow),
+    ("web_search", Policy::MainWindow),
+    ("web_read", Policy::MainWindow),
+    ("speech_neural_available", Policy::MainWindow),
+    ("speech_neural_install", Policy::MainWindow),
+    ("speech_neural_speak", Policy::MainWindow),
+    ("voice_status", Policy::MainWindow),
+    ("voice_start", Policy::MainWindow),
+    ("voice_stop", Policy::MainWindow),
+    ("startup_status", Policy::MainWindow),
+    ("startup_set", Policy::MainWindow),
+    ("battery_status", Policy::MainWindow),
+    ("agenda_read", Policy::MainWindow),
+    ("screen_capture", Policy::MainWindow),
+    ("nim_classify", Policy::MainWindow),
+    ("nim_key_status", Policy::MainWindow),
+    ("nim_key_save", Policy::MainWindow),
+    ("nim_key_clear", Policy::MainWindow),
+    ("app_open", Policy::MainWindow),
+    ("app_find", Policy::MainWindow),
+    ("osint_run", Policy::MainWindow),
+    ("journal_status", Policy::MainWindow),
+    ("journal_set_enabled", Policy::MainWindow),
+    ("journal_record", Policy::MainWindow),
+    ("journal_list", Policy::MainWindow),
+    ("journal_clear", Policy::MainWindow),
+    ("plugin_packs", Policy::MainWindow),
+    ("permission_answer", Policy::MainWindow),
+    ("permission_rules", Policy::MainWindow),
+    ("permission_revoke", Policy::MainWindow),
+    ("permission_audit", Policy::MainWindow),
+    ("permissions_status", Policy::MainWindow),
+    // Commandes qui exercent une capacité de plugin : identité native.
+    ("processes_list", Policy::Capability(PROCESS_LIST)),
+    ("files_search", Policy::Capability(FILE_SEARCH)),
+    ("files_operate", Policy::Capability(FILE_OPERATIONS)),
+    ("agent_detect", Policy::Capability(CLAUDE_CODE)),
+    ("agent_run", Policy::Capability(CLAUDE_CODE)),
+    ("agent_cancel", Policy::Capability(CLAUDE_CODE)),
+    ("window_list", Policy::Capability(WINDOW_CONTROL)),
+    ("window_focus", Policy::Capability(WINDOW_CONTROL)),
+    ("window_close", Policy::Capability(WINDOW_CONTROL)),
+    ("plugin_prepare", Policy::Capability(PLUGIN_MANAGER)),
+    ("plugin_install", Policy::Capability(PLUGIN_MANAGER)),
+    ("plugin_remove", Policy::Capability(PLUGIN_MANAGER)),
+    ("plugin_run", Policy::Capability(PLUGIN_MANAGER)),
+    ("plugin_list", Policy::Capability(PLUGIN_MANAGER)),
+    ("plugin_index", Policy::Capability(PLUGIN_MANAGER)),
+];
+
+/// Vrai seulement pour la fenêtre de l'interface principale.
+pub fn is_main_window(label: &str) -> bool {
+    label == MAIN_WINDOW
+}
+
+/// Refuse l'appel si la fenêtre qui l'envoie n'est pas l'interface principale.
+pub fn require_main(webview: &tauri::Webview) -> Result<(), AdapterError> {
+    if is_main_window(webview.label()) {
         Ok(())
     } else {
-        Err(AdapterError::PermissionRefused(format!("{caller} → {}", permission.id())))
+        Err(AdapterError::PermissionRefused(format!("{} : réservé à l'interface principale", webview.label())))
     }
 }
 
-/// Seule l'interface peut répondre à une demande de confirmation : un plugin ne peut pas s'approuver lui-même.
-pub fn require_core(caller: &str) -> Result<(), AdapterError> {
-    if caller == CORE {
+/// Refuse l'action si l'identité n'a pas cette permission dans son manifeste.
+pub fn require(identity: &str, permission: Permission) -> Result<(), AdapterError> {
+    if grants_for(identity).contains(&permission) {
         Ok(())
     } else {
-        Err(AdapterError::PermissionRefused(format!("{caller} ne peut pas répondre à une confirmation")))
+        Err(AdapterError::PermissionRefused(format!("{identity} → {}", permission.id())))
     }
 }
 
-#[cfg(test)]
-pub(crate) fn grants_for(caller: &str) -> &'static [Permission] {
-    GRANTS.iter().find(|(id, _)| *id == caller).map(|(_, permissions)| *permissions).unwrap_or(&[])
+fn grants_for(identity: &str) -> &'static [Permission] {
+    GRANTS.iter().find(|(id, _)| *id == identity).map(|(_, permissions)| *permissions).unwrap_or(&[])
 }
 
 #[cfg(test)]
@@ -52,25 +152,56 @@ mod tests {
 
     #[test]
     fn a_plugin_cannot_use_a_permission_it_was_not_granted() {
-        assert!(require("actions.process-list", Permission::SystemRead).is_ok());
-        assert!(matches!(require("actions.process-list", Permission::FileDelete), Err(AdapterError::PermissionRefused(_))));
-        assert!(matches!(require("actions.file-search", Permission::FileWrite), Err(AdapterError::PermissionRefused(_))));
+        assert!(require(PROCESS_LIST, Permission::SystemRead).is_ok());
+        assert!(matches!(require(PROCESS_LIST, Permission::FileDelete), Err(AdapterError::PermissionRefused(_))));
+        assert!(matches!(require(FILE_SEARCH, Permission::FileWrite), Err(AdapterError::PermissionRefused(_))));
     }
 
     #[test]
-    fn an_unknown_caller_has_no_permission() {
+    fn an_unknown_identity_has_no_permission() {
         assert!(matches!(require("actions.inconnu", Permission::SystemRead), Err(AdapterError::PermissionRefused(_))));
-        assert!(matches!(require(CORE, Permission::FileRead), Err(AdapterError::PermissionRefused(_))));
+        assert!(matches!(require("core", Permission::FileRead), Err(AdapterError::PermissionRefused(_))));
+    }
+
+    /// Seule la fenêtre principale est l'interface. Un autre libellé, ou une identité écrite comme « core », ne l'est pas.
+    #[test]
+    fn only_the_main_window_is_the_interface() {
+        assert!(is_main_window("main"));
+        for label in ["", "Main", "main-evil", "plugin", "core", "actions.process-list"] {
+            assert!(!is_main_window(label), "{label} ne doit pas être l'interface");
+        }
     }
 
     #[test]
-    fn only_the_interface_can_answer_a_confirmation() {
-        assert!(require_core(CORE).is_ok());
-        assert!(matches!(require_core("agents.claude-code"), Err(AdapterError::PermissionRefused(_))));
+    fn every_identity_used_by_a_policy_has_grants() {
+        for (command, policy) in POLICIES {
+            if let Policy::Capability(identity) = policy {
+                assert!(!grants_for(identity).is_empty(), "{command} : identité sans permission {identity}");
+            }
+        }
     }
 
-    /// La table doit refléter les `plugin.json` : une permission ajoutée à un plugin sans être accordée ici,
-    /// ou l'inverse, est une erreur de configuration.
+    /// Chaque commande exposée au JavaScript doit avoir une politique, et aucune politique ne vise une commande absente.
+    #[test]
+    fn every_exposed_command_has_a_policy_and_no_policy_is_stale() {
+        let source = include_str!("lib.rs");
+        let start = source.find("generate_handler![").expect("liste des commandes");
+        let block = &source[start..];
+        let block = &block[..block.find("])").expect("fin de la liste")];
+        let exposed: std::collections::BTreeSet<&str> = block
+            .lines()
+            .map(|line| line.trim().trim_end_matches(',').rsplit("::").next().unwrap_or_default())
+            .filter(|name| !name.is_empty() && !name.starts_with("generate_handler"))
+            .collect();
+        let declared: std::collections::BTreeSet<&str> = POLICIES.iter().map(|(name, _)| *name).collect();
+        assert_eq!(declared.len(), POLICIES.len(), "une commande a deux politiques");
+        let missing: Vec<&&str> = exposed.difference(&declared).collect();
+        let stale: Vec<&&str> = declared.difference(&exposed).collect();
+        assert!(missing.is_empty(), "commandes sans politique : {missing:?}");
+        assert!(stale.is_empty(), "politiques sans commande : {stale:?}");
+    }
+
+    /// Une politique qui n'accorde pas de permission, ou une permission ajoutée sans politique, est une erreur de configuration.
     #[test]
     fn the_table_matches_the_plugin_manifests() {
         let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("plugins");
@@ -88,13 +219,13 @@ mod tests {
             }
         }
 
-        for (caller, granted) in GRANTS {
-            let manifest = declared.get(*caller).unwrap_or_else(|| panic!("plugin absent du dépôt : {caller}"));
+        for (identity, granted) in GRANTS {
+            let manifest = declared.get(*identity).unwrap_or_else(|| panic!("plugin absent du dépôt : {identity}"));
             let mut expected: Vec<&str> = granted.iter().map(|p| p.id()).collect();
             let mut actual: Vec<&str> = manifest.iter().map(String::as_str).collect();
             expected.sort_unstable();
             actual.sort_unstable();
-            assert_eq!(actual, expected, "permissions de {caller}");
+            assert_eq!(actual, expected, "permissions de {identity}");
         }
 
         // Tout plugin qui demande une action sensible doit être connu du natif.
@@ -105,5 +236,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Le JavaScript de l'interface ne doit pas pouvoir exécuter de code arbitraire : pas d'évaluation de chaîne ni de
+    /// script en ligne, et aucune source de script autre que NEXUS lui-même.
+    #[test]
+    fn the_content_security_policy_blocks_injected_scripts() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let csp = config["app"]["security"]["csp"].as_str().expect("CSP définie");
+        assert!(csp.contains("default-src 'self'"), "{csp}");
+        assert!(!csp.contains("unsafe-eval"), "{csp}");
+        for directive in csp.split(';').map(str::trim).filter(|d| d.starts_with("script-src")) {
+            assert!(!directive.contains("unsafe-inline") && !directive.contains("unsafe-eval") && !directive.contains("http"), "{directive}");
+        }
+    }
+
+    /// Une seule fenêtre, sans capacité distante : la permission native ne s'étend pas à d'autres fenêtres.
+    #[test]
+    fn the_capability_is_limited_to_the_main_window() {
+        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+        assert!(capability.get("remote").is_none(), "aucune fenêtre distante");
     }
 }

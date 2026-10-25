@@ -63,14 +63,20 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | `connector.install` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_install` : installer un connecteur MCP. Le courtier affiche la commande exacte (`npx -y paquet@version`), le dépôt et les noms des variables |
 | `connector.call` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_call` : chaque appel d'outil, avec les arguments complets |
 
-### Qui peut appeler quoi : l'identité de l'appelant
+### Qui peut appeler quoi : une politique par commande, décidée côté natif
 
-Chaque commande native reçoit l'identifiant de son appelant : `core` pour l'interface, `type.dossier` pour un
-plugin (par exemple `actions.file-search`). Le backend vérifie la permission correspondante avant toute action,
-d'après la table `src-tauri/src/grants.rs`. Un test compare cette table aux `plugin.json` : une permission
-déclarée sans être accordée, ou accordée sans être déclarée, fait échouer la compilation des tests.
+L'interface n'envoie plus d'identité. Auparavant, chaque commande recevait une chaîne `caller` fournie par le JavaScript :
+n'importe quel script de la fenêtre pouvait alors se dire `core` ou un autre plugin. Ce n'est plus le cas.
 
-| Appelant | Peut faire |
+Chaque commande native a une politique, dans la table `POLICIES` de `src-tauri/src/grants.rs` :
+
+- `MainWindow` : seule la fenêtre `main` peut l'appeler (Tauri fournit le libellé de la fenêtre appelante). Toutes les
+  commandes de l'interface sont dans cette catégorie, y compris les modèles, les captures, le réseau, le journal, les
+  connecteurs MCP et l'état des permissions.
+- `Capability(identité)` : la commande exerce une capacité de plugin. L'identité est une constante du natif, et les
+  permissions sont celles du `plugin.json` correspondant.
+
+| Identité native | Peut faire |
 |---|---|
 | `actions.process-list` | `system.read` uniquement |
 | `actions.file-search` | `file.read` uniquement |
@@ -78,7 +84,14 @@ déclarée sans être accordée, ou accordée sans être déclarée, fait échou
 | `agents.claude-code` | `agent.run` (confirmé) |
 | `actions.window-control` | `window.read`, `window.control` (confirmé) |
 | `actions.plugin-manager` | `plugin.manage` (confirmé à chaque étape) |
-| `core` (interface) | répondre aux confirmations, gérer le journal, installer ou appeler un connecteur (chacun confirmé par le courtier natif). Rien d'autre. |
+
+Tests : chaque commande exposée figure dans `POLICIES` et inversement ; la table des permissions correspond aux
+`plugin.json` ; la CSP interdit les scripts en ligne et l'évaluation de chaîne ; la capacité Tauri ne vise que `main`.
+
+**Limite connue.** Le JavaScript de la fenêtre `main` est celui de NEXUS, et il peut appeler toute commande de sa fenêtre.
+Un script injecté dans cette fenêtre (XSS) pourrait donc répondre à une confirmation. Les protections restantes :
+la CSP, l'absence de plugin à code exécuté dans la fenêtre (les WebAssembly tournent côté natif), et des confirmations
+qui affichent les paramètres exacts. Isoler davantage exige une seconde fenêtre pour les confirmations : décision à prendre.
 
 Chaque plugin ne reçoit qu'un pont attribué à son identifiant : il ne peut pas agir au nom d'un autre plugin
 en passant par ce pont. Une confirmation affiche « Demandé par » avec l'identifiant de l'appelant.

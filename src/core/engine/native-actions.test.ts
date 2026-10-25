@@ -51,7 +51,6 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     emitConfirmation(request: ConfirmationRequest): void;
     emitAutoApproval(approval: AutoApproval): void;
   } = {
-    forPlugin: () => bridge,
     pluginPrepare: vi.fn(async (source: string) => ({
       stagingId: "stage-1-0",
       id: "community.ana.verbes",

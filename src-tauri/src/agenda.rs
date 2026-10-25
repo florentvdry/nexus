@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_PATH_CHARS: usize = 520;
@@ -34,8 +34,8 @@ pub fn read_agenda(path: &str) -> Result<String, AdapterError> {
 }
 
 #[tauri::command]
-pub async fn agenda_read(caller: String, path: String) -> Result<String, AdapterError> {
-    require_core(&caller)?;
+pub async fn agenda_read(webview: tauri::Webview, path: String) -> Result<String, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || read_agenda(&path))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?

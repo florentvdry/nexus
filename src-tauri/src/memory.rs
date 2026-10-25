@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 /// Une information tient en une phrase : la borne protège seulement contre un texte démesuré. Pas de limite de nombre.
 pub const MAX_TEXT_CHARS: usize = 1000;
@@ -134,32 +134,32 @@ pub fn open_store(data_dir: Option<PathBuf>) -> MemoryStore {
 }
 
 #[tauri::command]
-pub fn memory_list(store: State<'_, MemoryStore>, caller: String) -> Result<Vec<Memory>, AdapterError> {
-    require_core(&caller)?;
+pub fn memory_list(store: State<'_, MemoryStore>, webview: tauri::Webview) -> Result<Vec<Memory>, AdapterError> {
+    require_main(&webview)?;
     Ok(store.list())
 }
 
 #[tauri::command]
-pub fn memory_add(store: State<'_, MemoryStore>, caller: String, text: String, source: String) -> Result<Memory, AdapterError> {
-    require_core(&caller)?;
+pub fn memory_add(store: State<'_, MemoryStore>, webview: tauri::Webview, text: String, source: String) -> Result<Memory, AdapterError> {
+    require_main(&webview)?;
     store.add(&text, &source)
 }
 
 #[tauri::command]
-pub fn memory_remove(store: State<'_, MemoryStore>, caller: String, id: u64) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+pub fn memory_remove(store: State<'_, MemoryStore>, webview: tauri::Webview, id: u64) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     store.remove(id)
 }
 
 #[tauri::command]
-pub fn memory_forget(store: State<'_, MemoryStore>, caller: String, query: String) -> Result<usize, AdapterError> {
-    require_core(&caller)?;
+pub fn memory_forget(store: State<'_, MemoryStore>, webview: tauri::Webview, query: String) -> Result<usize, AdapterError> {
+    require_main(&webview)?;
     store.forget(&query)
 }
 
 #[tauri::command]
-pub fn memory_clear(store: State<'_, MemoryStore>, caller: String) -> Result<usize, AdapterError> {
-    require_core(&caller)?;
+pub fn memory_clear(store: State<'_, MemoryStore>, webview: tauri::Webview) -> Result<usize, AdapterError> {
+    require_main(&webview)?;
     store.clear()
 }
 

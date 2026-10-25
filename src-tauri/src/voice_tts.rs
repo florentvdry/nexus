@@ -12,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 use crate::model_download::{self, DownloadPlan};
 use crate::web::base64;
 
@@ -221,15 +221,15 @@ fn data_root(app: &AppHandle) -> Result<PathBuf, AdapterError> {
 
 /// Vrai si la voix naturelle de cette langue est installée sur ce poste.
 #[tauri::command]
-pub async fn speech_neural_available(app: AppHandle, caller: String, locale: String) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+pub async fn speech_neural_available(app: AppHandle, webview: tauri::Webview, locale: String) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     Ok(installed(&data_root(&app)?, &locale))
 }
 
 /// Installe la voix naturelle de cette langue (moteur et voix, vérifiés). Long : le frontend attend le résultat.
 #[tauri::command]
-pub async fn speech_neural_install(app: AppHandle, caller: String, locale: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub async fn speech_neural_install(app: AppHandle, webview: tauri::Webview, locale: String) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     let root = data_root(&app)?;
     tauri::async_runtime::spawn_blocking(move || install_at(&root, &locale))
         .await
@@ -238,8 +238,8 @@ pub async fn speech_neural_install(app: AppHandle, caller: String, locale: Strin
 
 /// Le texte, lu par la voix naturelle de cette langue, en WAV encodé en base64.
 #[tauri::command]
-pub async fn speech_neural_speak(app: AppHandle, caller: String, text: String, rate: f64, locale: String) -> Result<String, AdapterError> {
-    require_core(&caller)?;
+pub async fn speech_neural_speak(app: AppHandle, webview: tauri::Webview, text: String, rate: f64, locale: String) -> Result<String, AdapterError> {
+    require_main(&webview)?;
     let root = data_root(&app)?;
     tauri::async_runtime::spawn_blocking(move || synthesize_at(&root, &text, rate, &locale).map(|bytes| base64(&bytes)))
         .await

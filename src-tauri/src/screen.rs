@@ -2,7 +2,7 @@
 //! qui la donne au modèle local. Rien n'est enregistré sur le disque et rien ne quitte ce poste.
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 use crate::web::base64;
 
 /// Largeur maximale envoyée au modèle : assez pour lire un texte, sans alourdir la requête.
@@ -148,8 +148,8 @@ pub fn capture_primary_base64() -> Result<String, AdapterError> {
 }
 
 #[tauri::command]
-pub async fn screen_capture(caller: String) -> Result<String, AdapterError> {
-    require_core(&caller)?;
+pub async fn screen_capture(webview: tauri::Webview) -> Result<String, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(capture_primary_base64)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?

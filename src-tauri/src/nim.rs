@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use tauri::State;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 use crate::secrets;
 
 /// Seul hôte interrogé pour ce service.
@@ -129,27 +129,27 @@ impl KeyStore {
 }
 
 #[tauri::command]
-pub fn nim_key_status(caller: String, store: State<'_, KeyStore>) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+pub fn nim_key_status(webview: tauri::Webview, store: State<'_, KeyStore>) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     Ok(store.status())
 }
 
 #[tauri::command]
-pub fn nim_key_save(caller: String, store: State<'_, KeyStore>, key: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub fn nim_key_save(webview: tauri::Webview, store: State<'_, KeyStore>, key: String) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     store.save(&key)
 }
 
 #[tauri::command]
-pub fn nim_key_clear(caller: String, store: State<'_, KeyStore>) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub fn nim_key_clear(webview: tauri::Webview, store: State<'_, KeyStore>) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     store.clear()
 }
 
 /// Classement par NIM avec la clé enregistrée. Sans clé, la commande échoue et le modèle local prend le relais.
 #[tauri::command]
-pub async fn nim_classify(caller: String, store: State<'_, KeyStore>, model: String, text: String, context: Vec<String>) -> Result<Value, AdapterError> {
-    require_core(&caller)?;
+pub async fn nim_classify(webview: tauri::Webview, store: State<'_, KeyStore>, model: String, text: String, context: Vec<String>) -> Result<Value, AdapterError> {
+    require_main(&webview)?;
     let key = store.load()?;
     tauri::async_runtime::spawn_blocking(move || classify_at(ENDPOINT, &key, &model, &text, &context))
         .await

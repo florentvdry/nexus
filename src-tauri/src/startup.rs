@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 /// Clé de démarrage de l'utilisateur courant.
 pub const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
@@ -70,14 +70,14 @@ pub fn set_startup(_enabled: bool) -> Result<(), AdapterError> {
 }
 
 #[tauri::command]
-pub fn startup_status(caller: String) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+pub fn startup_status(webview: tauri::Webview) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     startup_enabled()
 }
 
 #[tauri::command]
-pub fn startup_set(caller: String, enabled: bool) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub fn startup_set(webview: tauri::Webview, enabled: bool) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     set_startup(enabled)
 }
 

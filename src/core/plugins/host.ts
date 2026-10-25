@@ -28,8 +28,8 @@ export function activatePlugin(plugin: DiscoveredPlugin, api: PluginApi): Plugin
   const scoped: PluginApi = {
     registerCapability(capability, handler) {
       if (!manifest.capabilities.includes(capability.id)) throw new Error(`capacité non déclarée : ${capability.id}`);
-      // Le plugin ne voit que le pont attribué à son identifiant : le natif applique les permissions de son manifeste.
-      api.registerCapability(capability, (input, context) => handler(input, { ...context, bridge: context.bridge.forPlugin(id) }));
+      // Le natif applique les permissions du manifeste à la commande appelée : le plugin n'envoie aucune identité.
+      api.registerCapability(capability, handler);
     },
     registerLanguage(locale, dictionary) {
       if (!manifest.languages.includes(locale)) throw new Error(`langue non déclarée : ${locale}`);

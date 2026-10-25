@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use super::session::{EventSink, VoiceSession};
 use super::transcribe::{Transcriber, WhisperTranscriber};
 use crate::error::AdapterError;
+use crate::grants::require_main;
 
 pub const EVENT_CHANNEL: &str = "voice://event";
 const MODEL_FILE: &str = "ggml-base.bin";
@@ -50,7 +51,8 @@ fn transcriber_for(app: &AppHandle, state: &VoiceState) -> Result<Arc<dyn Transc
 }
 
 #[tauri::command]
-pub fn voice_status(app: AppHandle, state: State<'_, VoiceState>) -> Result<VoiceStatus, AdapterError> {
+pub fn voice_status(webview: tauri::Webview, app: AppHandle, state: State<'_, VoiceState>) -> Result<VoiceStatus, AdapterError> {
+    require_main(&webview)?;
     let path = model_path(&app)?;
     let listening = state.session.lock().map(|session| session.is_some()).unwrap_or(false);
     Ok(VoiceStatus {
@@ -62,10 +64,12 @@ pub fn voice_status(app: AppHandle, state: State<'_, VoiceState>) -> Result<Voic
 
 #[tauri::command]
 pub fn voice_start(
+    webview: tauri::Webview,
     app: AppHandle,
     state: State<'_, VoiceState>,
     language: Option<String>,
 ) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     let mut session = state.session.lock().map_err(|_| AdapterError::TaskFailed("verrou vocal".into()))?;
     if session.is_some() {
         return Err(AdapterError::VoiceAlreadyActive);
@@ -81,7 +85,8 @@ pub fn voice_start(
 }
 
 #[tauri::command]
-pub fn voice_stop(state: State<'_, VoiceState>) -> Result<(), AdapterError> {
+pub fn voice_stop(webview: tauri::Webview, state: State<'_, VoiceState>) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     let mut session = state.session.lock().map_err(|_| AdapterError::TaskFailed("verrou vocal".into()))?;
     if let Some(active) = session.take() {
         active.stop();

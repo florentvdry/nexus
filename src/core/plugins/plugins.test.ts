@@ -119,18 +119,16 @@ describe("activation isolée", () => {
     expect(healthy.state).toBe("active");
   });
 
-  it("donne à chaque capacité un pont attribué à son plugin", async () => {
+  it("transmet à chaque capacité le pont de l'interface, sans identité attachée", async () => {
     const api = noopApi();
-    const scoped = { marker: "pont attribué" } as never;
-    const forPlugin = vi.fn(() => scoped);
+    const bridge = { marker: "pont de l'interface" } as never;
     const inner = vi.fn(async () => ({ caption: "ok", presentations: [], source: { capabilityId: "demo.liste", locality: "local" as const, collectedAt: 0 } }));
     const status = activatePlugin(plugin((host) => host.registerCapability({ id: "demo.liste" } as never, inner), { capabilities: ["demo.liste"] }), api);
     expect(status.state).toBe("active");
 
     const registered = vi.mocked(api.registerCapability).mock.calls[0][1];
-    await registered({}, { bridge: { forPlugin } } as never);
-    expect(forPlugin).toHaveBeenCalledWith("actions.demo");
-    expect(inner).toHaveBeenCalledWith({}, expect.objectContaining({ bridge: scoped }));
+    await registered({}, { bridge } as never);
+    expect(inner).toHaveBeenCalledWith({}, expect.objectContaining({ bridge }));
   });
 
   it("refuse une langue non déclarée", () => {

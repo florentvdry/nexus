@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 pub const MAX_TASKS: usize = 100;
 const MAX_REQUEST_CHARS: usize = 500;
@@ -120,14 +120,14 @@ pub fn open_store(data_dir: Option<PathBuf>) -> ScheduleStore {
 }
 
 #[tauri::command]
-pub fn schedule_list(store: State<'_, ScheduleStore>, caller: String) -> Result<Vec<ScheduledTask>, AdapterError> {
-    require_core(&caller)?;
+pub fn schedule_list(store: State<'_, ScheduleStore>, webview: tauri::Webview) -> Result<Vec<ScheduledTask>, AdapterError> {
+    require_main(&webview)?;
     Ok(store.list())
 }
 
 #[tauri::command]
-pub fn schedule_save(store: State<'_, ScheduleStore>, caller: String, tasks: Vec<ScheduledTask>) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub fn schedule_save(store: State<'_, ScheduleStore>, webview: tauri::Webview, tasks: Vec<ScheduledTask>) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     store.save(tasks)
 }
 

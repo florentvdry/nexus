@@ -12,7 +12,7 @@ use super::catalog::{Candidate, Catalog, GITHUB, REGISTRY};
 use super::client::{self, Launch, Tool};
 use super::store::{Installed, InstalledView, Store};
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 use crate::permissions::{self, Broker, Permission, Row};
 
 /// État des connecteurs : le catalogue de la dernière recherche et le registre des connecteurs installés.
@@ -47,8 +47,8 @@ fn installed_or_error(store: &Store, id: &str) -> Result<Installed, AdapterError
 
 /// Cherche un connecteur fiable dans le registre officiel, avec la popularité de son dépôt.
 #[tauri::command]
-pub async fn mcp_search(state: State<'_, McpState>, caller: String, query: String) -> Result<Vec<Candidate>, AdapterError> {
-    require_core(&caller)?;
+pub async fn mcp_search(state: State<'_, McpState>, webview: tauri::Webview, query: String) -> Result<Vec<Candidate>, AdapterError> {
+    require_main(&webview)?;
     let catalog = state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || catalog.search(REGISTRY, GITHUB, &query))
         .await
@@ -56,8 +56,8 @@ pub async fn mcp_search(state: State<'_, McpState>, caller: String, query: Strin
 }
 
 #[tauri::command]
-pub fn mcp_installed(state: State<'_, McpState>, caller: String) -> Result<Vec<InstalledView>, AdapterError> {
-    require_core(&caller)?;
+pub fn mcp_installed(state: State<'_, McpState>, webview: tauri::Webview) -> Result<Vec<InstalledView>, AdapterError> {
+    require_main(&webview)?;
     Ok(state.store.list().iter().map(Installed::view).collect())
 }
 
@@ -75,8 +75,8 @@ fn install_rows(candidate: &Candidate) -> Vec<Row> {
 /// Installe un connecteur trouvé par la dernière recherche, après accord du courtier natif.
 /// L'identifiant ne peut pas désigner autre chose.
 #[tauri::command]
-pub async fn mcp_install(app: AppHandle, broker: State<'_, Broker>, state: State<'_, McpState>, caller: String, id: String) -> Result<InstalledView, AdapterError> {
-    require_core(&caller)?;
+pub async fn mcp_install(app: AppHandle, broker: State<'_, Broker>, state: State<'_, McpState>, webview: tauri::Webview, id: String) -> Result<InstalledView, AdapterError> {
+    require_main(&webview)?;
     let candidate = state
         .catalog
         .get(&id)
@@ -93,15 +93,15 @@ pub async fn mcp_install(app: AppHandle, broker: State<'_, Broker>, state: State
 }
 
 #[tauri::command]
-pub fn mcp_set_value(state: State<'_, McpState>, caller: String, id: String, name: String, value: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+pub fn mcp_set_value(state: State<'_, McpState>, webview: tauri::Webview, id: String, name: String, value: String) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     state.store.set_value(&id, &name, &value)
 }
 
 /// Outils d'un connecteur installé. Lance le serveur le temps de la lecture.
 #[tauri::command]
-pub async fn mcp_tools(state: State<'_, McpState>, caller: String, id: String) -> Result<Vec<Tool>, AdapterError> {
-    require_core(&caller)?;
+pub async fn mcp_tools(state: State<'_, McpState>, webview: tauri::Webview, id: String) -> Result<Vec<Tool>, AdapterError> {
+    require_main(&webview)?;
     let launch = launch_for(&installed_or_error(&state.store, &id)?)?;
     tauri::async_runtime::spawn_blocking(move || client::list_tools(&launch))
         .await
@@ -114,12 +114,12 @@ pub async fn mcp_call(
     app: AppHandle,
     broker: State<'_, Broker>,
     state: State<'_, McpState>,
-    caller: String,
+    webview: tauri::Webview,
     id: String,
     tool: String,
     arguments: Value,
 ) -> Result<String, AdapterError> {
-    require_core(&caller)?;
+    require_main(&webview)?;
     let launch = launch_for(&installed_or_error(&state.store, &id)?)?;
     let rows = vec![
         Row { key: "connector".into(), value: id.clone() },

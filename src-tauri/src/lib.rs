@@ -26,7 +26,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, GlobalShortcutExt, ShortcutState};
 
 use error::AdapterError;
-use grants::{require, require_core};
+use grants::{require, require_main};
 use journal::{Journal, JournalEntry};
 use plugin_store::{Installed, PackData, Prepared, Store};
 use std::sync::Arc;
@@ -47,7 +47,8 @@ pub const VOICE_SHORTCUT: &str = "Ctrl+Alt+Space";
 pub const VOICE_TOGGLE_EVENT: &str = "voice://toggle";
 
 #[tauri::command]
-async fn system_info() -> Result<SystemInfo, AdapterError> {
+async fn system_info(webview: tauri::Webview) -> Result<SystemInfo, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(system::read_system_info)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
@@ -56,8 +57,8 @@ async fn system_info() -> Result<SystemInfo, AdapterError> {
 /// Classement d'une demande par le modèle local choisi par l'utilisateur (Ollama, sur ce poste uniquement).
 /// Sans modèle, ou si Ollama ne répond pas, l'erreur fait retomber l'interface sur les règles.
 #[tauri::command]
-async fn model_classify(caller: String, text: String, model: String, memories: Vec<String>) -> Result<serde_json::Value, AdapterError> {
-    require_core(&caller)?;
+async fn model_classify(webview: tauri::Webview, text: String, model: String, memories: Vec<String>) -> Result<serde_json::Value, AdapterError> {
+    require_main(&webview)?;
     if text.trim().is_empty() {
         return Err(AdapterError::InvalidTarget("demande vide".into()));
     }
@@ -68,8 +69,8 @@ async fn model_classify(caller: String, text: String, model: String, memories: V
 
 /// Question sur une capture d'écran, par le modèle de vision choisi. Seul ce poste reçoit l'image.
 #[tauri::command]
-async fn vision_ask(caller: String, model: String, question: String, image: String) -> Result<String, AdapterError> {
-    require_core(&caller)?;
+async fn vision_ask(webview: tauri::Webview, model: String, question: String, image: String) -> Result<String, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || ollama::vision_at(ollama::ENDPOINT, &model, &question, &image))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -78,8 +79,8 @@ async fn vision_ask(caller: String, model: String, question: String, image: Stri
 /// Réponse JSON libre du modèle local, pour choisir un outil d'un connecteur MCP. Même garde-fous que `model_classify` :
 /// la réponse est renvoyée à l'interface, qui la valide avant tout appel.
 #[tauri::command]
-async fn model_json(caller: String, model: String, system: String, user: String) -> Result<serde_json::Value, AdapterError> {
-    require_core(&caller)?;
+async fn model_json(webview: tauri::Webview, model: String, system: String, user: String) -> Result<serde_json::Value, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || ollama::answer_json_at(ollama::ENDPOINT, &model, &system, &user))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -88,8 +89,8 @@ async fn model_json(caller: String, model: String, system: String, user: String)
 /// Télécharge un modèle via Ollama, avec progression émise vers l'interface. Réservé à l'interface, après accord
 /// explicite de l'utilisateur sur le parcours (taille affichée avant).
 #[tauri::command]
-async fn ollama_pull(app: AppHandle, caller: String, model: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+async fn ollama_pull(app: AppHandle, webview: tauri::Webview, model: String) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || {
         let name = model.clone();
         ollama::pull_at(ollama::ENDPOINT, &model, |step| {
@@ -105,8 +106,8 @@ async fn ollama_pull(app: AppHandle, caller: String, model: String) -> Result<()
 
 /// Installe Ollama (winget) après accord de l'utilisateur dans le parcours. Les étapes arrivent par `ollama://install`.
 #[tauri::command]
-async fn ollama_install(app: AppHandle, caller: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+async fn ollama_install(app: AppHandle, webview: tauri::Webview) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || {
         ollama::install_ollama(ollama::ENDPOINT, |stage| {
             let _ = app.emit(ollama::INSTALL_EVENT, serde_json::json!({ "stage": stage }));
@@ -118,8 +119,8 @@ async fn ollama_install(app: AppHandle, caller: String) -> Result<(), AdapterErr
 
 /// État d'Ollama et modèles installés, pour l'interface. Ne renvoie pas d'erreur : « non joignable » est une réponse.
 #[tauri::command]
-async fn ollama_status(caller: String) -> Result<ollama::OllamaStatus, AdapterError> {
-    require_core(&caller)?;
+async fn ollama_status(webview: tauri::Webview) -> Result<ollama::OllamaStatus, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(|| ollama::status_at(ollama::ENDPOINT))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
@@ -127,8 +128,8 @@ async fn ollama_status(caller: String) -> Result<ollama::OllamaStatus, AdapterEr
 
 /// Profil pour le choix du modèle local : réservé à l'interface, lecture seule.
 #[tauri::command]
-async fn hardware_profile(caller: String) -> Result<hardware::HardwareProfile, AdapterError> {
-    require_core(&caller)?;
+async fn hardware_profile(webview: tauri::Webview) -> Result<hardware::HardwareProfile, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(hardware::read_profile)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
@@ -136,7 +137,8 @@ async fn hardware_profile(caller: String) -> Result<hardware::HardwareProfile, A
 
 /// Trouve puis lance une application du PC, par son nom. Seule une application trouvée par le scan peut être lancée.
 #[tauri::command]
-async fn app_open(name: String) -> Result<LaunchOutcome, AdapterError> {
+async fn app_open(webview: tauri::Webview, name: String) -> Result<LaunchOutcome, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || apps::open(&name))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -144,14 +146,16 @@ async fn app_open(name: String) -> Result<LaunchOutcome, AdapterError> {
 
 /// Application trouvée sur le PC pour ce nom, sans la lancer.
 #[tauri::command]
-async fn app_find(name: String) -> Result<Option<AppMatch>, AdapterError> {
+async fn app_find(webview: tauri::Webview, name: String) -> Result<Option<AppMatch>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || Ok(apps::find(&name).map(|found| apps::describe(&found))))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
-async fn osint_run(request: ConnectorRequest) -> Result<ConnectorReport, AdapterError> {
+async fn osint_run(webview: tauri::Webview, request: ConnectorRequest) -> Result<ConnectorReport, AdapterError> {
+    require_main(&webview)?;
     if !connectors::CONNECTORS.contains(&request.connector.as_str()) {
         return Err(AdapterError::UnknownConnector(request.connector));
     }
@@ -169,16 +173,16 @@ fn blocking_failed(error: tauri::Error) -> AdapterError {
 }
 
 #[tauri::command]
-async fn processes_list(caller: String, limit: usize) -> Result<Vec<ProcessEntry>, AdapterError> {
-    require(&caller, Permission::SystemRead)?;
+async fn processes_list(limit: usize) -> Result<Vec<ProcessEntry>, AdapterError> {
+    require(grants::PROCESS_LIST, Permission::SystemRead)?;
     tauri::async_runtime::spawn_blocking(move || processes::top_by_memory(limit.clamp(1, 50)))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
 }
 
 #[tauri::command]
-async fn files_search(caller: String, query: SearchQuery) -> Result<Vec<FileEntry>, AdapterError> {
-    require(&caller, Permission::FileRead)?;
+async fn files_search(query: SearchQuery) -> Result<Vec<FileEntry>, AdapterError> {
+    require(grants::FILE_SEARCH, Permission::FileRead)?;
     tauri::async_runtime::spawn_blocking(move || files::search(&files::allowed_roots(), &query))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -186,15 +190,15 @@ async fn files_search(caller: String, query: SearchQuery) -> Result<Vec<FileEntr
 
 /// Opération sur un fichier : aperçu, confirmation par le courtier, puis exécution. Rien n'est modifié sans accord.
 #[tauri::command]
-async fn files_operate(app: AppHandle, broker: State<'_, Broker>, caller: String, operation: Operation) -> Result<String, AdapterError> {
+async fn files_operate(app: AppHandle, broker: State<'_, Broker>, operation: Operation) -> Result<String, AdapterError> {
     let broker = broker.inner().clone_handle();
     let permission = if operation.is_deletion() { Permission::FileDelete } else { Permission::FileWrite };
-    require(&caller, permission)?;
+    require(grants::FILE_OPERATIONS, permission)?;
     let roots = files::allowed_roots();
     tauri::async_runtime::spawn_blocking(move || {
         let plan = files::plan(operation, &roots)?;
         let mut rows: Vec<Row> = plan.rows.iter().map(|(key, value)| Row { key: key.clone(), value: value.clone() }).collect();
-        rows.push(Row { key: "requester".into(), value: caller });
+        rows.push(Row { key: "requester".into(), value: grants::FILE_OPERATIONS.into() });
         permissions::confirm(&app, &broker, permission, &rows)?;
         files::apply(&plan, &roots)
     })
@@ -203,8 +207,8 @@ async fn files_operate(app: AppHandle, broker: State<'_, Broker>, caller: String
 }
 
 #[tauri::command]
-async fn agent_detect(caller: String) -> Result<Detection, AdapterError> {
-    require(&caller, Permission::AgentRun)?;
+async fn agent_detect() -> Result<Detection, AdapterError> {
+    require(grants::CLAUDE_CODE, Permission::AgentRun)?;
     tauri::async_runtime::spawn_blocking(claude_code::detect)
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))
@@ -217,12 +221,11 @@ async fn agent_run(
     app: AppHandle,
     broker: State<'_, Broker>,
     runs: State<'_, Runs>,
-    caller: String,
     run_id: String,
     project: String,
     prompt: String,
 ) -> Result<(), AdapterError> {
-    require(&caller, Permission::AgentRun)?;
+    require(grants::CLAUDE_CODE, Permission::AgentRun)?;
     let binary: PathBuf = claude_code::locate().ok_or_else(|| AdapterError::AgentNotInstalled("claude".into()))?;
     let project_path = PathBuf::from(project.trim().trim_matches('"'));
     if !project_path.is_absolute() || !project_path.is_dir() {
@@ -234,7 +237,7 @@ async fn agent_run(
     let rows = vec![
         Row { key: "project".into(), value: project_path.display().to_string() },
         Row { key: "prompt".into(), value: shown_prompt },
-        Row { key: "requester".into(), value: caller },
+        Row { key: "requester".into(), value: grants::CLAUDE_CODE.into() },
     ];
     let confirm_broker = broker.inner().clone_handle();
     let confirm_app = app.clone();
@@ -257,23 +260,23 @@ async fn agent_run(
 }
 
 #[tauri::command]
-async fn window_list(caller: String) -> Result<Vec<WindowEntry>, AdapterError> {
-    require(&caller, Permission::WindowRead)?;
+async fn window_list() -> Result<Vec<WindowEntry>, AdapterError> {
+    require(grants::WINDOW_CONTROL, Permission::WindowRead)?;
     tauri::async_runtime::spawn_blocking(desktop_windows::list).await.map_err(blocking_failed)?
 }
 
 /// Ramener une fenêtre au premier plan : confirmation d'abord, puis action sur la fenêtre revérifiée.
 #[tauri::command]
-async fn window_focus(app: AppHandle, broker: State<'_, Broker>, caller: String, id: usize) -> Result<(), AdapterError> {
-    require(&caller, Permission::WindowControl)?;
-    window_action(app, broker.inner().clone_handle(), caller, id, WindowAction::Focus).await
+async fn window_focus(app: AppHandle, broker: State<'_, Broker>, id: usize) -> Result<(), AdapterError> {
+    require(grants::WINDOW_CONTROL, Permission::WindowControl)?;
+    window_action(app, broker.inner().clone_handle(), id, WindowAction::Focus).await
 }
 
 /// Demander la fermeture d'une fenêtre : l'application reste libre de refuser ou de demander d'enregistrer.
 #[tauri::command]
-async fn window_close(app: AppHandle, broker: State<'_, Broker>, caller: String, id: usize) -> Result<(), AdapterError> {
-    require(&caller, Permission::WindowControl)?;
-    window_action(app, broker.inner().clone_handle(), caller, id, WindowAction::Close).await
+async fn window_close(app: AppHandle, broker: State<'_, Broker>, id: usize) -> Result<(), AdapterError> {
+    require(grants::WINDOW_CONTROL, Permission::WindowControl)?;
+    window_action(app, broker.inner().clone_handle(), id, WindowAction::Close).await
 }
 
 #[derive(Clone, Copy)]
@@ -282,13 +285,13 @@ enum WindowAction {
     Close,
 }
 
-async fn window_action(app: AppHandle, broker: Broker, caller: String, id: usize, action: WindowAction) -> Result<(), AdapterError> {
+async fn window_action(app: AppHandle, broker: Broker, id: usize, action: WindowAction) -> Result<(), AdapterError> {
     tauri::async_runtime::spawn_blocking(move || {
         let window = desktop_windows::describe(id)?;
         let rows = vec![
             Row { key: "window".into(), value: window.title.clone() },
             Row { key: "process".into(), value: window.process.clone() },
-            Row { key: "requester".into(), value: caller },
+            Row { key: "requester".into(), value: grants::WINDOW_CONTROL.into() },
         ];
         permissions::confirm(&app, &broker, Permission::WindowControl, &rows)?;
         match action {
@@ -311,32 +314,32 @@ impl JournalStore {
 
 // Le journal est réservé à l'interface : un plugin ne peut ni lire ni alimenter l'historique.
 #[tauri::command]
-fn journal_status(store: State<'_, JournalStore>, caller: String) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+fn journal_status(store: State<'_, JournalStore>, webview: tauri::Webview) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     store.get()?.enabled()
 }
 
 #[tauri::command]
-fn journal_set_enabled(store: State<'_, JournalStore>, caller: String, enabled: bool) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+fn journal_set_enabled(store: State<'_, JournalStore>, webview: tauri::Webview, enabled: bool) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     store.get()?.set_enabled(enabled)
 }
 
 #[tauri::command]
-fn journal_record(store: State<'_, JournalStore>, caller: String, kind: String, text: String) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+fn journal_record(store: State<'_, JournalStore>, webview: tauri::Webview, kind: String, text: String) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     store.get()?.record(&kind, &text)
 }
 
 #[tauri::command]
-fn journal_list(store: State<'_, JournalStore>, caller: String, limit: usize) -> Result<Vec<JournalEntry>, AdapterError> {
-    require_core(&caller)?;
+fn journal_list(store: State<'_, JournalStore>, webview: tauri::Webview, limit: usize) -> Result<Vec<JournalEntry>, AdapterError> {
+    require_main(&webview)?;
     store.get()?.list(limit)
 }
 
 #[tauri::command]
-fn journal_clear(store: State<'_, JournalStore>, caller: String) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+fn journal_clear(store: State<'_, JournalStore>, webview: tauri::Webview) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     store.get()?.clear()
 }
 
@@ -349,18 +352,18 @@ impl PluginStore {
     }
 }
 
-fn plugin_requester_row(caller: &str) -> Row {
-    Row { key: "requester".into(), value: caller.to_string() }
+fn plugin_requester_row(identity: &str) -> Row {
+    Row { key: "requester".into(), value: identity.to_string() }
 }
 
 /// Étape 1 : examiner une source. Une adresse Git est téléchargée (sans exécution) seulement après accord.
 #[tauri::command]
-async fn plugin_prepare(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, caller: String, source: String) -> Result<Prepared, AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+async fn plugin_prepare(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, source: String) -> Result<Prepared, AdapterError> {
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     let store = store.get()?;
     let broker = broker.inner().clone_handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let rows = vec![Row { key: "source".into(), value: source.clone() }, plugin_requester_row(&caller)];
+        let rows = vec![Row { key: "source".into(), value: source.clone() }, plugin_requester_row(grants::PLUGIN_MANAGER)];
         permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
         if source.starts_with("https://") {
             store.prepare_git(&source)
@@ -378,11 +381,10 @@ async fn plugin_install(
     app: AppHandle,
     broker: State<'_, Broker>,
     store: State<'_, PluginStore>,
-    caller: String,
     staging_id: String,
     digest: String,
 ) -> Result<Installed, AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     let store = store.get()?;
     let broker = broker.inner().clone_handle();
     tauri::async_runtime::spawn_blocking(move || {
@@ -406,7 +408,7 @@ async fn plugin_install(
         if let Some(previous) = previous {
             rows.push(Row { key: "previous".into(), value: previous.version });
         }
-        rows.push(plugin_requester_row(&caller));
+        rows.push(plugin_requester_row(grants::PLUGIN_MANAGER));
         permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
         store.install(&staging_id, &digest)
     })
@@ -415,8 +417,8 @@ async fn plugin_install(
 }
 
 #[tauri::command]
-async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, caller: String, id: String) -> Result<(), AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'_, PluginStore>, id: String) -> Result<(), AdapterError> {
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     let store = store.get()?;
     let broker = broker.inner().clone_handle();
     tauri::async_runtime::spawn_blocking(move || {
@@ -424,7 +426,7 @@ async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'
         let rows = vec![
             Row { key: "plugin".into(), value: format!("{} — {}", installed.id, installed.name) },
             Row { key: "version".into(), value: installed.version },
-            plugin_requester_row(&caller),
+            plugin_requester_row(grants::PLUGIN_MANAGER),
         ];
         permissions::confirm(&app, &broker, Permission::PluginManage, &rows)?;
         store.remove(&id)
@@ -436,8 +438,8 @@ async fn plugin_remove(app: AppHandle, broker: State<'_, Broker>, store: State<'
 /// Exécute une commande d'un plugin WebAssembly. Seul le gestionnaire de plugins peut appeler cette commande ;
 /// le texte est borné avant d'atteindre le module.
 #[tauri::command]
-async fn plugin_run(caller: String, store: State<'_, PluginStore>, plugin_id: String, command: String, text: String) -> Result<plugin_store::sandbox::ActionOutput, AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+async fn plugin_run(store: State<'_, PluginStore>, plugin_id: String, command: String, text: String) -> Result<plugin_store::sandbox::ActionOutput, AdapterError> {
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     if text.chars().count() > 2_000 {
         return Err(AdapterError::InvalidTarget("texte trop long".into()));
     }
@@ -446,59 +448,59 @@ async fn plugin_run(caller: String, store: State<'_, PluginStore>, plugin_id: St
 }
 
 #[tauri::command]
-async fn plugin_list(caller: String, store: State<'_, PluginStore>) -> Result<Vec<Installed>, AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+async fn plugin_list(store: State<'_, PluginStore>) -> Result<Vec<Installed>, AdapterError> {
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     let store = store.get()?;
     tauri::async_runtime::spawn_blocking(move || store.list()).await.map_err(blocking_failed)?
 }
 
 /// Paquets actifs, lus par l'interface seule pour enrichir la compréhension des commandes.
 #[tauri::command]
-async fn plugin_packs(caller: String, store: State<'_, PluginStore>) -> Result<Vec<PackData>, AdapterError> {
-    require_core(&caller)?;
+async fn plugin_packs(webview: tauri::Webview, store: State<'_, PluginStore>) -> Result<Vec<PackData>, AdapterError> {
+    require_main(&webview)?;
     let store = store.get()?;
     tauri::async_runtime::spawn_blocking(move || store.packs()).await.map_err(blocking_failed)?
 }
 
 #[tauri::command]
-async fn plugin_index(caller: String) -> Result<Vec<plugin_store::index::IndexEntry>, AdapterError> {
-    require(&caller, Permission::PluginManage)?;
+async fn plugin_index() -> Result<Vec<plugin_store::index::IndexEntry>, AdapterError> {
+    require(grants::PLUGIN_MANAGER, Permission::PluginManage)?;
     let url = plugin_store::index::configured_url()
         .ok_or_else(|| AdapterError::Operation(format!("aucun catalogue configuré : définis {} avec une adresse HTTPS", plugin_store::index::INDEX_ENV)))?;
     tauri::async_runtime::spawn_blocking(move || plugin_store::index::fetch(&url)).await.map_err(blocking_failed)?
 }
 
 #[tauri::command]
-fn agent_cancel(runs: State<'_, Runs>, caller: String, run_id: String) -> Result<bool, AdapterError> {
-    require(&caller, Permission::AgentRun)?;
+fn agent_cancel(runs: State<'_, Runs>, run_id: String) -> Result<bool, AdapterError> {
+    require(grants::CLAUDE_CODE, Permission::AgentRun)?;
     Ok(runs.cancel(&run_id))
 }
 
 /// Seule l'interface répond aux confirmations : un plugin ne peut pas approuver sa propre demande.
 /// `remember` : « toujours autoriser » pour le dossier ou le projet de la demande (refusé pour les actions non mémorisables).
 #[tauri::command]
-fn permission_answer(broker: State<'_, Broker>, caller: String, id: String, approved: bool, remember: Option<bool>) -> Result<(), AdapterError> {
-    require_core(&caller)?;
+fn permission_answer(broker: State<'_, Broker>, webview: tauri::Webview, id: String, approved: bool, remember: Option<bool>) -> Result<(), AdapterError> {
+    require_main(&webview)?;
     broker.answer_with(&id, approved, remember.unwrap_or(false))
 }
 
 /// Autorisations mémorisées, lues par les réglages.
 #[tauri::command]
-fn permission_rules(broker: State<'_, Broker>, caller: String) -> Result<Vec<permissions::Rule>, AdapterError> {
-    require_core(&caller)?;
+fn permission_rules(broker: State<'_, Broker>, webview: tauri::Webview) -> Result<Vec<permissions::Rule>, AdapterError> {
+    require_main(&webview)?;
     Ok(broker.rules())
 }
 
 #[tauri::command]
-fn permission_revoke(broker: State<'_, Broker>, caller: String, id: String) -> Result<bool, AdapterError> {
-    require_core(&caller)?;
+fn permission_revoke(broker: State<'_, Broker>, webview: tauri::Webview, id: String) -> Result<bool, AdapterError> {
+    require_main(&webview)?;
     broker.revoke(&id)
 }
 
 /// Actions approuvées automatiquement, les plus récentes d'abord.
 #[tauri::command]
-fn permission_audit(broker: State<'_, Broker>, caller: String) -> Result<Vec<permissions::AutoEntry>, AdapterError> {
-    require_core(&caller)?;
+fn permission_audit(broker: State<'_, Broker>, webview: tauri::Webview) -> Result<Vec<permissions::AutoEntry>, AdapterError> {
+    require_main(&webview)?;
     Ok(broker.audit())
 }
 
@@ -510,8 +512,9 @@ struct PermissionStatus {
 }
 
 #[tauri::command]
-fn permissions_status() -> Vec<PermissionStatus> {
-    permissions::status().into_iter().map(|(id, tier)| PermissionStatus { id, tier }).collect()
+fn permissions_status(webview: tauri::Webview) -> Result<Vec<PermissionStatus>, AdapterError> {
+    require_main(&webview)?;
+    Ok(permissions::status().into_iter().map(|(id, tier)| PermissionStatus { id, tier }).collect())
 }
 
 /// Un raccourci déjà utilisé par une autre application ne doit pas empêcher NEXUS de démarrer.

@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::AdapterError;
-use crate::grants::require_core;
+use crate::grants::require_main;
 
 pub const WIKIPEDIA: &str = "https://fr.wikipedia.org";
 pub const COMMONS: &str = "https://commons.wikimedia.org";
@@ -119,8 +119,8 @@ pub fn news_search_at(endpoint: &str, topic: Option<&str>) -> Result<Vec<NewsIte
 }
 
 #[tauri::command]
-pub async fn web_news_search(caller: String, topic: Option<String>) -> Result<Vec<NewsItem>, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_news_search(webview: tauri::Webview, topic: Option<String>) -> Result<Vec<NewsItem>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || news_search_at(GOOGLE_NEWS, topic.as_deref()))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -136,8 +136,8 @@ pub fn france24_at(endpoint: &str) -> Result<Vec<NewsItem>, AdapterError> {
 }
 
 #[tauri::command]
-pub async fn web_headlines(caller: String) -> Result<Vec<NewsItem>, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_headlines(webview: tauri::Webview) -> Result<Vec<NewsItem>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(|| france24_at(FRANCE24_RSS))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -400,24 +400,24 @@ pub fn news_at(endpoint: &str, date: &str) -> Result<Vec<NewsItem>, AdapterError
 }
 
 #[tauri::command]
-pub async fn web_news(caller: String, date: String) -> Result<Vec<NewsItem>, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_news(webview: tauri::Webview, date: String) -> Result<Vec<NewsItem>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || news_at(WIKIPEDIA, &date))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
-pub async fn web_summary(caller: String, query: String) -> Result<Summary, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_summary(webview: tauri::Webview, query: String) -> Result<Summary, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || summary_at(WIKIPEDIA, &query))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
-pub async fn web_photo(caller: String, query: String) -> Result<Photo, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_photo(webview: tauri::Webview, query: String) -> Result<Photo, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || photo_at(COMMONS, &query))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -612,16 +612,16 @@ pub fn read_page_at(url: &str) -> Result<PageText, AdapterError> {
 }
 
 #[tauri::command]
-pub async fn web_search(caller: String, question: String) -> Result<Vec<SearchHit>, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_search(webview: tauri::Webview, question: String) -> Result<Vec<SearchHit>, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || search_at(DUCKDUCKGO, &question))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
-pub async fn web_read(caller: String, url: String) -> Result<PageText, AdapterError> {
-    require_core(&caller)?;
+pub async fn web_read(webview: tauri::Webview, url: String) -> Result<PageText, AdapterError> {
+    require_main(&webview)?;
     tauri::async_runtime::spawn_blocking(move || read_page_at(&url))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?

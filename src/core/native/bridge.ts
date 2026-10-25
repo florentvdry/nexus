@@ -146,8 +146,6 @@ export interface WindowEntry {
 }
 
 export interface NativeBridge {
-  /** Pont dont les appels sont attribués à un plugin : le natif n'accorde que les permissions de son manifeste. */
-  forPlugin(pluginId: string): NativeBridge;
   listWindows(): Promise<WindowEntry[]>;
   focusWindow(id: number): Promise<void>;
   closeWindow(id: number): Promise<void>;
@@ -249,28 +247,19 @@ export interface NativeBridge {
   mcpCall(id: string, tool: string, args: Record<string, unknown>): Promise<string>;
 }
 
-/** Identité de l'interface principale : elle ne peut que répondre aux confirmations. */
-export const CORE_CALLER = "core";
 const AGENT_CHANNEL = "agents://event";
 const CONFIRMATION_CHANNEL = "permissions://request";
 const AUTO_APPROVAL_CHANNEL = "permissions://auto";
 const OLLAMA_PULL_CHANNEL = "ollama://pull";
 const OLLAMA_INSTALL_CHANNEL = "ollama://install";
 
+/**
+ * Pont vers les commandes natives. Aucune identité n'est envoyée : chaque commande porte la sienne côté natif
+ * (`grants.rs`). Un script de l'interface ne peut donc pas choisir qui il est.
+ */
 export class TauriNativeBridge implements NativeBridge {
-  readonly #caller: string;
-
-  constructor(caller: string = CORE_CALLER) {
-    this.#caller = caller;
-  }
-
-  forPlugin(pluginId: string): NativeBridge {
-    return new TauriNativeBridge(pluginId);
-  }
-
-  /** Chaque appel transmet l'identité de l'appelant : le natif vérifie la permission correspondante. */
   #call<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-    return callNative<T>(command, { caller: this.#caller, ...args });
+    return callNative<T>(command, args);
   }
 
   listProcesses(limit: number): Promise<ProcessEntry[]> {
@@ -565,7 +554,6 @@ export class UnavailableNativeBridge implements NativeBridge {
     return Promise.reject(new NativeUnavailableError());
   }
 
-  forPlugin = (): NativeBridge => this;
   pluginPrepare = () => this.unavailable();
   pluginInstall = () => this.unavailable();
   pluginRemove = () => this.unavailable();
