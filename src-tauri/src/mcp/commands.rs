@@ -110,6 +110,7 @@ mod tests {
             version: "1.0.0".into(),
             env: vec![EnvSpec { name: "TOKEN".into(), required: true, secret: true, description: String::new() }],
             values: Default::default(),
+            protected: None,
         };
         let error = launch_for(&installed).unwrap_err();
         assert!(error.to_string().contains("TOKEN"), "{error}");

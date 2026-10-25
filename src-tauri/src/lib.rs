@@ -6,6 +6,7 @@ pub mod model_download;
 pub mod ollama;
 pub mod journal;
 pub mod mcp;
+pub mod secrets;
 pub mod memory;
 pub mod nim;
 pub mod permissions;

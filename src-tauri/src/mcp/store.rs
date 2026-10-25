@@ -1,6 +1,6 @@
-//! Connecteurs installés, dans le dossier de données de NEXUS. Les valeurs (jetons, identifiants) sont gardées en clair
-//! dans ce fichier local : elles ne quittent jamais ce poste, et l'interface ne les relit pas. Un chiffrement du
-//! fichier par Windows (DPAPI) reste à faire.
+//! Connecteurs installés, dans le dossier de données de NEXUS. Les valeurs (jetons, identifiants) sont chiffrées avec
+//! DPAPI (`secrets.rs`) avant d'être écrites : le fichier ne contient jamais leur texte. Un fichier ancien, avec des
+//! valeurs en clair, est migré à l'ouverture. L'interface ne relit jamais les valeurs.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::catalog::{Candidate, EnvSpec};
 use crate::error::AdapterError;
+use crate::secrets;
 
 const MAX_VALUE_CHARS: usize = 4096;
 
@@ -21,8 +22,12 @@ pub struct Installed {
     pub package: String,
     pub version: String,
     pub env: Vec<EnvSpec>,
-    #[serde(default)]
+    /// Valeurs en mémoire. Ne sont écrites qu'en version chiffrée ; une valeur en clair ne vient que d'un ancien fichier.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub values: BTreeMap<String, String>,
+    /// Valeurs chiffrées (DPAPI, en hexadécimal) : le JSON de la table `values`, tel qu'écrit sur le disque.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected: Option<String>,
 }
 
 /// Vue pour l'interface : les noms des variables et s'ils sont renseignés, jamais leurs valeurs.
@@ -80,13 +85,28 @@ pub struct Store {
 }
 
 impl Store {
+    /// Ouvre le registre. Les valeurs chiffrées sont déchiffrées en mémoire ; une valeur en clair (ancien fichier)
+    /// est reprise puis le fichier est réécrit chiffré. Une valeur illisible (autre compte Windows) reste sans effet.
     pub fn open(path: Option<PathBuf>) -> Self {
-        let items = path
+        let mut items = path
             .as_ref()
             .and_then(|file| std::fs::read_to_string(file).ok())
             .and_then(|text| serde_json::from_str::<Vec<Installed>>(&text).ok())
             .unwrap_or_default();
-        Store { path, items: Mutex::new(items) }
+        let mut has_clear_values = false;
+        for item in &mut items {
+            if let Some(map) = item.protected.as_deref().and_then(unseal_values) {
+                item.values.extend(map);
+            }
+            has_clear_values |= !item.values.is_empty() && item.protected.is_none();
+        }
+        let store = Store { path, items: Mutex::new(items) };
+        if has_clear_values {
+            // Migration : une écriture chiffrée remplace le texte en clair. Un échec laisse le fichier tel quel.
+            let items = store.lock().clone();
+            let _ = store.save(&items);
+        }
+        store
     }
 
     pub fn list(&self) -> Vec<Installed> {
@@ -106,6 +126,7 @@ impl Store {
             version: candidate.version.clone(),
             env: candidate.env.clone(),
             values: BTreeMap::new(),
+            protected: None,
         };
         let mut items = self.lock();
         items.retain(|item| item.id != installed.id);
@@ -125,22 +146,56 @@ impl Store {
         if !item.env.iter().any(|spec| spec.name == name) {
             return Err(AdapterError::InvalidTarget(format!("variable inconnue pour ce connecteur : {name}")));
         }
-        item.values.insert(name.to_string(), value.to_string());
-        self.save(&items)
+        let previous = item.values.insert(name.to_string(), value.to_string());
+        let saved = self.save(&items);
+        if saved.is_err() {
+            // Rien ne doit rester en mémoire si la valeur n'a pas pu être protégée et écrite.
+            if let Some(item) = items.iter_mut().find(|item| item.id == id) {
+                match previous {
+                    Some(old) => item.values.insert(name.to_string(), old),
+                    None => item.values.remove(name),
+                };
+            }
+        }
+        saved
     }
 
+    /// Écrit le registre avec les valeurs chiffrées. Sans protection disponible, l'écriture échoue : rien n'est écrit en clair.
     fn save(&self, items: &[Installed]) -> Result<(), AdapterError> {
         let Some(path) = &self.path else { return Ok(()) };
+        let sealed = items
+            .iter()
+            .map(|item| {
+                let mut copy = item.clone();
+                if !copy.values.is_empty() {
+                    copy.protected = Some(seal_values(&copy.values)?);
+                    copy.values.clear();
+                }
+                Ok(copy)
+            })
+            .collect::<Result<Vec<Installed>, AdapterError>>()?;
         if let Some(directory) = path.parent() {
             std::fs::create_dir_all(directory).map_err(|error| AdapterError::Operation(format!("dossier des connecteurs : {error}")))?;
         }
-        let text = serde_json::to_string_pretty(items).map_err(|error| AdapterError::Operation(error.to_string()))?;
+        let text = serde_json::to_string_pretty(&sealed).map_err(|error| AdapterError::Operation(error.to_string()))?;
         std::fs::write(path, text).map_err(|error| AdapterError::Operation(format!("enregistrement des connecteurs : {error}")))
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Vec<Installed>> {
         self.items.lock().unwrap_or_else(|error| error.into_inner())
     }
+}
+
+/// Valeurs d'un connecteur, chiffrées pour le compte Windows courant (texte hexadécimal).
+fn seal_values(values: &BTreeMap<String, String>) -> Result<String, AdapterError> {
+    let json = serde_json::to_vec(values).map_err(|error| AdapterError::Operation(error.to_string()))?;
+    Ok(secrets::to_hex(&secrets::protect(&json)?))
+}
+
+/// Valeurs déchiffrées, ou `None` si le blob est corrompu ou vient d'un autre compte Windows.
+fn unseal_values(sealed: &str) -> Option<BTreeMap<String, String>> {
+    let plain = secrets::unprotect(&secrets::from_hex(sealed)?).ok()?;
+    serde_json::from_slice(&plain).ok()
 }
 
 #[cfg(test)]
@@ -190,6 +245,59 @@ mod tests {
         Store::open(Some(file.clone())).install(&candidate()).unwrap();
         let reopened = Store::open(Some(file));
         assert_eq!(reopened.list().len(), 1);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    fn scratch_file(name: &str) -> (PathBuf, PathBuf) {
+        let directory = std::env::temp_dir().join(format!("nexus-mcp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        (directory.clone(), directory.join("installed.json"))
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_saved_secret_is_encrypted_on_disk_and_comes_back_after_a_restart() {
+        let (directory, file) = scratch_file("secret");
+        let store = Store::open(Some(file.clone()));
+        store.install(&candidate()).unwrap();
+        store.set_value("app.example/discord", "DISCORD_BOT_TOKEN", "jeton-de-test-7731").unwrap();
+        let on_disk = std::fs::read_to_string(&file).unwrap();
+        assert!(!on_disk.contains("jeton-de-test-7731"), "le jeton ne doit pas être écrit en clair");
+        assert!(!on_disk.contains("\"values\""), "aucune table de valeurs en clair dans le fichier");
+        let reopened = Store::open(Some(file));
+        assert!(reopened.get("app.example/discord").unwrap().missing_required().is_empty());
+        assert_eq!(reopened.get("app.example/discord").unwrap().values["DISCORD_BOT_TOKEN"], "jeton-de-test-7731");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_file_with_clear_values_is_migrated_to_the_protected_form() {
+        let (directory, file) = scratch_file("legacy");
+        std::fs::create_dir_all(&directory).unwrap();
+        let legacy = r#"[{"id":"app.example/discord","title":"discord","package":"@acme/discord-mcp","version":"1.2.0",
+            "env":[{"name":"DISCORD_BOT_TOKEN","required":true,"secret":true,"description":""}],
+            "values":{"DISCORD_BOT_TOKEN":"ancien-jeton-clair-42"}}]"#;
+        std::fs::write(&file, legacy).unwrap();
+        let store = Store::open(Some(file.clone()));
+        assert_eq!(store.get("app.example/discord").unwrap().values["DISCORD_BOT_TOKEN"], "ancien-jeton-clair-42");
+        let migrated = std::fs::read_to_string(&file).unwrap();
+        assert!(!migrated.contains("ancien-jeton-clair-42"), "la migration doit retirer le texte en clair");
+        assert!(migrated.contains("\"protected\""));
+        let reopened = Store::open(Some(file));
+        assert_eq!(reopened.get("app.example/discord").unwrap().values["DISCORD_BOT_TOKEN"], "ancien-jeton-clair-42");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_failed_save_leaves_no_value_in_memory() {
+        let (directory, file) = scratch_file("unsaved");
+        let store = Store::open(Some(file));
+        store.install(&candidate()).unwrap();
+        // Sans protection disponible (hors Windows), l'écriture échoue : la valeur ne doit pas rester en mémoire.
+        if store.set_value("app.example/discord", "DISCORD_BOT_TOKEN", "valeur").is_err() {
+            assert!(store.get("app.example/discord").unwrap().values.is_empty());
+        }
         let _ = std::fs::remove_dir_all(&directory);
     }
 }

@@ -5,4 +5,5 @@
 pub mod catalog;
 pub mod client;
 pub mod commands;
+pub mod schema;
 pub mod store;
