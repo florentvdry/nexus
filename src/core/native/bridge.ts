@@ -204,6 +204,8 @@ export interface NativeBridge {
   memoryRemove(id: number): Promise<boolean>;
   memoryForget(query: string): Promise<number>;
   memoryClear(): Promise<number>;
+  /** Tous les souvenirs en JSON, pour une copie que l'utilisateur fait lui-même. */
+  memoryExport(): Promise<string>;
   /** Tâches programmées : lecture et écriture de la liste complète, réservées au cœur. */
   scheduleList(): Promise<ScheduledTask[]>;
   scheduleSave(tasks: ScheduledTask[]): Promise<void>;
@@ -410,6 +412,10 @@ export class TauriNativeBridge implements NativeBridge {
     return this.#call<number>("memory_clear");
   }
 
+  memoryExport(): Promise<string> {
+    return this.#call<string>("memory_export");
+  }
+
   scheduleList(): Promise<ScheduledTask[]> {
     return this.#call<ScheduledTask[]>("schedule_list");
   }
@@ -587,6 +593,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   memoryRemove = () => this.unavailable();
   memoryForget = () => this.unavailable();
   memoryClear = () => this.unavailable();
+  memoryExport = () => this.unavailable();
   scheduleList = () => this.unavailable();
   scheduleSave = () => this.unavailable();
   webSummary = () => this.unavailable();

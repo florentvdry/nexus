@@ -3,9 +3,11 @@
  * n'y est jamais gardée : elle est enregistrée côté natif, chiffrée par Windows, et seul son état revient ici.
  */
 import type { NativeBridge } from "../core/native/bridge";
+import { parseShare, type ContextShare } from "../core/language-model/context";
 
 const ENABLED = "nexus.nim.enabled";
 const MODEL = "nexus.nim.model";
+const SHARE = "nexus.nim.share";
 /** Emplacement de l'ancienne version, où la clé était gardée en clair dans le navigateur. */
 const LEGACY_KEY = "nexus.nim.key";
 export const DEFAULT_NIM_MODEL = "meta/llama-3.1-8b-instruct";
@@ -35,10 +37,30 @@ export function writeNimSettings(settings: NimPreferences): void {
   }
 }
 
+/**
+ * Catégories de contexte que NVIDIA reçoit en plus de la demande (la demande et l'heure partent toujours).
+ * Par défaut, aucune : ni la conversation, ni les souvenirs, ni ce qui est affiché.
+ */
+export function readNimShare(): ContextShare[] {
+  try {
+    return parseShare(JSON.parse(window.localStorage.getItem(SHARE) ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+
+export function writeNimShare(share: ContextShare[]): void {
+  try {
+    window.localStorage.setItem(SHARE, JSON.stringify(parseShare(share)));
+  } catch {
+    // Stockage indisponible : le choix reviendra à « rien partagé », le plus sûr.
+  }
+}
+
 /** Configuration pour une demande : seulement si NIM est activé. La clé est utilisée côté natif, jamais ici. */
-export function readOnlineModel(): { model: string } | null {
+export function readOnlineModel(): { model: string; share: ContextShare[] } | null {
   const settings = readNimSettings();
-  return settings.enabled ? { model: settings.model } : null;
+  return settings.enabled ? { model: settings.model, share: readNimShare() } : null;
 }
 
 /**

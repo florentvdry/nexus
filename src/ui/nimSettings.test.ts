@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NativeBridge } from "../core/native/bridge";
-import { migrateLegacyNimKey, readNimSettings, readOnlineModel, writeNimSettings } from "./nimSettings";
+import { migrateLegacyNimKey, readNimSettings, readNimShare, readOnlineModel, writeNimSettings, writeNimShare } from "./nimSettings";
 
 function bridgeWith(nimKeySave: (key: string) => Promise<void>): NativeBridge {
   return { nimKeySave } as unknown as NativeBridge;
@@ -31,12 +31,21 @@ describe("NVIDIA NIM : préférences et clé", () => {
     expect(window.localStorage.getItem("nexus.nim.key")).toBe("nvapi-ancienne");
   });
 
+  it("par défaut, rien n'est partagé avec NVIDIA au-delà de la demande ; les cases cochées sont gardées", () => {
+    expect(readNimShare()).toEqual([]);
+    writeNimShare(["memories", "memories", "inconnu" as never]);
+    expect(readNimShare()).toEqual(["memories"]);
+    expect(readOnlineModel()).toBeNull();
+    writeNimSettings({ enabled: true, model: "meta/llama-3.1-8b-instruct" });
+    expect(readOnlineModel()).toEqual({ model: "meta/llama-3.1-8b-instruct", share: ["memories"] });
+  });
+
   it("les préférences ne gardent jamais de clé, et seul l'activation ouvre le modèle en ligne", () => {
     expect(readOnlineModel()).toBeNull();
     writeNimSettings({ enabled: true, model: "meta/llama-3.1-8b-instruct" });
     expect(readNimSettings()).toEqual({ enabled: true, model: "meta/llama-3.1-8b-instruct" });
     const online = readOnlineModel();
-    expect(online).toEqual({ model: "meta/llama-3.1-8b-instruct" });
+    expect(online).toEqual({ model: "meta/llama-3.1-8b-instruct", share: [] });
     expect(Object.keys(online ?? {})).not.toContain("key");
     const stored = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.getItem(window.localStorage.key(index) ?? "") ?? "");
     expect(stored.join(" ")).not.toContain("nvapi");

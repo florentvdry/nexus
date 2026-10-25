@@ -206,7 +206,7 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 | Messages | Un brouillon est affiché avec un bouton « Copier ». NEXUS n'envoie rien. | Aucun envoi possible |
 | Voix neurale (Piper) | Téléchargement du moteur et de la voix française depuis des adresses fixes, avec somme SHA-256 vérifiée. | Clic sur « Installer » |
 | Ollama et modèle de langage | Installation d'Ollama par `winget` et du modèle choisi. NEXUS ne parle qu'à `127.0.0.1:11434`. | Accord au premier lancement |
-| NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, les demandes vont à `integrate.api.nvidia.com`, seul hôte autorisé. La clé est chiffrée par Windows (DPAPI) et ne quitte pas le natif. | Activation et clé dans les réglages |
+| NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, la demande part à `integrate.api.nvidia.com`, seul hôte autorisé ; le reste du contexte seulement si l'utilisateur l'a coché. La clé est chiffrée par Windows (DPAPI) et ne quitte pas le natif. | Activation, clé et cases dans les réglages |
 | Démarrage avec Windows | Écrit la valeur `NEXUS` dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Sans droits administrateur, jamais à l'installation. | Case cochée dans les réglages |
 
 ## Restant à faire
@@ -231,5 +231,15 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 - **Enregistrement** : le modèle local garde sans question les informations durables que l'utilisateur donne sur lui (prénom, ville, préférences). Aucune limite de nombre.
 - **Première conversation** : sept questions après le setup, chacune passable ; les réponses deviennent des souvenirs.
 - **Oubli** : « oublie X » supprime tout de suite les souvenirs qui contiennent X ; « oublie tout » demande une confirmation.
-- **Envoi au modèle** : les souvenirs, les éléments affichés et les commandes de plugins accompagnent chaque demande, en local (Ollama sur ce poste), comme données.
-- **Consultation et suppression** : liste dans les réglages, suppression par ligne, « Tout effacer ».
+- **Envoi au modèle** : le modèle local reçoit les souvenirs, les éléments affichés et les commandes de plugins à chaque demande, en local (Ollama sur ce poste). NVIDIA ne reçoit que les catégories cochées (voir NVIDIA NIM).
+- **Consultation, export et suppression** : liste dans les réglages, suppression par ligne, « Tout effacer », et export en JSON copiable (`memory_export`).
+- **Effacement vérifié** : après une suppression, NEXUS relit le fichier `memory/memories.json` et refuse de confirmer si le texte supprimé y figure encore. Les blocs du disque peuvent rester lisibles par des outils de récupération tant que le disque n'est pas chiffré : BitLocker est recommandé.
+- **Rétention** : les souvenirs restent jusqu'à suppression. Il n'existe pas d'expiration automatique. La conversation n'est pas conservée au redémarrage.
+- **Journal des commandes** : désactivé par défaut ; quand il est activé, il ne garde que les 500 dernières commandes, en texte seulement.
+
+## NVIDIA NIM : ce qui part
+
+- **Toujours** : la demande, la date et l'heure, et la liste des commandes des plugins.
+- **Sur case cochée seulement** : les derniers échanges de la conversation, les souvenirs, et ce qui est affiché (fichiers, pages, applications). Aucune case n'est cochée par défaut.
+- **Local strict** : décocher « Utiliser NVIDIA NIM en premier » : rien ne quitte ce poste.
+- Les catégories sont appliquées avant l'envoi, dans l'interface : le natif transmet ce qu'il reçoit. Un test vérifie que les souvenirs ne partent pas sans case cochée.

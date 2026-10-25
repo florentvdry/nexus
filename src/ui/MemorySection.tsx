@@ -15,6 +15,7 @@ interface MemorySectionProps {
 export function MemorySection({ bridge, locale, t }: MemorySectionProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [unavailable, setUnavailable] = useState(false);
+  const [exported, setExported] = useState<string | null>(null);
   const [routines, setRoutines] = useState(() => routinesEnabled(typeof window === "undefined" ? undefined : window.localStorage));
 
   useEffect(() => {
@@ -36,6 +37,14 @@ export function MemorySection({ bridge, locale, t }: MemorySectionProps) {
     try {
       await bridge.memoryRemove(id);
       setMemories((items) => items.filter((item) => item.id !== id));
+    } catch {
+      setUnavailable(true);
+    }
+  };
+
+  const exportMemories = async () => {
+    try {
+      setExported(await bridge.memoryExport());
     } catch {
       setUnavailable(true);
     }
@@ -86,6 +95,15 @@ export function MemorySection({ bridge, locale, t }: MemorySectionProps) {
               <button type="button" className="chip" onClick={() => void clear()}>
                 {t("memory.clear")}
               </button>
+              <button type="button" className="chip" onClick={() => void exportMemories()}>
+                {t("memory.export")}
+              </button>
+              {exported !== null && (
+                <>
+                  <p className="field-hint">{t("memory.exportHint")}</p>
+                  <textarea readOnly rows={6} value={exported} spellCheck={false} aria-label={t("memory.export")} />
+                </>
+              )}
             </>
           )}
         </>

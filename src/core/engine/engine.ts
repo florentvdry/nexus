@@ -13,6 +13,7 @@ import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
 import { fallbackClassifier, nativeClassifier, nimClassifier } from "../language-model/classifier";
 import { readSelectedModel } from "../language-model/selection";
+import { buildContext, CONTEXT_SHARES, type ContextShare } from "../language-model/context";
 import { ConnectorFlow } from "../connectors/flow";
 import { ASK_PAGES, ASK_SYSTEM, parseWebAnswer, webSources } from "../web/ask";
 import { MemoryController } from "../memory/memory";
@@ -50,7 +51,7 @@ export interface EngineOptions {
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
   /** Clé et modèle NVIDIA NIM, si l'utilisateur les a activés. Sinon null : tout reste sur ce poste. */
-  onlineModel?: () => { model: string } | null;
+  onlineModel?: () => { model: string; share: ContextShare[] } | null;
   /** Chemin du fichier d'agenda (.ics), ou null. Lu seulement quand l'utilisateur demande son agenda. */
   agendaPath?: () => string | null;
   /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */
@@ -161,10 +162,11 @@ export class Engine {
       t: (key, params) => translate(this.#locale, key, params),
       run: (request) => this.#runScheduled(request),
     });
-    const local = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext());
+    const local = nativeClassifier(this.#bridge, options.model ?? readSelectedModel, () => this.classifierContext(new Set(CONTEXT_SHARES)));
     const online = options.onlineModel ?? (() => null);
-    // NIM d'abord si l'utilisateur l'a activé ; en cas d'échec, le modèle local sur ce poste.
-    this.#classifier = fallbackClassifier(nimClassifier(this.#bridge, online, () => this.classifierContext()), local);
+    // NIM d'abord si l'utilisateur l'a activé, avec seulement les catégories qu'il a cochées ; sinon, le modèle local.
+    const onlineContext = () => this.classifierContext(new Set(online()?.share ?? []));
+    this.#classifier = fallbackClassifier(nimClassifier(this.#bridge, online, onlineContext), local);
     this.#connectors = new ConnectorFlow({
       bridge: this.#bridge,
       model: () => readSelectedModel(),
@@ -350,20 +352,25 @@ export class Engine {
    * Contexte donné au modèle avec chaque demande : les souvenirs de l'utilisateur, et les éléments que NEXUS vient
    * d'afficher (« ferme le deuxième »). Ce sont des données, jamais des instructions.
    */
-  async classifierContext(): Promise<string[]> {
-    const context = await this.#memory.texts();
-    const recent = this.#recentConversation();
-    if (recent) context.unshift(recent);
+  /** Contexte de la classification : seules les catégories demandées sont incluses (le modèle local demande tout). */
+  async classifierContext(share: ReadonlySet<ContextShare>): Promise<string[]> {
     const shown = this.#conversation.referents();
-    if (shown.length > 0) {
-      const list = shown.map((referent, index) => `${index + 1}) ${referent.label} (${referent.value})`).join(" · ");
-      context.push(`Éléments affichés à l'utilisateur : ${list}`);
-    }
     const now = new Date();
-    context.push(`Date et heure actuelles : ${localDateTime(now)} (${now.toLocaleDateString("fr-FR", { weekday: "long" })}).`);
     const commands = pluginCommandsForModel();
-    if (commands.length > 0) context.push(`Commandes des plugins installés (PLUGIN_ACTION : pluginId, command, text) : ${commands.join(" ; ")}`);
-    return context;
+    const system = [`Date et heure actuelles : ${localDateTime(now)} (${now.toLocaleDateString("fr-FR", { weekday: "long" })}).`];
+    if (commands.length > 0) system.push(`Commandes des plugins installées (PLUGIN_ACTION : pluginId, command, text) : ${commands.join(" ; ")}`);
+    return buildContext(
+      {
+        conversation: this.#recentConversation(),
+        memories: share.has("memories") ? await this.#memory.texts() : [],
+        shown:
+          shown.length > 0
+            ? `Éléments affichés à l'utilisateur : ${shown.map((referent, index) => `${index + 1}) ${referent.label} (${referent.value})`).join(" · ")}`
+            : null,
+        system,
+      },
+      share,
+    );
   }
 
   /** Ouvre la liste des tâches programmées (bouton de la barre). */

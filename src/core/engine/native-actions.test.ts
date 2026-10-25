@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { NativeCallError, type NativeAdapter } from "../native/adapter";
 import type { AgentEvent, AutoApproval, ConfirmationNotice, NativeBridge } from "../native/bridge";
+import type { ContextShare } from "../language-model/context";
 import { createEngine, type EngineEvent } from "./engine";
 import { TEST_MODEL } from "../testing/scripted";
 
@@ -131,6 +132,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     mcpTools: vi.fn(async () => []),
     mcpCall: vi.fn(async () => ""),
     memoryList: vi.fn(async () => []),
+    memoryExport: vi.fn(async () => "[]"),
     memoryAdd: vi.fn(async (text: string, source: "user" | "model") => ({ id: 1, text, createdAt: 0, source })),
     memoryRemove: vi.fn(async () => true),
     memoryForget: vi.fn(async () => 0),
@@ -179,8 +181,8 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
 
 const nativeDouble: NativeAdapter = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
-function setup(bridge: NativeBridge) {
-  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0 });
+function setup(bridge: NativeBridge, onlineModel?: () => { model: string; share: ContextShare[] } | null) {
+  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0, onlineModel });
   const events: EngineEvent[] = [];
   engine.subscribe((event) => events.push(event));
   return { engine, events };
@@ -602,5 +604,31 @@ describe("actualités sur un sujet : la recherche reçoit le sujet", () => {
     const { engine } = setup(bridge);
     await engine.submit("actus sur Macron");
     expect(bridge.webNewsSearch).toHaveBeenCalledWith("Emmanuel Macron");
+  });
+});
+
+/** Contexte reçu par NVIDIA NIM pour la première demande. */
+async function contextSentToNvidia(share: ContextShare[]): Promise<string> {
+  const memory = { id: 1, text: "je préfère Firefox", createdAt: 0, source: "user" as const };
+  const nimClassify = vi.fn(async () => ({ type: "HELP" }));
+  const bridge = fakeBridge({ nimClassify, memoryList: vi.fn(async () => [memory]) });
+  const { engine } = setup(bridge, () => ({ model: "meta/llama", share }));
+  await engine.submit("ouvre la calculatrice");
+  const [, , context] = vi.mocked(nimClassify).mock.calls[0] as unknown as [string, string, string[]];
+  return context.join(" | ");
+}
+
+describe("NVIDIA NIM : seules les catégories cochées partent", () => {
+  it("sans case cochée, NVIDIA ne reçoit ni les souvenirs, ni la conversation, mais la date et l'heure", async () => {
+    const context = await contextSentToNvidia([]);
+    expect(context).not.toContain("Firefox");
+    expect(context).not.toContain("Conversation récente");
+    expect(context).toContain("Date et heure actuelles");
+  });
+
+  it("la case « souvenirs » envoie les souvenirs, et rien de plus", async () => {
+    const context = await contextSentToNvidia(["memories"]);
+    expect(context).toContain("Firefox");
+    expect(context).not.toContain("Conversation récente");
   });
 });

@@ -82,10 +82,11 @@ impl MemoryStore {
     pub fn remove(&self, id: u64) -> Result<bool, AdapterError> {
         let mut items = self.lock();
         let before = items.len();
+        let gone: Vec<String> = items.iter().filter(|item| item.id == id).map(|item| item.text.clone()).collect();
         items.retain(|item| item.id != id);
         let removed = items.len() != before;
         if removed {
-            self.save(&items)?;
+            self.save_removing(&items, &gone)?;
         }
         Ok(removed)
     }
@@ -98,10 +99,11 @@ impl MemoryStore {
         }
         let mut items = self.lock();
         let before = items.len();
+        let gone: Vec<String> = items.iter().filter(|item| item.text.to_lowercase().contains(&needle)).map(|item| item.text.clone()).collect();
         items.retain(|item| !item.text.to_lowercase().contains(&needle));
         let removed = before - items.len();
         if removed > 0 {
-            self.save(&items)?;
+            self.save_removing(&items, &gone)?;
         }
         Ok(removed)
     }
@@ -109,9 +111,32 @@ impl MemoryStore {
     pub fn clear(&self) -> Result<usize, AdapterError> {
         let mut items = self.lock();
         let count = items.len();
+        let gone: Vec<String> = items.iter().map(|item| item.text.clone()).collect();
         items.clear();
-        self.save(&items)?;
+        self.save_removing(&items, &gone)?;
         Ok(count)
+    }
+
+    /// Tous les souvenirs, au format du fichier : c'est ce que l'utilisateur emporte s'il exporte.
+    pub fn export(&self) -> Result<String, AdapterError> {
+        serde_json::to_string_pretty(&self.list()).map_err(|error| AdapterError::Operation(error.to_string()))
+    }
+
+    /// Écrit le registre puis relit le fichier : les textes supprimés doivent avoir disparu. Un échec est signalé,
+    /// jamais passé sous silence. Les blocs du disque peuvent rester lisibles tant que le disque n'est pas chiffré.
+    fn save_removing(&self, items: &[Memory], removed: &[String]) -> Result<(), AdapterError> {
+        self.save(items)?;
+        let Some(path) = &self.path else { return Ok(()) };
+        let on_disk = std::fs::read_to_string(path).map_err(|error| AdapterError::Operation(format!("contrôle d'effacement : {error}")))?;
+        for text in removed.iter().filter(|text| !text.is_empty()) {
+            // Le texte est cherché tel qu'il est écrit dans le fichier JSON (guillemets et antislashs échappés).
+            let escaped = serde_json::to_string(text).unwrap_or_default();
+            let fragment = escaped.trim_matches('"');
+            if on_disk.contains(fragment) {
+                return Err(AdapterError::Operation("effacement non vérifié : le fichier contient encore le souvenir supprimé".into()));
+            }
+        }
+        Ok(())
     }
 
     fn save(&self, items: &[Memory]) -> Result<(), AdapterError> {
@@ -163,6 +188,13 @@ pub fn memory_clear(store: State<'_, MemoryStore>, webview: tauri::Webview) -> R
     store.clear()
 }
 
+/// Export des souvenirs, en JSON, pour que l'utilisateur les garde ou les emporte.
+#[tauri::command]
+pub fn memory_export(store: State<'_, MemoryStore>, webview: tauri::Webview) -> Result<String, AdapterError> {
+    require_main(&webview)?;
+    store.export()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +219,42 @@ mod tests {
         let again = store.add("je préfère firefox", "user").unwrap();
         assert_eq!(first.id, again.id);
         assert_eq!(store.list().len(), 1);
+    }
+
+    /// Après suppression, le texte n'est plus dans le fichier, ni après un nouvel ouverture du registre.
+    #[test]
+    fn a_forgotten_memory_is_gone_from_the_file_and_stays_gone() {
+        let file = temp_file("erase");
+        let store = MemoryStore::open(Some(file.clone()));
+        store.add("Je préfère Firefox", "user").unwrap();
+        store.add("Mon code secret est 4721", "user").unwrap();
+        assert_eq!(store.forget("code secret").unwrap(), 1);
+        let on_disk = std::fs::read_to_string(&file).unwrap();
+        assert!(!on_disk.contains("4721"), "le texte effacé ne doit plus être dans le fichier");
+        assert!(on_disk.contains("Firefox"), "les autres souvenirs restent");
+        assert_eq!(MemoryStore::open(Some(file.clone())).list().len(), 1);
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
+    #[test]
+    fn clearing_leaves_no_memory_text_on_disk() {
+        let file = temp_file("clear");
+        let store = MemoryStore::open(Some(file.clone()));
+        store.add("Je m'appelle Florent", "user").unwrap();
+        store.clear().unwrap();
+        let on_disk = std::fs::read_to_string(&file).unwrap();
+        assert!(!on_disk.contains("Florent"));
+        assert!(MemoryStore::open(Some(file.clone())).list().is_empty());
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
+    #[test]
+    fn the_export_holds_every_memory_in_the_stored_format() {
+        let store = MemoryStore::open(None);
+        store.add("Je préfère Firefox", "user").unwrap();
+        store.add("J'habite à Lyon", "model").unwrap();
+        let exported: Vec<Memory> = serde_json::from_str(&store.export().unwrap()).unwrap();
+        assert_eq!(exported, store.list());
     }
 
     #[test]

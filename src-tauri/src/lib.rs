@@ -623,6 +623,7 @@ pub fn run() {
             memory::memory_remove,
             memory::memory_forget,
             memory::memory_clear,
+            memory::memory_export,
             schedule::schedule_list,
             schedule::schedule_save,
             web::web_summary,

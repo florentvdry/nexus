@@ -67,6 +67,7 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("memory_remove", Policy::MainWindow),
     ("memory_forget", Policy::MainWindow),
     ("memory_clear", Policy::MainWindow),
+    ("memory_export", Policy::MainWindow),
     ("schedule_list", Policy::MainWindow),
     ("schedule_save", Policy::MainWindow),
     ("web_summary", Policy::MainWindow),
