@@ -3,6 +3,19 @@
 Chaque phase a des livrables et des critères d'acceptation. Une phase n'est déclarée terminée que
 si ses critères sont atteints et vérifiés.
 
+## État au 25/10/2026
+
+| Phase | Statut |
+| --- | --- |
+| 1 — Fondations et interface Windows | Livrée ; validation sous Windows à faire |
+| 2 — Voix et multilingue | Partielle : reconnaissance en attente du modèle Whisper. Voix neurale Piper livrée (ADR-043, ADR-044) |
+| 3 — Moteur de plugins et OSINT | Implémentée et testée ; résultats réels sur example.com à valider |
+| 4 — Automatisation avancée de Windows | Implémentée ; non validée sous Windows, contrôle des fenêtres compris |
+| 5 — Intelligence et écosystème | En cours : modèle de langage local (Ollama), journal, plugins de données et WebAssembly, tâches programmées, agenda, alertes. Bibliothèque publique de plugins non commencée |
+
+Les sections ci-dessous gardent l'état de chaque phase au moment de sa livraison. Quand une décision ultérieure l'a changé,
+la ligne le signale et renvoie à l'ADR concerné.
+
 ## Phase 1 — Fondations et interface Windows
 
 **Statut : livrée ; validation Windows à faire.**
@@ -17,7 +30,7 @@ si ses critères sont atteints et vérifiés.
 - [x] Moteur de fenêtres flottantes : placement hors orbe et hors HUD, anti-chevauchement,
       réduction de taille, historique, redimensionnement, déplacement, fermeture.
 - [x] Gestion des tâches avec états réels et annulation.
-- [x] Commandes natives : lancement d'applications depuis un catalogue fermé, informations système.
+- [x] Commandes natives : lancement d'applications, informations système. Le catalogue fermé de la phase 1 a été retiré depuis (ADR-042) : le lancement cherche le nom sur le PC.
 - [x] Tests : 81 tests frontend (Vitest), 7 tests Rust (cargo test).
 
 ### Critères d'acceptation
@@ -26,7 +39,7 @@ si ses critères sont atteints et vérifiés.
 |---|---|---|
 | Taper « Lance le Bloc-notes » ouvre l'application | **Non vérifié sous Windows.** Sous Linux, la chaîne complète s'exécute et renvoie l'erreur attendue « Notepad is not installed » (`notepad.exe` absent). | Capture Xvfb, session de test |
 | Demander CPU/RAM fait apparaître une fenêtre dans un espace libre | **Vérifié** avec les valeurs réelles de la machine de test (CPU, mémoire, disques). | Captures Xvfb |
-| Aucun LLM nécessaire | **Vérifié par conception** : aucun code réseau ou modèle dans le chemin de commande ; `resolvedBy` vaut toujours `rules`. | Tests `parse.test.ts`, `engine.test.ts` |
+| Aucun LLM nécessaire | **Vérifié par conception** : aucun code réseau ou modèle dans le chemin de commande ; `resolvedBy` vaut toujours `rules`. *Ce critère ne vaut plus depuis ADR-029 : un modèle local comprend les demandes.* | Tests `parse.test.ts`, `engine.test.ts` |
 
 ### Tests exécutés
 
@@ -40,9 +53,9 @@ si ses critères sont atteints et vérifiés.
 
 ### Limites connues
 
-- Le lancement n'a pas été testé sous Windows. Les chemins candidats (Chrome, Discord) suivent
-  les emplacements d'installation standards, mais ne sont pas vérifiés sur une machine réelle.
-- Pas encore d'icône de zone de notification, de raccourci global ni de démarrage automatique.
+- Le lancement n'a pas été testé sous Windows. Le scan du PC (ADR-042) ne suit plus de chemins fixes,
+  mais il n'est pas vérifié sur une machine réelle.
+- Pas encore d'icône de zone de notification. (Le raccourci global et le démarrage automatique ont été livrés depuis : ADR-010 et ADR-035.)
 - Pas de redimensionnement manuel des fenêtres (déplacement seulement).
 - Deux commandes identiques ouvrent deux fenêtres (pas de déduplication).
 - Les états « en écoute », « reconnaissance vocale » et « réponse vocale » de l'orbe sont
@@ -92,7 +105,7 @@ si ses critères sont atteints et vérifiés.
 - **Bloquant : `huggingface.co` est refusé par la politique réseau de l'environnement de développement.** Les poids Whisper (`ggml-base.bin`) et les voix Piper y sont hébergés. Aucun paquet de registre autorisé ne fournit de modèle de reconnaissance français. Pour finir la validation : autoriser `huggingface.co` dans les réglages réseau, puis lancer `NEXUS_WHISPER_MODEL=... cargo test -- --ignored`.
 - Le micro n'a pas pu être testé : aucun périphérique audio dans le conteneur. La capture (cpal) compile mais n'a pas tourné.
 - La synthèse vocale n'a pas été entendue. Sous WebKitGTK, elle n'est pas disponible ; sous WebView2 (Windows), elle dépend des voix installées.
-- Piper n'est pas intégré (ADR-008) : ses voix sont hébergées sur Hugging Face et espeak-ng, sa dépendance phonétique, est sous GPL.
+- Piper est intégré depuis ADR-043 (voix française, téléchargée après accord) ; ADR-008 est en partie remplacée. Sans voix installée, ou pour l'anglais, la voix Windows lit la réponse.
 - Pas de wake word (« Jarvis ») : seules la touche, le raccourci et le clic activent l'écoute. C'est un choix de confidentialité ; un mot d'activation local viendra plus tard.
 - Pendant la transcription d'un énoncé (quelques secondes sur CPU), les nouveaux audios sont mis en file ; aucune perte, mais la réponse est retardée.
 - Le CI Windows compile whisper.cpp (C++) : premier run à surveiller.
@@ -138,7 +151,7 @@ si ses critères sont atteints et vérifiés.
 - Pas de recherche de pseudo sur d'autres plateformes ; la liste est fixe dans le code. Une correspondance n'est jamais une identité.
 - Les enregistrements MX, TXT et NS ne sont pas résolus : le résolveur du système ne les expose pas. Ajout prévu avec un résolveur DNS dédié.
 - Le worker est compilé à côté de l'application en développement. **Avant un installateur**, il faut le déclarer comme binaire externe (`bundle.externalBinaries`) pour chaque cible.
-- Le plugin de connecteurs n'est pas encore chargé depuis un dossier : les connecteurs sont intégrés au binaire. L'API externe viendra avec la phase 5.
+- Le plugin de connecteurs n'est pas encore chargé depuis un dossier : les connecteurs sont intégrés au binaire. (Depuis la phase 5, les plugins de données se chargent depuis un dossier ; les connecteurs restent intégrés.)
 - Pas d'analyse de métadonnées EXIF ni de texte de PDF : seules l'empreinte, le type et les statistiques de texte sont calculées.
 - Les vérifications TLS utilisent le magasin de certificats de l'OS (`platform-verifier`). Sur Linux, un proxy d'inspection peut encore échouer : c'est l'environnement, pas le code.
 
@@ -153,7 +166,7 @@ si ses critères sont atteints et vérifiés.
 - [x] Processus actifs, triés par mémoire utilisée (lecture seule).
 - [x] Permissions natives : la confirmation est exigée par le backend Rust, pas seulement par l'interface. Une demande expire après 120 secondes et une réponse inconnue est refusée.
 - [x] Intégration Claude Code : détection du CLI, exécution non interactive (`-p --output-format stream-json`), demande transmise sur l'entrée standard (jamais dans la ligne de commande), budget plafonné à 0,50 $ par run, annulation, délai de 15 minutes, flux d'événements affiché (outils, réponse, refus, coût, durée).
-- [x] Applications installées : catalogue de lancement avec statut (en cours ou non) ; pas de détection des installations hors catalogue.
+- [x] Applications : lancement par nom après scan du PC, sans catalogue (ADR-042). Le statut « en cours » n'est plus affiché.
 - [x] Contrôle des fenêtres Windows (lister, activer, demander la fermeture) : implémenté avec confirmation, Windows uniquement. Non exécuté sous Windows dans cet environnement : la vérification est faite par la compilation croisée et par le job CI Windows.
 
 ### Critère d'acceptation
@@ -165,7 +178,7 @@ si ses critères sont atteints et vérifiés.
 | Recherche limitée aux dossiers utilisateur | **Vérifié** sous Xvfb. Une erreur de conception avait exposé le dossier personnel (113 résultats, dont des fichiers de `~/.claude`) ; corrigée et couverte par un test. | Capture `51-file-search.png` : 2 résultats, tous dans `nexus-e2e` |
 | Renommage après confirmation | **Vérifié** : refus → fichier inchangé ; autorisation → fichier renommé sur le disque. | Captures `52`, `53`, `56`, `57` |
 | Lancement de Claude Code après confirmation | **Vérifié** avec le CLI réel (2.1.309) : réponse affichée, coût 0,0093 $, durée 5 s, 1 outil. | Capture `62-agent-rerun.png` |
-| Contrôle des fenêtres | **Non réalisé.** | — |
+| Contrôle des fenêtres | **Implémenté, non exécuté sous Windows.** | — |
 | Comportement sous Windows (corbeille, `.cmd`, chemins) | **Non validé.** | À vérifier sous Windows |
 
 ### Tests exécutés
@@ -183,7 +196,7 @@ si ses critères sont atteints et vérifiés.
 
 ### Limites connues
 
-- Le lancement passe par le catalogue ; les applications installées hors catalogue ne sont pas détectées.
+- Le lancement passe par le scan du PC (ADR-042) : une application absente du menu Démarrer, du registre et des dossiers scannés n'est pas trouvée.
 - Le chemin `.cmd` de Claude Code (`cmd /C`) et la corbeille (crate `trash`) ne sont pas testés sous Windows.
 - La tâche « Claude Code en cours » s'affiche avant la confirmation : c'est un libellé à améliorer.
 - Le contrôle des fenêtres n'a pas été exécuté sur Windows : les appels Win32 sont compilés pour la cible MSVC, mais pas lancés.
@@ -192,9 +205,11 @@ si ses critères sont atteints et vérifiés.
 
 ## Phase 5 — Intelligence et écosystème
 
-**Statut : plugins de données et plugins WebAssembly livrés, journal des commandes livré, compréhension enrichie (politesse, références, questions, demandes enchaînées, fautes de frappe). Bibliothèque publique de plugins et modèle de langage : non commencés.**
+**Statut : plugins de données et plugins WebAssembly livrés, journal des commandes livré, modèle de langage local livré (ADR-026, ADR-029). Bibliothèque publique de plugins : non commencée.**
 
 ### Compréhension enrichie (ADR-023)
+
+*Remarque : depuis ADR-029, la compréhension ne passe plus par des règles de texte. Le modèle local reçoit la demande, avec la conversation et les souvenirs ; les demandes composées ne sont plus découpées. Les mécanismes décrits ci-dessous sont gardés comme historique.*
 
 - [x] Politesse et formules de question retirées : « peux-tu ouvrir Discord ? » = « ouvre Discord ».
 - [x] Demandes enchaînées : « ouvre X puis Y » (trois au maximum, dans l'ordre, une question suspend la suite).
@@ -202,7 +217,7 @@ si ses critères sont atteints et vérifiés.
 - [x] Mémoire de conversation : « le deuxième », « ferme-le », « renomme ça en X » après une liste de fichiers ou de fenêtres.
 - [x] Questions à réponses numérotées quand c'est ambigu ; « non » annule ; « oui » valide une suggestion unique.
 - [x] Fenêtres au nom ambigu : la question est posée, et la fenêtre choisie est identifiée par son numéro, jamais par son titre.
-- [ ] Modèle de langage pour les formulations hors vocabulaire : décision à prendre avec l'utilisateur (ADR-023).
+- [x] Modèle de langage pour les formulations hors vocabulaire : livré (ADR-026, ADR-029).
 
 ### Critère d'acceptation (compréhension)
 
@@ -224,8 +239,8 @@ si ses critères sont atteints et vérifiés.
 
 ### Limites connues
 
-- Les formulations hors du vocabulaire restent non comprises : elles reçoivent un message d'aide, sans deviner.
-- La mémoire est propre à la session : elle n'est pas conservée au redémarrage.
+- Une formulation que le modèle ne reconnaît pas reçoit un message d'aide, sans deviner. La qualité dépend de la taille du modèle choisi (le niveau léger de 1,5 B est le plus fragile).
+- La conversation n'est pas conservée au redémarrage. Les souvenirs, eux, le sont (ADR-029).
 - Les fenêtres ambiguës ne se vérifient que par les tests moteur sur cette plateforme.
 
 ### Livrables
@@ -240,7 +255,7 @@ si ses critères sont atteints et vérifiés.
 - [x] Plugins avec code en WebAssembly (wasmtime 50) : une seule fonction hôte, permissions approuvées dans le lock (`storage.local`, `network.fetch`), limites de mémoire, de temps et de taille, commandes déclenchées par expressions.
 - [x] SDK Rust `sdk/nexus-plugin-sdk` et exemple complet `community.exemple.convertisseur`, validé par la CI et exécuté dans l'application.
 - [ ] Signature des auteurs, métriques sociales et mises à jour automatiques : hors périmètre de la version 1.
-- [ ] Modèle de langage local ou distant pour les cas que les règles ne couvrent pas.
+- [x] Modèle de langage local (Ollama) pour toutes les demandes ; fournisseur distant optionnel (NVIDIA NIM, désactivé par défaut, ADR-040).
 
 ### Critère d'acceptation (journal)
 
@@ -266,4 +281,4 @@ si ses critères sont atteints et vérifiés.
 - Le validateur et l'installation vérifient l'empreinte, pas l'identité de l'auteur.
 - Les plugins WebAssembly sont exécutés dans un bac à sable, mais un module malveillant peut quand même consommer la mémoire et le temps alloués, dans les limites fixées (32 Mo, 10 s par appel).
 - Le SDK n'est pas encore publié sur un registre : il s'utilise par chemin depuis le dépôt.
-- Le modèle de langage n'est pas branché : toute compréhension reste déterministe.
+- Sans modèle local prêt, aucune demande n'est comprise : NEXUS le dit et ne devine pas (ADR-029).

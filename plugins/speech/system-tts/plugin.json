@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "type": "speech",
-  "description": "Lecture des réponses avec les voix installées sur le système (API Web Speech, hors ligne sous Windows).",
+  "description": "Lecture des réponses avec les voix installées sur le système (API Web Speech, hors ligne sous Windows). Repli quand la voix neurale locale n'est pas installée.",
   "author": "NEXUS contributors",
   "license": "MIT",
   "entry": "index.ts",

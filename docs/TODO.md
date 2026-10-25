@@ -1,6 +1,6 @@
 # À faire
 
-État au commit `4754d7b` sur `main` (connecteurs MCP). Les changements suivants ne sont **pas encore commités** : mémoire, première conversation, analyseur par règles retiré (tout passe par le modèle local). Voir ADR-027 à ADR-029 dans `docs/DECISIONS.md`.
+État au 25/10/2026, commit `3a2eeb9` sur `main`. `[x]` : livré. `[~]` : partiel. `[ ]` : à faire. Les décisions qui ont changé sont signalées en tête de leur ADR dans `docs/DECISIONS.md` ; la compréhension passe par le modèle local (ADR-029).
 
 ## 0. Feuille de route de la nuit (amélioration continue)
 
@@ -22,8 +22,8 @@ Accessibilité : réglage « texte plus grand » (section Accessibilité des ré
 Chaque point : état, et ce qu'il faut pour le faire. « Accord » = ton accord explicite requis.
 
 1. [ ] **Écoute permanente avec mot de réveil** : répondre à « Jarvis » sans geste. Demande un micro ouvert en continu et une détection de mot de réveil locale. Accord (micro) requis.
-2. [ ] **Voix naturelle** : répondre à voix haute, et interrompre quand c'est utile. Base : synthèse vocale Windows. Accord pour la sortie audio.
-3. [~] **Vision de l'écran** (ADR-039) : question confirmée, capture de l'écran principal, lecture par un modèle de vision local. Reste : installer un modèle de vision (« ollama pull qwen2.5vl:3b », à lancer par toi) et tester la réponse.
+2. [~] **Voix naturelle** : voix neurale Piper, voix française installée sur accord (ADR-043, ADR-044), voix Windows en repli. Reste : écouter la qualité sur la machine, installer la voix anglaise après accord.
+3. [x] **Vision de l'écran** (ADR-039) : question confirmée, capture de l'écran principal, lecture par un modèle de vision local. Testée de bout en bout (commit `ebb8928`).
 4. [ ] **Contrôle des applications** : remplir et enchaîner des actions dans les logiciels, sans API. Demande une automatisation d'interface, étape par étape, avec confirmation.
 5. [~] **Alertes proactives** : disque presque plein, mémoire saturée. **Fait en partie** (ADR-036, ADR-037) : disque, mémoire, batterie. Mises à jour Windows restent à faire.
 6. [~] **Agenda et messages** : **fait en partie** (ADR-038) : agenda du jour depuis un fichier .ics désigné, brouillons à copier (rien n'est envoyé). Reste : comptes de messagerie et d'agenda en ligne, avec accord.
@@ -80,6 +80,7 @@ Le modèle comprend toutes les demandes (ADR-029). Sans modèle prêt, NEXUS le 
 - [ ] **Contrôle des fenêtres** : test réel (lister, activer, fermer, désigner par numéro après une question). Le test live existe, à relancer.
 - [ ] **Claude Code** : chemins `.cmd` (`cmd /C`) et chemins avec lettre de lecteur, avec un appel réel accepté.
 - [ ] **Reconnaissance vocale** : télécharger le modèle Whisper, tester une transcription réelle en FR et en EN.
+- [ ] **Voix naturelle (Piper)** : installer la voix française depuis les réglages, l'écouter, vérifier le repli sur la voix Windows (anglais, ou voix absente).
 - [ ] **OSINT** : résultats réels sur `example.com` (RDAP répond, crt.sh a expiré depuis cette machine).
 
 ## 6. Plugins
@@ -108,12 +109,12 @@ Idées de l'utilisateur, à discuter avant de les lancer :
 
 - Connecteurs MCP proposés selon le profil (agenda, messagerie).
 - Lecture et résumé de documents locaux (PDF, Word, notes).
-- Rappels et minuteurs avec notification Windows.
+- Rappels et minuteurs avec notification Windows (rappels programmés : ADR-030 ; notification Windows à vérifier).
 - Actions sur le presse-papiers (traduire, résumer).
-- Description de ce qui est à l'écran (modèle multimodal local).
-- Lecture d'un calendrier local (ICS).
+- ~~Description de ce qui est à l'écran (modèle multimodal local).~~ Fait : ADR-039.
+- ~~Lecture d'un calendrier local (ICS).~~ Fait : ADR-038.
 - Surveillance d'un dossier ou d'un fichier.
-- Réponses parlées (synthèse vocale Windows).
+- ~~Réponses parlées (synthèse vocale Windows).~~ Fait : voix neurale locale et repli Windows (ADR-041 à ADR-044).
 - Historique des conversations, en option (aujourd'hui non conservé, volontairement).
 - Mode discret : l'orbe seule, sans texte.
 - Astuces contextuelles et tour guidé après la première conversation.

@@ -8,7 +8,7 @@ Merci de votre intérêt. Quelques règles pour garder le projet stable et compr
    nommée comme telle, et réservée aux tests.
 2. **Pas de logique métier dans l'interface.** Les composants de `src/ui` appellent le moteur.
 3. **Pas de commande libre.** Le lancement ne peut viser qu'une application trouvée par le scan du PC (`src-tauri/src/plugins/actions/apps.rs`). Aucun catalogue d'applications n'est tenu.
-4. **Pas d'appel à un modèle de langage pour une tâche simple.** Ajoutez d'abord une règle locale.
+4. **Pas de règle de texte pour comprendre une demande.** Toute compréhension passe par le modèle local, dont la réponse est validée (ADR-029). Une fois l'intention comprise, la capacité qui l'exécute reste déterministe.
 5. **Chaque capacité déclare son manifeste** : permissions, localité, délai, coût.
 6. **Les erreurs ne sont jamais masquées.** Elles apparaissent sous forme de carte d'erreur.
 
@@ -21,6 +21,8 @@ Prérequis :
 - Sous Windows : Microsoft Edge WebView2 (présent sur Windows 11), et Visual Studio Build Tools (charge C++) avec CMake et
   LLVM/Clang, pour compiler whisper.cpp
 - Sous Linux (pour compiler seulement) : `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libasound2-dev cmake clang`
+- Facultatifs : Ollama, pour comprendre les demandes (NEXUS propose de l'installer au premier lancement), Node.js pour les
+  connecteurs MCP, et le CLI `claude` pour Claude Code.
 
 ```bash
 pnpm install
@@ -38,8 +40,8 @@ répondent explicitement qu'ils exigent l'application de bureau.
 ## Architecture
 
 - `src/ui` : interface React (orbe, fenêtres, barre de commande). Aucune logique métier.
-- `src/core` : moteur en TypeScript pur — intentions, capacités, tâches, placement, plugins.
-- `plugins/<type>/<nom>/` : **un dossier par plugin**, rangé par type (`actions`, `sources`, `documents`, `speech`, `languages`), avec sa fiche `plugin.json`.
+- `src/core` : moteur en TypeScript pur — compréhension (modèle local), capacités, tâches, placement, plugins.
+- `plugins/<type>/<nom>/` : **un dossier par plugin**, rangé par type (`actions`, `agents`, `sources`, `documents`, `speech`, `languages`), avec sa fiche `plugin.json`.
 - `src-tauri/src` : noyau natif Rust ; le code natif des plugins est dans `src-tauri/src/plugins/<type>/`.
 
 La convention des plugins et la piste d'une marketplace sont décrites dans [docs/PLUGINS.md](docs/PLUGINS.md).

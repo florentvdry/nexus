@@ -30,7 +30,7 @@ demande lui-même la confirmation (voir la phase 4). Une permission `restricted`
 
 ## Garanties techniques (phase 1)
 
-- Le lancement d'application n'accepte qu'un nom, cherché sur le PC par le scan ; seule une application trouvée peut être lancée
+- Le lancement d'application n'accepte qu'un nom, cherché sur le PC par le scan (aucun catalogue, ADR-042) ; seule une application trouvée peut être lancée
   (`src-tauri/src/plugins/actions/apps.rs`). Aucune chaîne venant de l'interface n'est exécutée comme commande.
 - Aucune élévation de privilèges n'est demandée ni tentée.
 - Le processus lancé est détaché : NEXUS ne le surveille pas et n'injecte rien dans lui.
@@ -172,12 +172,27 @@ Rien n'est silencieux :
 - Stocké dans le dossier de données de l'application, sur cet ordinateur. Aucun envoi réseau.
 - Réservé à l'interface : un plugin ne peut ni lire ni alimenter le journal.
 
-## Prévu pour les phases suivantes
+## Accès réseau, téléchargements et écriture système
 
-- Journal local des actions, consultable et supprimable.
-- Identité de plugin côté natif (voir ci-dessus).
+Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'agit sur les fichiers personnels ou sur le système sans l'accord de l'utilisateur.
+
+| Fonction | Ce qui se passe | Accord |
+|---|---|---|
+| Questions ouvertes sur le web | Recherche DuckDuckGo (version HTML, sans clé), 3 pages au plus lues (HTTP ou HTTPS, 1 Mo chacune). Les adresses locales, privées, avec port ou identifiants sont refusées. Seuls les termes de la recherche sont envoyés. | Demande de l'utilisateur, sans confirmation supplémentaire |
+| Actualités, photos, fiches | Hôtes fixes dans le natif : Google Actualités, Wikipédia fr, Wikimedia Commons. Les images sont téléchargées côté natif (3 Mo au plus). | Demande de l'utilisateur |
+| Capture d'écran | Une seule capture de l'écran principal, en mémoire, jamais enregistrée. Elle est lue par un modèle de vision local et affichée à l'utilisateur. | « oui » demandé à chaque question |
+| Agenda | Lecture seule d'un fichier `.ics` désigné dans les réglages (2 Mo au plus). | Choix du fichier dans les réglages |
+| Messages | Un brouillon est affiché avec un bouton « Copier ». NEXUS n'envoie rien. | Aucun envoi possible |
+| Voix neurale (Piper) | Téléchargement du moteur et de la voix française depuis des adresses fixes, avec somme SHA-256 vérifiée. | Clic sur « Installer » |
+| Ollama et modèle de langage | Installation d'Ollama par `winget` et du modèle choisi. NEXUS ne parle qu'à `127.0.0.1:11434`. | Accord au premier lancement |
+| NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, les demandes vont à `integrate.api.nvidia.com`, seul hôte autorisé. | Activation et clé dans les réglages |
+| Démarrage avec Windows | Écrit la valeur `NEXUS` dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Sans droits administrateur, jamais à l'installation. | Case cochée dans les réglages |
+
+## Restant à faire
+
 - Désactivation du microphone et de chaque module.
 - Arrêt immédiat des opérations en cours (l'annulation existe déjà dans le moteur de tâches).
+- Chiffrement des jetons des connecteurs MCP (`mcp/installed.json`) et de la clé NIM, aujourd'hui en clair.
 
 ## Connecteurs MCP
 

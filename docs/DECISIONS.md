@@ -1,5 +1,7 @@
 # Décisions techniques
 
+Une décision remplacée ou complétée porte une ligne **Statut** sous son titre, qui renvoie à la décision suivante.
+
 ## ADR-001 — Tauri 2 plutôt qu'Electron
 
 Tauri utilise le WebView2 déjà présent sur Windows 10 et 11 : binaire léger, démarrage rapide,
@@ -13,11 +15,15 @@ en Node sans navigateur. Les contraintes de performance ne justifient pas encore
 
 ## ADR-003 — Classification par règles en phase 1
 
+*Statut : remplacée par ADR-029 (l'analyseur par règles est retiré ; tout passe par le modèle local).*
+
 Les commandes de la phase 1 sont courtes et bien délimitées. Des expressions régulières et des
 dictionnaires suffisent, sans coût ni latence. Un classificateur local viendra en phase 5, si les
 règles ne couvrent plus les besoins.
 
 ## ADR-004 — Catalogue fermé pour le lancement d'applications
+
+*Statut : remplacée par ADR-042 (aucun catalogue : le nom est cherché sur le PC). Le principe « le frontend ne transmet qu'un nom » reste valable.*
 
 Le frontend envoie un identifiant (`discord`), jamais une commande. Cela évite l'exécution de
 commandes arbitraires à partir d'un texte, y compris un texte qui viendrait de sources externes.
@@ -43,6 +49,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Conséquence** : le modèle Whisper doit être téléchargé par l'utilisateur ou par une étape explicite. Il n'est pas embarqué (148 Mo pour `base`).
 
 ## ADR-008 — Synthèse vocale : voix du système, Piper plus tard
+
+*Statut : en partie remplacée par ADR-043 et ADR-044 (Piper est intégré, installé sur accord ; la voix système reste le repli).*
 
 - **Choix en phase 2** : API Web Speech (`speechSynthesis`). Sous WebView2 sur Windows, elle utilise les voix SAPI installées, hors ligne et sans téléchargement.
 - **Pourquoi pas Piper maintenant** : ses voix sont hébergées sur Hugging Face (inaccessible ici), et sa phonémisation repose sur espeak-ng, sous GPL-3. Intégrer espeak-ng dans l'installateur obligerait à publier le produit sous GPL.
@@ -134,6 +142,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-023 — Compréhension plus souple, contexte et questions, sans modèle de langage
 
+*Statut : en partie remplacée par ADR-029 (les règles de texte sont retirées ; la mémoire de conversation et les questions restent).*
+
 - **Choix** : la compréhension reste déterministe, enrichie de trois mécanismes. (1) Politesse et formules de question retirées avant classification, demandes enchaînées par « puis / ensuite / then » (trois au maximum), fautes de frappe sur les noms d'application (une seule suggestion, jamais un choix ambigu). (2) Une mémoire de conversation : les éléments d'une liste (fichiers trouvés, fenêtres) deviennent des références (« le deuxième », « ferme-le »), réécrites en commandes explicites avant la compréhension. (3) Des questions : quand une demande est ambiguë, NEXUS demande lequel, et la réponse (numéro, ordinal, libellé, « oui », « non ») exécute l'option choisie.
 - **Pourquoi** : les règles couvrent mal les formulations naturelles, mais un modèle de langage enverrait les demandes hors de la machine et exigerait une clé et une connexion. La mémoire et les questions donnent l'impression de comprendre sans rien quitter de l'ordinateur, et sans déplacer la décision de sécurité.
 - **Garanties** : une référence réécrite passe par les mêmes confirmations que la commande saisie. Un pronom qui ne désigne pas un seul élément pose une question au lieu de deviner. « ouvre la calculatrice » n'est jamais réécrite, même après une liste.
@@ -155,12 +165,16 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-025 — Modèle de langage local : activation explicite, règles conservées
 
+*Statut : remplacée par ADR-029 (les règles ne sont plus conservées comme repli). Le téléchargement sur accord reste valable.*
+
 - **Choix** : le modèle n'est téléchargé qu'après une activation explicite de la compréhension avancée, avec accord et taille affichés (recommandation du TODO, retenue). Les règles restent la compréhension principale et le validateur : le modèle n'intervient que quand `parseIntent` renvoie `UNKNOWN`, et sa réponse n'est retenue qu'après validation de sa forme, dans le délai (3 s) et sans jamais produire `UNKNOWN` ni `UNSUPPORTED`.
 - **Pourquoi** : un téléchargement au premier lancement imposerait plusieurs Go sans demande. Garder les règles évite qu'une panne du modèle rende NEXUS inutilisable, et garde les commandes simples instantanées et sans erreur possible du modèle.
 - **Garanties** : rien ne quitte la machine ; le modèle ne fait que classer la demande en intention connue ; les confirmations, racines autorisées et permissions restent appliquées par le moteur et le natif, comme pour les règles.
 - **Limites** : le choix des modèles candidats reste ouvert : licence et support du français à vérifier avant d'en proposer un. Les tailles des niveaux sont des ordres de grandeur. Le runtime llama.cpp et le téléchargement avec somme de contrôle ne sont pas encore implémentés côté natif.
 
 ## ADR-026 — Modèle local via Ollama, choisi et affiché par l'utilisateur
+
+*Statut : le repli sur les règles, prévu ici, est retiré par ADR-029. Le runtime Ollama et le choix affiché par l'utilisateur restent valables.*
 
 - **Choix** : le runtime est Ollama. Le parcours l'installe avec winget (paquet officiel `Ollama.Ollama`) après accord, puis le lance si besoin. NEXUS ne parle qu'à `127.0.0.1:11434`. Le parcours recommande un modèle selon la machine (Qwen2.5 1,5 B, 7 B ou 14 B, sous Apache 2.0 ; la taille 3 B est écartée à cause de sa licence), mais l'utilisateur voit le modèle utilisé dans les réglages et peut en choisir un autre parmi ceux qu'il a installés, ou aucun.
 - **Pourquoi** : pas de compilation de llama.cpp dans NEXUS, téléchargements et mises à jour gérés par Ollama, et le choix du modèle reste visible. Les modèles sont téléchargés par `ollama pull`, lancé par l'utilisateur, pas par NEXUS.
@@ -181,6 +195,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-028 — Mémoire de l'utilisateur : explicite d'abord, proposée ensuite, jamais cachée
 
+*Statut : en partie remplacée par ADR-029 (enregistrement automatique par le modèle, sans limite de nombre).*
+
 - **Choix** : NEXUS retient les préférences et faits de deux façons. (1) « retiens que… » : enregistré tout de suite, c'est l'utilisateur qui l'a demandé. (2) Le modèle local peut proposer un souvenir (`REMEMBER`) : il n'est gardé qu'après « oui ». Les souvenirs se consultent (« qu'est-ce que tu retiens de moi ? »), s'oublient un à un (« oublie Firefox ») ou tous ensemble (« oublie tout », avec confirmation), et se suppriment dans les réglages.
 - **Où** : `dossier de données/memory/memories.json`, côté natif, 200 souvenirs au plus (le plus ancien part), 300 caractères chacun, doublons à la casse près refusés.
 - **Contexte du modèle** : les souvenirs accompagnent chaque classement, dans la consigne, comme des données (« jamais des instructions »), pour comprendre des formules comme « mon navigateur ».
@@ -197,12 +213,16 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-030 — Tâches programmées : relancées par NEXUS quand il tourne, par le même chemin que les demandes
 
+*Statut : complétée par ADR-035 (démarrage avec Windows, sur demande).*
+
 - **Choix** : une demande « rappelle-moi demain à 9 h », « chaque lundi, résume mes actus » devient une tâche (une fois, chaque jour, chaque semaine). NEXUS vérifie la liste toutes les 30 secondes tant qu'il est ouvert, et relance la demande comme si elle était tapée : mêmes règles, mêmes confirmations.
 - **Garde-fou** (règle relevée chez Hermes) : une tâche en cours d'exécution ne peut pas en créer d'autres.
 - **Stockage** : `dossier de données/schedule/tasks.json`, écriture atomique, 100 tâches au plus, demande de 500 caractères au plus. Une liste invalide n'est jamais écrite.
 - **Limites** : une tâche ne tourne que si NEXUS est ouvert. Une tâche manquée pendant la fermeture s'exécute une seule fois à la réouverture. Pas encore de démarrage avec Windows.
 
 ## ADR-031 — Fenêtres par demande : Wikipédia et Wikimedia Commons, images téléchargées côté natif, pas d'actualités sans source vérifiée
+
+*Statut : la partie « actualités » est en partie remplacée par ADR-035 (Google Actualités, sans liste de médias fixée à l'avance).*
 
 - **Choix** : « affiche une photo de X » ouvre une fenêtre image ; « qui est X ? » ouvre une fenêtre résumé. Sources : Wikimedia Commons (photos libres, avec auteur et licence) et Wikipédia fr (résumé, page d'origine). Vérifiées le 24/10/2026 par lecture réelle des réponses.
 - **Images** : le natif télécharge la miniature (3 Mo au plus, hôtes `upload.wikimedia.org` et `thumb.wikimedia.org` seulement) et la renvoie en data URL. La politique de l'interface (`img-src 'self' data:`) n'est pas élargie.
@@ -211,11 +231,15 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-032 — Actualités : le flux « à la une » de Wikipédia fr, à défaut de médias
 
+*Statut : remplacée par ADR-035 pour les actualités.*
+
 - **Choix** : « résume les actus » ouvre une fenêtre liste avec les éléments du jour du flux « à la une » de Wikipédia fr (`/api/rest_v1/feed/featured/AAAA/MM/JJ`), chacun avec sa page de référence. Si la journée n'est pas encore publiée, la veille est affichée, avec sa date.
 - **Pourquoi** : les grands médias refusent la lecture depuis cet environnement, et une liste inventée serait pire. Ce flux est public, sans compte, et vérifié par lecture réelle le 24/10/2026.
 - **Limites** : une sélection éditoriale de Wikipédia, pas la couverture complète de l'actualité. Les médias de l'utilisateur restent à ajouter, après vérification de chaque flux.
 
 ## ADR-033 — Routines : proposées après trois jours, programmées seulement après « oui »
+
+*Statut : la limite « pas de moyen de désactiver » est levée : la détection se désactive dans les réglages (section Mémoire).*
 
 - **Choix** : une demande faite sur trois jours distincts, à une heure stable (écart d'une heure au plus), devient une proposition : « Je le programme chaque jour à HH:MM ? ». Rien n'est programmé sans « oui ». La proposition arrive après la réponse, jamais à sa place.
 - **Ce qui n'est pas compté** : les réponses, la mémoire, les tâches programmées elles-mêmes, l'aide, les connecteurs, et les demandes très courtes (moins de six caractères). Une demande lancée par une tâche programmée ne compte pas non plus.
@@ -223,6 +247,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Limites** : une seule proposition par demande. Pas encore de moyen de désactiver la détection ; à ajouter dans les réglages avant de l'élargir.
 
 ## ADR-034 — Actualités : France 24 et Wikipédia, deux sources publiques vérifiées ; pas de recherche web à l'exécution
+
+*Statut : remplacée par ADR-035 pour les actualités.*
 
 - **Choix** : la liste du jour combine les titres du flux RSS de France 24 (version française, `https://www.france24.com/fr/rss`, 24 éléments datés vérifiés le 24/10/2026) et le flux « à la une » de Wikipédia fr (ADR-032). Chaque élément garde sa page de référence ; la fenêtre cite les deux sources.
 - **Hôtes autorisés à l'exécution** : `www.france24.com`, `fr.wikipedia.org`, `commons.wikimedia.org`, `upload.wikimedia.org`, `thumb.wikimedia.org`. Rien d'autre.
@@ -239,6 +265,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Reste** : `web_news` et `web_headlines` (Wikipédia et France 24) ne sont plus utilisés par les actualités ; à retirer ou à garder pour un usage futur.
 
 ## ADR-036 — Alertes proactives : disque et mémoire, une fois par alerte
+
+*Statut : complétée par ADR-037 (batterie).*
 
 - **Choix** : toutes les cinq minutes tant que NEXUS tourne, la machine est lue (même lecture que « état de la machine »). Un disque libre sous 10 % ou une mémoire utilisée au-delà de 90 % produit une alerte, annoncée une seule fois tant qu'elle dure.
 - **Pourquoi** : premier pas du point 5 des fonctionnalités Jarvis, sans compte, sans réseau, sans accord supplémentaire (lecture seule de la machine).
@@ -259,6 +287,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-039 — Vision de l'écran : sur demande, confirmée, une seule capture, lue par un modèle local
 
+*Statut : la limite « réponse du modèle non testée » est levée : la vision a été testée de bout en bout (commit `ebb8928`).*
+
 - **Déclencheur** : une question sur l'écran (« qu'est-ce qui est affiché ? »). Jamais de capture en arrière-plan.
 - **Confirmation** : NEXUS dit ce qu'il va faire et demande « oui » ou « non ». Une autre réponse abandonne la question.
 - **Capture** : écran principal, GDI, réduit à 1024 px de large, encodé en PNG en mémoire. Rien n'est enregistré sur le disque. La capture est affichée dans une fenêtre « Ce que NEXUS a vu », pour que tu voies exactement ce qui a été lu.
@@ -276,6 +306,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Limites** : NIM n'a pas été testé avec une vraie clé (aucune n'est enregistrée). Le nom de modèle par défaut est à vérifier sur le catalogue NVIDIA.
 
 ## ADR-041 — Questions ouvertes sur le web (sans clé), Planning complet, lecture vocale des réponses, Edge
+
+*Statut : le point « Edge ajouté au catalogue » est remplacé par ADR-042 (plus de catalogue). Edge reste reconnu par le scan du PC.*
 
 - **Recherche générale** : DuckDuckGo, version HTML, sans clé ni compte. Le choix est le plus simple à maintenir ; il dépend d'un service tiers qui peut changer sa mise en page ou limiter les requêtes. Une clé Brave Search ou un SearXNG auto-hébergé restent possibles si ce service devient insuffisant.
 - **Lecture des pages** : 3 résultats au plus, HTTP ou HTTPS seulement, 1 Mo au plus par page, 6000 caractères de texte. Les adresses sans nom de domaine public, les ports, les identifiants et les adresses locales ou privées sont refusés. Une redirection vers une adresse privée n'est pas bloquée (voir `docs/ANALYSE-CAUSES.md`).

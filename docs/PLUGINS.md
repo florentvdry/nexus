@@ -4,13 +4,19 @@ NEXUS est organisé en **plugins**. Chaque plugin est un dossier, rangé dans le
 
 ```
 plugins/                              ← code TypeScript et manifestes (un dossier par plugin)
+  actions/app-launch/                 ← lancement d'applications par leur nom (scan du PC), alias
   actions/system-info/                ← lecture des ressources de la machine
-  actions/app-launch/                 ← lancement d'applications + catalogue d'alias
+  actions/process-list/               ← processus actifs (lecture seule)
+  actions/file-search/                ← recherche de fichiers dans les dossiers utilisateur
+  actions/file-operations/            ← renommer, déplacer, copier, corbeille (sous confirmation)
+  actions/window-control/             ← fenêtres Windows (lecture, activation, fermeture sous confirmation)
+  actions/plugin-manager/             ← installation et suppression des plugins de données
+  agents/claude-code/                 ← Claude Code, via le CLI officiel, sous confirmation
   sources/domain-analysis/            ← OSINT : DNS et certificats publics
   sources/username-search/            ← OSINT : présence d'un pseudo
   documents/file-inspect/             ← analyse locale d'un fichier désigné
   speech/whisper-stt/                 ← micro, VAD et transcription locale
-  speech/system-tts/                  ← synthèse vocale système
+  speech/system-tts/                  ← synthèse vocale système (repli)
   languages/fr/                       ← vocabulaire français
   languages/en/                       ← vocabulaire anglais
 
@@ -26,7 +32,7 @@ Chaque dossier de plugin contient :
 
 | Type | Contribue | Exemple |
 |---|---|---|
-| `actions` | capacités sur la machine, et éventuellement un catalogue d'applications | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations`, `window-control` |
+| `actions` | capacités sur la machine | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations`, `window-control`, `plugin-manager` |
 | `sources` | connecteurs de données passifs, exécutés dans le worker isolé | `domain-analysis` |
 | `documents` | analyse locale de fichiers désignés explicitement | `file-inspect` |
 | `speech` | moteurs vocaux (entrée, sortie) | `whisper-stt`, `system-tts` |
@@ -55,7 +61,6 @@ est dans [PLUGIN-SPEC.md](PLUGIN-SPEC.md). Exemple : `examples/plugins/community
 | `capabilities` | Identifiants des capacités enregistrées. Tout autre enregistrement est refusé. |
 | `connectors` | Connecteurs exécutés dans le worker. Doit correspondre exactement à la liste Rust (testé). |
 | `languages` | Codes de langue enregistrés. |
-| `applications` | `true` si le plugin fournit le catalogue d'applications. |
 | `permissions` | Permissions demandées (voir `docs/PERMISSIONS.md`). Une permission inconnue est refusée. |
 | `locality`, `cost`, `offline` | Localité (`local` ou `network`), coût (`local`, `internet`, `external-api`, `llm`), disponibilité hors ligne. |
 
@@ -99,7 +104,8 @@ une erreur `permission-refused`, pas un accès silencieux.
 ## Vers une marketplace
 
 L'idée : installer un plugin depuis un catalogue, comme un paquet, avec sa fiche affichée avant l'installation.
-Cette fonctionnalité n'existe pas encore. Avant d'ouvrir l'installation à des tiers, il faut traiter les points suivants.
+Le format de catalogue et sa consultation existent (`index.json`, adresse dans `NEXUS_PLUGIN_INDEX`), mais aucun catalogue
+public n'existe encore. Avant d'ouvrir l'installation à des tiers, il faut traiter les points suivants.
 
 1. **Les plugins TypeScript ont accès à l'API Tauri.** Un plugin tiers pourrait appeler n'importe quelle commande
    native. Avant toute ouverture : les appels natifs doivent être filtrés par les permissions déclarées par le plugin.
