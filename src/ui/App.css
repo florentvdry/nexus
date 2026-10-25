@@ -31,6 +31,66 @@
   font-size: 14px;
 }
 
+/*
+ * Thème clair. Par défaut, il suit le réglage de Windows (« Suivre Windows ») ; l'attribut data-theme impose l'un
+ * ou l'autre. Les variables sont les mêmes que sur le thème sombre, seules leurs valeurs changent.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f4f5fa;
+    --rail: #eceef6;
+    --side: #e9ebf3;
+    --panel: #ffffff;
+    --panel-2: #f3f4fa;
+    --panel-3: #e8eaf3;
+    --line: rgba(20, 24, 38, 0.08);
+    --line-strong: rgba(20, 24, 38, 0.14);
+    --text: #141826;
+    --text-2: #3b4258;
+    --muted: #565d7a;
+    --muted-2: #626a86;
+    --accent: #5a49d8;
+    --accent-soft: #6d5fe0;
+    --accent-ink: #4a3ac4;
+    --cyan: #0b7f86;
+    --amber: #a85d00;
+    --green: #17805a;
+    --red: #bf2f4b;
+    --blue: #2a5ccc;
+    --ok: #17805a;
+    --warn: #a85d00;
+    --error: #bf2f4b;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f5fa;
+  --rail: #eceef6;
+  --side: #e9ebf3;
+  --panel: #ffffff;
+  --panel-2: #f3f4fa;
+  --panel-3: #e8eaf3;
+  --line: rgba(20, 24, 38, 0.08);
+  --line-strong: rgba(20, 24, 38, 0.14);
+  --text: #141826;
+  --text-2: #3b4258;
+  --muted: #565d7a;
+  --muted-2: #626a86;
+  --accent: #5a49d8;
+  --accent-soft: #6d5fe0;
+  --accent-ink: #4a3ac4;
+  --cyan: #0b7f86;
+  --amber: #a85d00;
+  --green: #17805a;
+  --red: #bf2f4b;
+  --blue: #2a5ccc;
+  --ok: #17805a;
+  --warn: #a85d00;
+  --error: #bf2f4b;
+}
+
 html,
 body,
 #root {

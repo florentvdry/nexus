@@ -30,6 +30,7 @@ import { SettingsView } from "./SettingsView";
 import { readAgendaPath } from "./agendaSettings";
 import { migrateLegacyNimKey, readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
+import { applyTheme, readTheme } from "./theme";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readSelectedModel } from "../core/language-model/selection";
@@ -145,9 +146,10 @@ export function App({ engine: injectedEngine }: AppProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // La taille du texte choisie est rétablie à chaque lancement.
+  // La taille du texte et le thème choisis sont rétablis à chaque lancement.
   useEffect(() => {
     applyLargeText(readLargeText());
+    applyTheme(readTheme());
   }, []);
   // Les tâches programmées tournent tant que NEXUS est ouvert.
   useEffect(() => {

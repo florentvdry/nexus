@@ -420,12 +420,68 @@ pub async fn web_photo(webview: tauri::Webview, query: String) -> Result<Photo, 
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
-/// Un résultat de recherche : titre, adresse de la page, extrait.
+/// Nature d'une source, d'après son domaine. L'ordre des variants est celui de l'affichage : officiel d'abord, commercial
+/// en dernier. Le classement est indicatif : une source commerciale n'est pas fausse, elle est signalée comme telle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceKind {
+    Official,
+    Reference,
+    Other,
+    Commercial,
+}
+
+/// Sites de référence (encyclopédies, documentations de langages et de systèmes, normes).
+const REFERENCE_LABELS: &[&str] = &["wikipedia", "wikimedia", "wiktionary"];
+/// Documentations officielles de langages, de systèmes et de normes (adresse exacte, sans « www. »).
+const REFERENCE_HOSTS: &[&str] = &[
+    "learn.microsoft.com",
+    "docs.microsoft.com",
+    "support.microsoft.com",
+    "developer.mozilla.org",
+    "docs.python.org",
+    "doc.rust-lang.org",
+    "developer.apple.com",
+    "w3.org",
+    "ietf.org",
+    "rfc-editor.org",
+];
+/// Boutiques et comparateurs : leur page sert à vendre, leur avis n'est pas neutre.
+const COMMERCIAL_LABELS: &[&str] = &["amazon", "fnac", "darty", "cdiscount", "ebay", "aliexpress", "rakuten", "boulanger", "ldlc", "leboncoin", "materiel"];
+
+/// Domaine d'une adresse, sans schéma, sans port et sans « www. ».
+fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
+    let host = rest.split(['/', '?', '#', ':']).next().unwrap_or("");
+    host.trim_start_matches("www.").to_lowercase()
+}
+
+/// Nature de la source d'après son domaine : institutions publiques, référence, commerce, ou autre.
+pub fn source_kind(url: &str) -> SourceKind {
+    let host = host_of(url);
+    let labels: Vec<&str> = host.split('.').collect();
+    let official = matches!(labels.last(), Some(&"gov" | &"edu" | &"int")) || host.ends_with(".gouv.fr") || host.ends_with(".gc.ca") || host.ends_with("europa.eu");
+    if official {
+        return SourceKind::Official;
+    }
+    if REFERENCE_HOSTS.contains(&host.as_str()) || labels.iter().any(|label| REFERENCE_LABELS.contains(label)) {
+        return SourceKind::Reference;
+    }
+    let shop = labels.iter().any(|label| COMMERCIAL_LABELS.contains(label) || label.starts_with("shop") || label.starts_with("boutique") || label.starts_with("store"));
+    if shop {
+        SourceKind::Commercial
+    } else {
+        SourceKind::Other
+    }
+}
+
+/// Un résultat de recherche : titre, adresse de la page, extrait, et nature de la source.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SearchHit {
     pub title: String,
     pub url: String,
     pub snippet: String,
+    pub kind: SourceKind,
 }
 
 /// Texte lisible d'une page web, avec son adresse.
@@ -504,7 +560,7 @@ fn destination(href: &str) -> String {
 
 /// Résultats d'une page de recherche DuckDuckGo (version HTML). Un résultat sans titre ou sans adresse web est ignoré.
 pub fn search_hits(html: &str) -> Vec<SearchHit> {
-    html.split("class=\"result__a\"")
+    let mut hits: Vec<SearchHit> = html.split("class=\"result__a\"")
         .skip(1)
         .filter_map(|part| {
             let href_start = part.find("href=\"")? + 6;
@@ -525,10 +581,14 @@ pub fn search_hits(html: &str) -> Vec<SearchHit> {
                     Some(html_text(&rest[start..end]))
                 })
                 .unwrap_or_default();
-            (!title.is_empty()).then_some(SearchHit { title, url, snippet })
+            let kind = source_kind(&url);
+            (!title.is_empty()).then_some(SearchHit { title, url, snippet, kind })
         })
-        .take(MAX_SEARCH_HITS)
-        .collect()
+        .collect();
+    // Officiel et référence d'abord, commercial en dernier ; à égalité, l'ordre de la recherche est gardé.
+    hits.sort_by_key(|hit| hit.kind);
+    hits.truncate(MAX_SEARCH_HITS);
+    hits
 }
 
 /// Recherche web générale, sans clé : DuckDuckGo (version HTML). La question est transmise telle quelle, bornée.
@@ -638,6 +698,28 @@ mod tests {
         assert_eq!(hits[0].url, "https://fr.wikipedia.org/wiki/GTA_RP");
         assert_eq!(hits[0].snippet, "Un serveur RP de GTA.");
         assert_eq!(hits[1].url, "https://example.org/page");
+    }
+
+    #[test]
+    fn sources_are_classed_by_their_domain() {
+        assert_eq!(source_kind("https://www.service-public.gouv.fr/particuliers"), SourceKind::Official);
+        assert_eq!(source_kind("https://www.nasa.gov/mission"), SourceKind::Official);
+        assert_eq!(source_kind("https://fr.wikipedia.org/wiki/Lyon"), SourceKind::Reference);
+        assert_eq!(source_kind("https://learn.microsoft.com/fr-fr/windows"), SourceKind::Reference);
+        assert_eq!(source_kind("https://www.amazon.fr/dp/B00001"), SourceKind::Commercial);
+        assert_eq!(source_kind("https://boutique.example.com/chaise"), SourceKind::Commercial);
+        assert_eq!(source_kind("https://example.org:8443/page"), SourceKind::Other);
+    }
+
+    #[test]
+    fn official_and_reference_sources_come_before_commercial_ones() {
+        let html = r#"<a class="result__a" href="https://www.amazon.fr/x">Achat</a><a class="result__snippet" href="a">Prix.</a>
+<a class="result__a" href="https://example.org/page">Autre</a><a class="result__snippet" href="b">Texte.</a>
+<a class="result__a" href="https://fr.wikipedia.org/wiki/Lyon">Lyon</a><a class="result__snippet" href="c">Ville.</a>"#;
+        let hits = search_hits(html);
+        let kinds: Vec<SourceKind> = hits.iter().map(|hit| hit.kind).collect();
+        assert_eq!(kinds, vec![SourceKind::Reference, SourceKind::Other, SourceKind::Commercial]);
+        assert_eq!(hits[0].title, "Lyon");
     }
 
     #[test]

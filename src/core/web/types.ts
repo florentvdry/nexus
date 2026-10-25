@@ -11,11 +11,15 @@ export interface WebNewsItem {
   page: string;
 }
 
-/** Un résultat de recherche web : titre, adresse de la page, extrait. */
+/** Nature d'une source, d'après son domaine (classée par le natif : officiel et référence avant commercial). */
+export type WebSourceKind = "official" | "reference" | "other" | "commercial";
+
+/** Un résultat de recherche web : titre, adresse de la page, extrait, et nature de la source. */
 export interface WebSearchHit {
   title: string;
   url: string;
   snippet: string;
+  kind?: WebSourceKind;
 }
 
 /** Texte lisible d'une page web, borné, avec son adresse. */

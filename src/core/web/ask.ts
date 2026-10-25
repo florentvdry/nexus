@@ -25,7 +25,12 @@ export interface WebSource {
 export function webSources(hits: WebSearchHit[], pages: (WebPage | null)[]): WebSource[] {
   return hits
     .slice(0, ASK_PAGES)
-    .map((hit, position) => ({ title: hit.title, url: hit.url, text: (pages[position]?.text ?? hit.snippet).trim() }))
+    .map((hit, position) => ({
+      // Un site commercial est signalé au modèle : sa réponse doit le dire quand elle s'appuie sur lui.
+      title: hit.kind === "commercial" ? `${hit.title} (site commercial)` : hit.title,
+      url: hit.url,
+      text: (pages[position]?.text ?? hit.snippet).trim(),
+    }))
     .filter((source) => source.text.length > 0)
     .map((source, position) => ({ index: position + 1, title: source.title, url: source.url, text: source.text.slice(0, ASK_TEXT_CHARS) }));
 }

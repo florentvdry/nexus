@@ -25,6 +25,15 @@ describe("sources d'une question ouverte", () => {
     expect(sources.map((source) => source.url)).toEqual(["https://example.org/b", "https://example.org/c"]);
   });
 
+  it("signale un site commercial au modèle, sans toucher aux autres sources", () => {
+    const hits = [
+      { title: "Chaise", url: "https://www.amazon.fr/chaise", snippet: "Prix 99 €", kind: "commercial" as const },
+      { title: "Fauteuil", url: "https://example.org/f", snippet: "Histoire du fauteuil", kind: "other" as const },
+    ];
+    const sources = webSources(hits, []);
+    expect(sources.map((source) => source.title)).toEqual(["Chaise (site commercial)", "Fauteuil"]);
+  });
+
   it("borne le texte donné au modèle", () => {
     const [source] = webSources([{ title: "Long", url: "https://example.org/l", snippet: "" }], [{ url: "https://example.org/l", text: "x".repeat(ASK_TEXT_CHARS + 500) }]);
     expect(source.text.length).toBe(ASK_TEXT_CHARS);
