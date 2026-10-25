@@ -53,7 +53,7 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | Permission | Niveau | Accordée par défaut | Utilisée par |
 |---|---|---|---|
 | `system.read` | automatic | oui | `system.processes` (processus actifs, lecture seule) |
-| `file.read` | automatic | oui | `files.search` (recherche dans les dossiers utilisateur) |
+| `file.read` | automatic | oui | `files.search` (recherche dans les dossiers utilisateur) ; `files.view` (visionneuse : lecture seule, 100 Mo au plus) |
 | `file.write` | confirmation | oui (demande à chaque fois) | `files.operate` : renommer, déplacer, copier |
 | `file.delete` | confirmation | oui (demande à chaque fois) | `files.operate` : envoi à la corbeille |
 | `agent.run` | confirmation | oui (demande à chaque fois) | `agent.claude-code` |
@@ -81,10 +81,14 @@ Chaque commande native a une politique, dans la table `POLICIES` de `src-tauri/s
 |---|---|
 | `actions.process-list` | `system.read` uniquement |
 | `actions.file-search` | `file.read` uniquement |
+| `actions.file-view` | `file.read` uniquement : la visionneuse lit un fichier des dossiers autorisés, sans rien écrire ni transmettre |
 | `actions.file-operations` | `file.write`, `file.delete` (chacune confirmée) |
 | `agents.claude-code` | `agent.run` (confirmé) |
 | `actions.window-control` | `window.read`, `window.control` (confirmé) |
 | `actions.plugin-manager` | `plugin.manage` (confirmé à chaque étape) |
+
+La visionneuse de fichiers ajoute une seule ouverture de la CSP : `blob:` pour `img-src` et `media-src`, afin d'afficher
+une image ou lire un média que NEXUS a déjà lu. Les PDF passent par pdf.js, embarqué ; aucun script ni CDN n'est ajouté.
 
 Tests : chaque commande exposée figure dans `POLICIES` et inversement ; la table des permissions correspond aux
 `plugin.json` ; la CSP interdit les scripts en ligne et l'évaluation de chaîne ; la capacité Tauri ne vise que `main`.

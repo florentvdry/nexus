@@ -14,6 +14,7 @@ export type Intent =
   | { type: "OSINT_DOMAIN"; domain: string }
   | { type: "OSINT_USERNAME"; username: string }
   | { type: "DOCUMENT_INSPECT"; path: string }
+  | { type: "FILE_VIEW"; path: string }
   | { type: "FILE_SEARCH"; extension?: string; folderHint?: string; withinDays?: number }
   | { type: "FILE_RENAME"; path: string; newName: string }
   | { type: "FILE_MOVE"; path: string; toDir: string }

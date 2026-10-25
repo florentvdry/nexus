@@ -1,6 +1,12 @@
 import type { PresentedContent, Size } from "./types";
 
 export const MAX_WINDOW_HEIGHT = 420;
+/**
+ * Fenêtre de visionneuse. Le placement ne réduit jusqu'à 70 % : sur un écran 1280 × 800, la colonne libre à droite
+ * de l'orbe ne fait que 290 px, et seule une fenêtre de 380 px réduite (266 px) y trouve une place sur la grille.
+ */
+export const VIEWER_WIDTH = 380;
+export const VIEWER_HEIGHT = 380;
 
 /** Hauteur d'une ligne : une ligne de plus par tranche de 40 caractères, pour les valeurs longues. */
 function rowHeight(value: string): number {
@@ -26,6 +32,9 @@ export function estimateSize(content: PresentedContent): Size {
       return { width: 420, height: 380 };
     case "article-card":
       return { width: 400, height: Math.min(MAX_WINDOW_HEIGHT, 120 + Math.ceil(content.extract.length / 60) * 22) };
+    case "file-view":
+      // Une page de PDF, une image ou un tableau ont besoin de place : la fenêtre est plus large que les cartes.
+      return { width: VIEWER_WIDTH, height: VIEWER_HEIGHT };
     case "confirmation": {
       // Au moins de quoi afficher les deux boutons, même pour une demande courte : jamais de bouton hors de la fenêtre.
       const checkbox = content.remember ? 32 : 0;

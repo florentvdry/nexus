@@ -13,6 +13,7 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "OSINT_DOMAIN",
   "OSINT_USERNAME",
   "DOCUMENT_INSPECT",
+  "FILE_VIEW",
   "FILE_SEARCH",
   "FILE_RENAME",
   "FILE_MOVE",

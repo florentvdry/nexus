@@ -182,6 +182,8 @@ export interface NativeBridge {
   clearJournal(): Promise<void>;
   listProcesses(limit: number): Promise<ProcessEntry[]>;
   searchFiles(query: FileSearchQuery): Promise<FileEntry[]>;
+  /** Contenu brut d'un fichier des dossiers autorisés, pour la visionneuse. Lecture seule, taille bornée côté natif. */
+  readFile(path: string): Promise<ArrayBuffer>;
   operateFile(operation: FileOperation): Promise<string>;
   detectAgent(): Promise<AgentDetection>;
   runAgent(runId: string, project: string, prompt: string): Promise<void>;
@@ -303,6 +305,10 @@ export class TauriNativeBridge implements NativeBridge {
 
   searchFiles(query: FileSearchQuery): Promise<FileEntry[]> {
     return this.#call<FileEntry[]>("files_search", { query });
+  }
+
+  readFile(path: string): Promise<ArrayBuffer> {
+    return this.#call<ArrayBuffer>("files_read", { path });
   }
 
   operateFile(operation: FileOperation): Promise<string> {
@@ -622,6 +628,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   closeWindow = () => this.unavailable();
   listProcesses = () => this.unavailable();
   searchFiles = () => this.unavailable();
+  readFile = () => this.unavailable();
   operateFile = () => this.unavailable();
   detectAgent = () => this.unavailable();
   runAgent = () => this.unavailable();

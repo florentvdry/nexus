@@ -334,6 +334,40 @@ pub fn apply(plan: &Plan, roots: &[PathBuf]) -> Result<String, AdapterError> {
     }
 }
 
+/// Taille maximale d'un fichier affiché. Doit rester identique à `MAX_VIEW_BYTES` côté interface (`src/core/viewers/formats.ts`).
+pub const MAX_VIEW_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Lit un fichier pour l'afficher : chemin absolu, dans un emplacement autorisé, taille bornée. Lecture seule.
+pub fn read_for_view(roots: &[PathBuf], raw: &str) -> Result<Vec<u8>, AdapterError> {
+    read_limited(roots, raw, MAX_VIEW_BYTES)
+}
+
+fn read_limited(roots: &[PathBuf], raw: &str, limit: u64) -> Result<Vec<u8>, AdapterError> {
+    use std::io::Read;
+
+    let path = PathBuf::from(raw.trim().trim_matches('"'));
+    if !path.is_absolute() {
+        return Err(AdapterError::InvalidPath(raw.to_string()));
+    }
+    require_within(&path, roots)?;
+    let metadata = fs::metadata(&path).map_err(|error| AdapterError::Operation(format!("fichier inaccessible ({error})")))?;
+    if !metadata.is_file() {
+        return Err(AdapterError::InvalidPath(raw.to_string()));
+    }
+    if metadata.len() > limit {
+        return Err(AdapterError::Operation(format!("fichier trop volumineux (limite {} Mo)", limit / 1024 / 1024)));
+    }
+
+    // Lecture bornée : un fichier qui grossit entre le contrôle et la lecture ne dépasse pas la limite.
+    let file = fs::File::open(&path).map_err(|error| AdapterError::Operation(format!("lecture impossible ({error})")))?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes).map_err(|error| AdapterError::Operation(format!("lecture impossible ({error})")))?;
+    if bytes.len() as u64 > limit {
+        return Err(AdapterError::Operation(format!("fichier trop volumineux (limite {} Mo)", limit / 1024 / 1024)));
+    }
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -475,6 +509,46 @@ mod tests {
         let home = dirs::home_dir().and_then(|home| home.canonicalize().ok());
         let roots = allowed_roots();
         assert!(home.map(|home| !roots.contains(&home)).unwrap_or(true));
+    }
+
+    #[test]
+    fn a_file_is_read_inside_the_roots() {
+        let sandbox = Sandbox::new("view-read");
+        let roots = vec![sandbox.path()];
+        let path = sandbox.path().join("facture.pdf").display().to_string();
+        assert_eq!(read_limited(&roots, &path, MAX_VIEW_BYTES).unwrap(), b"%PDF-1.4 test".to_vec());
+    }
+
+    #[test]
+    fn a_file_outside_the_roots_is_not_read() {
+        let sandbox = Sandbox::new("view-outside");
+        let roots = vec![sandbox.path().join("sub")];
+        let path = sandbox.path().join("facture.pdf").display().to_string();
+        assert!(matches!(read_limited(&roots, &path, MAX_VIEW_BYTES), Err(AdapterError::OutsideAllowedFolders(_))));
+    }
+
+    #[test]
+    fn a_relative_path_or_a_folder_is_not_read() {
+        let sandbox = Sandbox::new("view-kind");
+        let roots = vec![sandbox.path()];
+        assert!(matches!(read_limited(&roots, "facture.pdf", MAX_VIEW_BYTES), Err(AdapterError::InvalidPath(_))));
+        let folder = sandbox.path().join("sub").display().to_string();
+        assert!(matches!(read_limited(&roots, &folder, MAX_VIEW_BYTES), Err(AdapterError::InvalidPath(_))));
+    }
+
+    #[test]
+    fn a_file_over_the_limit_is_refused() {
+        let sandbox = Sandbox::new("view-limit");
+        let roots = vec![sandbox.path()];
+        let path = sandbox.path().join("notes.txt").display().to_string();
+        // « bonjour » fait 7 octets : une limite de 6 octets doit refuser.
+        assert!(matches!(read_limited(&roots, &path, 6), Err(AdapterError::Operation(_))));
+        assert!(read_limited(&roots, &path, 7).is_ok());
+    }
+
+    #[test]
+    fn the_view_limit_is_the_documented_one() {
+        assert_eq!(MAX_VIEW_BYTES, 100 * 1024 * 1024);
     }
 
     #[test]

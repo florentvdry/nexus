@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { PresentedContent } from "../core/presentation/types";
 import type { MessageKey } from "../i18n/messages";
+import { FileView, type ReadFile } from "./viewers/FileView";
 
 export type ConfirmationAnswer = (id: string, approved: boolean, remember?: boolean) => Promise<void>;
 
@@ -65,14 +66,26 @@ export function ConfirmationCard({
   );
 }
 
+/** Badge discret « source » : l'adresse de la page apparaît au survol, sans encombrer la fenêtre. */
+function SourceBadge({ url, t }: { url: string; t: (key: MessageKey) => string }) {
+  return (
+    <span className="source-badge" title={url}>
+      {t("ui.sourceBadge")}
+    </span>
+  );
+}
+
 export function PresentedContentView({
   content,
   onAnswer,
+  readFile,
   t,
 }: {
   content: PresentedContent;
   onAnswer?: ConfirmationAnswer;
-  t: (key: MessageKey) => string;
+  /** Lecture du contenu d'un fichier, pour la visionneuse. Absente : la visionneuse le dit. */
+  readFile?: ReadFile;
+  t: (key: MessageKey, params?: Record<string, string | number>) => string;
 }) {
   switch (content.kind) {
     case "information-card":
@@ -135,10 +148,10 @@ export function PresentedContentView({
             {content.items.map((item, index) => (
               <li key={index}>
                 <span>{item.text}</span>
+                {item.page && <SourceBadge url={item.page} t={t} />}
               </li>
             ))}
           </ul>
-          <p className="field-hint">{content.source}</p>
         </div>
       );
     case "image-card":
@@ -146,18 +159,19 @@ export function PresentedContentView({
         <figure className="image-card">
           <img src={content.imageUrl} alt={content.title} />
           <figcaption>
-            <span>{content.credit}</span> · <span>{content.license}</span>
+            <span>{content.credit}</span> · <span>{content.license}</span> <SourceBadge url={content.page} t={t} />
           </figcaption>
-          <p className="field-hint">{content.page}</p>
         </figure>
       );
     case "article-card":
       return (
         <article className="article-card">
           <p>{content.extract}</p>
-          <p className="field-hint">{content.page}</p>
+          <SourceBadge url={content.page} t={t} />
         </article>
       );
+    case "file-view":
+      return <FileView path={content.path} readFile={readFile} t={t} />;
     case "confirmation":
       return <ConfirmationCard content={content} onAnswer={onAnswer ?? (async () => {})} t={t} />;
   }

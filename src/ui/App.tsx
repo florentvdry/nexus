@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { createEngine, type Engine, type EngineEvent, type OrbState } from "../core/engine/engine";
 import type { Rect } from "../core/presentation/types";
@@ -21,10 +21,9 @@ import { readVoiceSettings, writeVoiceSettings, type VoiceSettings } from "../co
 import type { Task } from "../core/tasks/taskManager";
 import { translate, type Locale, type MessageKey } from "../i18n/messages";
 import type { VoiceControl } from "./CommandBar";
-import { ConversationView, type ChatMessage } from "./ConversationView";
 import { FloatingWindow } from "./FloatingWindow";
 import { FirstRunSetup } from "./FirstRunSetup";
-import { HomeView } from "./HomeView";
+import { SceneView, type ChatMessage } from "./SceneView";
 import { Rail, type View } from "./Rail";
 import { SchedulePanel } from "./SchedulePanel";
 import { SettingsView } from "./SettingsView";
@@ -33,6 +32,7 @@ import { migrateLegacyNimKey, readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { readStoredLocale, storeLocale } from "./locale";
+import { readSelectedModel } from "../core/language-model/selection";
 import { readWindowContext } from "./scene";
 import { createNativeBridge } from "../core/native/bridge";
 import { useVoice } from "./useVoice";
@@ -99,7 +99,21 @@ export function App({ engine: injectedEngine }: AppProps) {
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(readVoiceSettings);
   const [planningOpen, setPlanningOpen] = useState(false);
   const windowsRef = useRef(windows);
+  // Ordre d'affichage dans le DOM : fixe, de l'ouverture à la fermeture. La pile (premier plan) se lit dans le z-index.
+  // Déplacer les nœuds à chaque clic ferait perdre le clic en cours (la croix ne se déclenchait pas toujours).
+  const creationOrder = useRef(new Map<string, number>());
+  const displayed = useMemo(() => {
+    for (const item of windows.open) {
+      if (!creationOrder.current.has(item.id)) creationOrder.current.set(item.id, creationOrder.current.size);
+    }
+    const rank = (id: string) => creationOrder.current.get(id) ?? 0;
+    return windows.open
+      .map((item, stack) => ({ item, stack }))
+      .sort((a, b) => rank(a.item.id) - rank(b.item.id));
+  }, [windows.open]);
   const [answerBridge] = useState(() => createNativeBridge());
+  // Stable : la visionneuse relit le fichier à chaque changement de cette fonction.
+  const readFile = useCallback((path: string) => answerBridge.readFile(path), [answerBridge]);
   // Premier lancement : le parcours s'ouvre une seule fois, puis reste accessible depuis les réglages.
   const [setupOpen, setSetupOpen] = useState(() => !hasSeenModelSetup());
   // Le parcours peut changer le modèle choisi : la section Modèle des réglages se relit à la fermeture.
@@ -170,7 +184,6 @@ export function App({ engine: injectedEngine }: AppProps) {
       switch (event.type) {
         case "message":
           // Depuis l'accueil, un échange (tapé, dit ou une réponse) ouvre la conversation ; les réglages restent ouverts.
-          setView((current) => (current === "home" ? "conversation" : current));
           setMessages((items) =>
             [...items, { id: nextId("msg"), role: event.role, text: event.text, tone: event.tone }].slice(-MAX_MESSAGES),
           );
@@ -219,7 +232,6 @@ export function App({ engine: injectedEngine }: AppProps) {
     orbState === "idle" && voiceStatus !== "off" ? (voiceStatus === "recognizing" ? "recognizing" : "listening") : orbState;
 
   const submit = (text: string) => {
-    setView("conversation");
     void voice.submitText(text);
   };
 
@@ -251,38 +263,23 @@ export function App({ engine: injectedEngine }: AppProps) {
 
       <main className="workspace">
         {view === "home" && (
-          <HomeView
+          <SceneView
             t={t}
             locale={locale}
             onLocale={setLocale}
-            orbState={displayedOrb}
-            statusLabel={statusLabel}
-            placeholder={t("ui.placeholder")}
-            sendLabel={t("ui.send")}
-            voice={commandVoice}
-            onSubmit={submit}
-            onSuggest={submit}
-          />
-        )}
-
-        {view === "conversation" && (
-          <ConversationView
-            t={t}
             messages={messages}
             orbState={displayedOrb}
             statusLabel={statusLabel}
+            modelLabel={readSelectedModel() ? t("scene.modelReady") : t("scene.noModel")}
             tasks={tasks}
             history={windows.history}
             voice={commandVoice}
-            placeholder={t("conversation.placeholder")}
+            placeholder={t("ui.placeholder")}
             sendLabel={t("ui.send")}
             onSubmit={submit}
             onCancelTask={(id) => engine.cancelTask(id)}
             onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
-            onNewConversation={() => {
-              setMessages([]);
-              setView("home");
-            }}
+            onNewConversation={() => setMessages([])}
           />
         )}
 
@@ -303,12 +300,13 @@ export function App({ engine: injectedEngine }: AppProps) {
       {planningOpen && <SchedulePanel source={engine} locale={locale} t={t} onClose={() => setPlanningOpen(false)} />}
 
       <div className="windows-layer">
-        {windows.open.map((item, index) => (
+        {displayed.map(({ item, stack }) => (
           <FloatingWindow
             key={item.id}
             item={item}
-            zIndex={10 + index}
+            zIndex={10 + stack}
             t={t}
+            readFile={readFile}
             onMove={(id, rect) => dispatch({ type: "move", id, rect, context: readWindowContext() })}
             onFocus={(id) => dispatch({ type: "focus", id })}
             onClose={(id) => dispatch({ type: "close", id, now: Date.now() })}

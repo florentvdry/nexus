@@ -23,6 +23,7 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "ferme la fenêtre #202": { type: "WINDOW_CLOSE", name: "#202" },
   "Cherche mes fichiers PDF téléchargés cette semaine": { type: "FILE_SEARCH", extension: "pdf", folderHint: "downloads", withinDays: 7 },
   "Cherche mes fichiers PDF": { type: "FILE_SEARCH", extension: "pdf" },
+  "affiche C:/Users/ana/Documents/rapport.pdf": { type: "FILE_VIEW", path: "C:/Users/ana/Documents/rapport.pdf" },
   "Quelles applications sont ouvertes ?": { type: "PROCESS_LIST" },
   "supprime /home/ana/Documents/vieux.txt": { type: "FILE_TRASH", path: "/home/ana/Documents/vieux.txt" },
   "lance Claude Code dans /home/ana/projet : liste les fichiers": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "liste les fichiers" },
@@ -93,6 +94,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     focusWindow: vi.fn(async () => {}),
     closeWindow: vi.fn(async () => {}),
     listProcesses: vi.fn(async () => [{ name: "Discord.exe", pid: 4242, cpuPercent: 3, memoryBytes: 512 * 1024 * 1024 }]),
+    readFile: vi.fn(async () => new ArrayBuffer(0)),
     searchFiles: vi.fn(async () => [
       { path: "/home/ana/Téléchargements/contrat.pdf", name: "contrat.pdf", size: 2048, modified: 1_780_000_000 },
       { path: "/home/ana/Téléchargements/facture.pdf", name: "facture.pdf", size: 4096, modified: 1_780_000_100 },
@@ -333,6 +335,15 @@ describe("recherche et processus", () => {
     expect(bridge.searchFiles).toHaveBeenCalledWith({ extension: "pdf", folderHint: "downloads", modifiedWithinDays: 7 });
     expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "data-table", columns: ["Nom", "Dossier", "Taille", "Modifié"] }));
     expect(assistant(events)).toEqual(["2 fichier(s) trouvé(s)."]);
+  });
+
+  it("ouvre un fichier désigné par son chemin dans une visionneuse, sans le lire ici", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("affiche C:/Users/ana/Documents/rapport.pdf");
+    expect(presented(events)).toContainEqual({ kind: "file-view", title: "rapport.pdf", path: "C:/Users/ana/Documents/rapport.pdf" });
+    expect(bridge.readFile).not.toHaveBeenCalled();
+    expect(assistant(events)).toEqual(["rapport.pdf est ouvert dans une fenêtre."]);
   });
 
   it("affiche les processus les plus gourmands", async () => {

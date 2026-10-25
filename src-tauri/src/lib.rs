@@ -191,6 +191,17 @@ async fn files_search(query: SearchQuery) -> Result<Vec<FileEntry>, AdapterError
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
+/// Contenu d'un fichier pour la visionneuse : octets bruts, lus dans les dossiers autorisés et bornés en taille.
+/// Lecture seule, depuis la fenêtre principale uniquement. Le contenu n'est jamais écrit ni transmis ailleurs.
+#[tauri::command]
+async fn files_read(webview: tauri::Webview, path: String) -> Result<tauri::ipc::Response, AdapterError> {
+    require_main(&webview)?;
+    require(grants::FILE_VIEW, Permission::FileRead)?;
+    tauri::async_runtime::spawn_blocking(move || files::read_for_view(&files::allowed_roots(), &path).map(tauri::ipc::Response::new))
+        .await
+        .map_err(blocking_failed)?
+}
+
 /// Opération sur un fichier : aperçu, confirmation par le courtier, puis exécution. Rien n'est modifié sans accord.
 #[tauri::command]
 async fn files_operate(app: AppHandle, broker: State<'_, Broker>, operation: Operation) -> Result<String, AdapterError> {
@@ -666,6 +677,7 @@ pub fn run() {
             osint_run,
             processes_list,
             files_search,
+            files_read,
             files_operate,
             window_list,
             window_focus,

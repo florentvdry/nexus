@@ -338,7 +338,7 @@ button:not([class]):hover {
 }
 
 .orb[data-size="hero"] {
-  --orb-size: 170px;
+  --orb-size: 128px;
 }
 
 .orb[data-size="medium"] {
@@ -1286,6 +1286,155 @@ button:not([class]):hover {
   opacity: 0.8;
 }
 
+/* Visionneuse de fichiers : le contenu défile dans la fenêtre, sans sortir de sa largeur. */
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+}
+
+.viewer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.viewer-status {
+  margin: 0;
+}
+
+.viewer-meta {
+  margin: auto 0 0;
+  padding-top: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.viewer-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 8px;
+}
+
+.viewer-media {
+  width: 100%;
+}
+
+.viewer-pdf {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.viewer-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.viewer-text,
+.viewer-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* Un texte se lit en retour de ligne : la fenêtre est étroite, et le défilement horizontal gêne. */
+.viewer-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.viewer-table {
+  overflow: auto;
+}
+
+.viewer-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.viewer-markdown h1,
+.viewer-markdown h2,
+.viewer-markdown h3,
+.viewer-markdown h4,
+.viewer-markdown h5,
+.viewer-markdown h6 {
+  margin: 6px 0 0;
+  line-height: 1.25;
+}
+
+.viewer-markdown h1 {
+  font-size: 1.35rem;
+}
+
+.viewer-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.viewer-markdown h3,
+.viewer-markdown h4,
+.viewer-markdown h5,
+.viewer-markdown h6 {
+  font-size: 1rem;
+}
+
+.viewer-markdown p,
+.viewer-markdown ul,
+.viewer-markdown ol,
+.viewer-markdown blockquote {
+  margin: 0;
+}
+
+.viewer-markdown blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--line-strong);
+  opacity: 0.85;
+}
+
+.viewer-markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.92em;
+}
+
+.viewer-markdown .viewer-code code {
+  padding: 0;
+  background: none;
+}
+
+.viewer-markdown hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.viewer-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
 .article-card p {
   margin: 0 0 8px;
   line-height: 1.5;
@@ -1302,6 +1451,19 @@ button:not([class]):hover {
   gap: 2px;
   margin-bottom: 8px;
   min-width: 0;
+}
+
+.source-badge {
+  align-self: flex-start;
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  cursor: help;
 }
 
 .news-list li span,
@@ -1730,5 +1892,150 @@ html[data-text-scale="large"] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Scène principale : l'orbe au centre, la dernière demande et la    */
+/* réponse dessous, les tâches et les fenêtres récentes à gauche. Les */
+/* résultats s'ouvrent en fenêtres flottantes autour de l'orbe.       */
+/* ------------------------------------------------------------------ */
+.scene {
+  position: relative;
+  background:
+    radial-gradient(ellipse 55% 50% at 50% 42%, rgba(139, 123, 255, 0.14), transparent 70%),
+    var(--bg);
+}
+
+.scene-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.scene-header > * {
+  pointer-events: auto;
+}
+
+.scene-identity,
+.scene-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.scene-identity .wordmark {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.scene-side {
+  position: absolute;
+  left: 24px;
+  top: 96px;
+  bottom: 170px;
+  z-index: 2;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.scene-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 320px 170px;
+  box-sizing: border-box;
+  text-align: center;
+  overflow-y: auto;
+}
+
+.scene-stage .orb {
+  margin-bottom: 4px;
+}
+
+.scene-label {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.scene-answer {
+  width: 100%;
+  max-width: 640px;
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.scene-caption {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.scene-text {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.scene-text.error {
+  color: var(--error);
+}
+
+.scene-title {
+  margin: 26px 0 0;
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.scene .suggestions {
+  margin-top: 26px;
+}
+
+.scene .dock {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 360px));
+  z-index: 2;
+}
+
+@media (max-width: 1100px) {
+  .scene-side {
+    display: none;
+  }
+
+  .scene-stage {
+    padding: 0 40px 170px;
+  }
+
+  .scene .dock {
+    width: calc(100% - 80px);
   }
 }

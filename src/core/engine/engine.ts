@@ -415,6 +415,8 @@ export class Engine {
         return this.#runCapability("osint.username", { username: intent.username }, { labelKey: "task.osintUsername", labelParams: { username: intent.username } }, reply);
       case "DOCUMENT_INSPECT":
         return this.#runCapability("document.inspect", { path: intent.path }, { labelKey: "task.inspectFile", labelParams: { file: intent.path.split(/[\\/]/).pop() ?? intent.path } }, reply);
+      case "FILE_VIEW":
+        return this.#runCapability("files.view", { path: intent.path }, { labelKey: "task.fileView", labelParams: { file: intent.path.split(/[\\/]/).pop() ?? intent.path } }, reply);
       case "FILE_SEARCH": {
         const input: CapabilityInput = {};
         if (intent.extension) input.extension = intent.extension;
@@ -756,6 +758,19 @@ export class Engine {
     const title = permissionTitle(this.#locale, notice.permission);
     this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.asked", { title }), tone: "info", locale: reply.locale });
     this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.answerInWindow"), tone: "info", locale: reply.locale });
+    // Une carte sans boutons : l'interface principale montre ce qui attend, la décision se prend dans la fenêtre dédiée.
+    this.#emit({
+      type: "present",
+      content: {
+        kind: "information-card",
+        title: reply.t("confirm.requiredTitle"),
+        rows: [
+          { label: reply.t("confirm.row.action"), value: title },
+          { label: reply.t("confirm.row.answer"), value: reply.t("confirm.answerWhere") },
+        ],
+      },
+      source: { capabilityId: "permissions", locality: "local", collectedAt: Date.now() },
+    });
   }
 
   /** Une règle mémorisée a approuvé une action sans question : la conversation le dit, le natif le journalise. */

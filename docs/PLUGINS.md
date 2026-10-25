@@ -8,6 +8,7 @@ plugins/                              ← code TypeScript et manifestes (un doss
   actions/system-info/                ← lecture des ressources de la machine
   actions/process-list/               ← processus actifs (lecture seule)
   actions/file-search/                ← recherche de fichiers dans les dossiers utilisateur
+  actions/file-view/                  ← visionneuse : PDF, images, texte, Markdown, CSV, audio et vidéo (lecture seule)
   actions/file-operations/            ← renommer, déplacer, copier, corbeille (sous confirmation)
   actions/window-control/             ← fenêtres Windows (lecture, activation, fermeture sous confirmation)
   actions/plugin-manager/             ← installation et suppression des plugins de données
@@ -32,7 +33,7 @@ Chaque dossier de plugin contient :
 
 | Type | Contribue | Exemple |
 |---|---|---|
-| `actions` | capacités sur la machine | `system-info`, `app-launch`, `process-list`, `file-search`, `file-operations`, `window-control`, `plugin-manager` |
+| `actions` | capacités sur la machine | `system-info`, `app-launch`, `process-list`, `file-search`, `file-view`, `file-operations`, `window-control`, `plugin-manager` |
 | `sources` | connecteurs de données passifs, exécutés dans le worker isolé | `domain-analysis` |
 | `documents` | analyse locale de fichiers désignés explicitement | `file-inspect` |
 | `speech` | moteurs vocaux (entrée, sortie) | `whisper-stt`, `system-tts` |

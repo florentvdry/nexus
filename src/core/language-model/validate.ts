@@ -76,6 +76,10 @@ export function validateModelIntent(raw: unknown): Intent | null {
       const path = text(candidate.path, 1000);
       return path ? { type, path } : null;
     }
+    case "FILE_VIEW": {
+      const path = text(candidate.path, 1000);
+      return path ? { type, path } : null;
+    }
     case "FILE_SEARCH": {
       const extension = optionalText(candidate.extension, 20);
       const folderHint = optionalText(candidate.folderHint, 40);

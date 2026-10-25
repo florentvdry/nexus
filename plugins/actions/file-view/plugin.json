@@ -1,0 +1,25 @@
+{
+  "id": "actions.file-view",
+  "name": "Visionneuse de fichiers",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Affiche un fichier des dossiers utilisateur dans une fenêtre : PDF, images, texte, Markdown, CSV, audio et vidéo. Lecture seule.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::files"
+  ],
+  "capabilities": [
+    "files.view"
+  ],
+  "connectors": [],
+  "languages": [],
+  "permissions": [
+    "file.read"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

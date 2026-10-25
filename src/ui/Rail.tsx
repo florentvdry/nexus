@@ -1,7 +1,7 @@
 import type { MessageKey } from "../i18n/messages";
-import { CalendarIcon, ChatIcon, HomeIcon, SettingsIcon } from "./icons";
+import { CalendarIcon, HomeIcon, SettingsIcon } from "./icons";
 
-export type View = "home" | "conversation" | "settings";
+export type View = "home" | "settings";
 
 type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
@@ -26,15 +26,6 @@ export function Rail({ view, planningOpen, t, onNavigate, onTogglePlanning }: Ra
         onClick={() => onNavigate("home")}
       >
         <HomeIcon />
-      </button>
-      <button
-        type="button"
-        className="rail-button"
-        aria-label={t("nav.conversation")}
-        aria-current={view === "conversation" ? "page" : undefined}
-        onClick={() => onNavigate("conversation")}
-      >
-        <ChatIcon />
       </button>
       <button
         type="button"

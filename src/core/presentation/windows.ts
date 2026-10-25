@@ -38,10 +38,23 @@ function toHistory(window: OpenWindow, reason: HistoryReason, now: number): Hist
 }
 
 /**
+ * Deux contenus identiques forment la même fenêtre. Une confirmation reste propre à sa demande (son identifiant),
+ * elle n'est jamais fusionnée.
+ */
+export function isSameWindow(a: PresentedContent, b: PresentedContent): boolean {
+  if (a.kind === "confirmation" || b.kind === "confirmation") return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
  * Ouvre une fenêtre à un emplacement libre. Si l'écran est saturé, la plus ancienne fenêtre est
- * déplacée dans l'historique pour laisser la place au résultat le plus récent.
+ * déplacée dans l'historique pour laisser la place au résultat le plus récent. Si la même fenêtre est déjà
+ * ouverte, elle passe au premier plan au lieu d'être ouverte une seconde fois.
  */
 export function openWindow(state: WindowsState, request: WindowRequest, context: WindowContext): WindowsState {
+  const existing = state.open.find((window) => isSameWindow(window.content, request.content));
+  if (existing) return focusWindow(state, existing.id);
+
   const options = context.options ?? DEFAULT_PLACEMENT;
   const desired = estimateSize(request.content);
   let open = [...state.open];

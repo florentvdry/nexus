@@ -50,3 +50,33 @@ describe("carte de confirmation : « toujours autoriser »", () => {
     await waitFor(() => expect(onAnswer).toHaveBeenCalledWith("perm-1", false, false));
   });
 });
+
+describe("badge source", () => {
+  afterEach(cleanup);
+
+  it("affiche un badge « source » discret dont l'adresse apparaît au survol, sans l'écrire", () => {
+    const page = "https://fr.wikipedia.org/wiki/Paris";
+    render(<PresentedContentView content={{ kind: "article-card", title: "Paris", extract: "Capitale.", page }} t={t} />);
+    expect(screen.getByText("source").getAttribute("title")).toBe(page);
+    expect(screen.queryByText(page)).toBeNull();
+  });
+
+  it("met un badge par actualité, chacun avec la page de sa source", () => {
+    const content: PresentedContent = {
+      kind: "news-list",
+      title: "Actualités",
+      source: "Wikipédia (fr)",
+      items: [
+        { text: "Premier fait", page: "https://fr.wikipedia.org/wiki/Un" },
+        { text: "Second fait", page: "https://fr.wikipedia.org/wiki/Deux" },
+      ],
+    };
+    render(<PresentedContentView content={content} t={t} />);
+    const badges = screen.getAllByText("source");
+    expect(badges.map((badge) => badge.getAttribute("title"))).toEqual([
+      "https://fr.wikipedia.org/wiki/Un",
+      "https://fr.wikipedia.org/wiki/Deux",
+    ]);
+    expect(screen.queryByText("Wikipédia (fr)")).toBeNull();
+  });
+});

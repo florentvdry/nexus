@@ -4,11 +4,14 @@ import type { OpenWindow } from "../core/presentation/windows";
 import type { Rect } from "../core/presentation/types";
 import type { MessageKey } from "../i18n/messages";
 import { PresentedContentView } from "./PresentedContentView";
+import type { ReadFile } from "./viewers/FileView";
 
 interface FloatingWindowProps {
   item: OpenWindow;
   zIndex: number;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, params?: Record<string, string | number>) => string;
+  /** Lecture d'un fichier pour la visionneuse. */
+  readFile?: ReadFile;
   onMove: (id: string, rect: Rect) => void;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
@@ -21,7 +24,7 @@ interface DragState {
   origin: Rect;
 }
 
-export function FloatingWindow({ item, zIndex, t, onMove, onFocus, onClose }: FloatingWindowProps) {
+export function FloatingWindow({ item, zIndex, t, readFile, onMove, onFocus, onClose }: FloatingWindowProps) {
   const drag = useRef<DragState | null>(null);
   const { rect } = item;
 
@@ -65,7 +68,7 @@ export function FloatingWindow({ item, zIndex, t, onMove, onFocus, onClose }: Fl
         </button>
       </header>
       <div className="body">
-        <PresentedContentView content={item.content} t={t} />
+        <PresentedContentView content={item.content} readFile={readFile} t={t} />
       </div>
     </section>
   );

@@ -22,6 +22,7 @@ pub const CONFIRMATION_WINDOW: &str = "confirm";
 
 pub const PROCESS_LIST: &str = "actions.process-list";
 pub const FILE_SEARCH: &str = "actions.file-search";
+pub const FILE_VIEW: &str = "actions.file-view";
 pub const FILE_OPERATIONS: &str = "actions.file-operations";
 pub const CLAUDE_CODE: &str = "agents.claude-code";
 pub const WINDOW_CONTROL: &str = "actions.window-control";
@@ -31,6 +32,7 @@ pub const PLUGIN_MANAGER: &str = "actions.plugin-manager";
 const GRANTS: &[(&str, &[Permission])] = &[
     (PROCESS_LIST, &[Permission::SystemRead]),
     (FILE_SEARCH, &[Permission::FileRead]),
+    (FILE_VIEW, &[Permission::FileRead]),
     (FILE_OPERATIONS, &[Permission::FileWrite, Permission::FileDelete]),
     (CLAUDE_CODE, &[Permission::AgentRun]),
     (WINDOW_CONTROL, &[Permission::WindowRead, Permission::WindowControl]),
@@ -114,6 +116,7 @@ pub const POLICIES: &[(&str, Policy)] = &[
     // Commandes qui exercent une capacité de plugin : identité native.
     ("processes_list", Policy::Capability(PROCESS_LIST)),
     ("files_search", Policy::Capability(FILE_SEARCH)),
+    ("files_read", Policy::Capability(FILE_VIEW)),
     ("files_operate", Policy::Capability(FILE_OPERATIONS)),
     ("agent_detect", Policy::Capability(CLAUDE_CODE)),
     ("agent_run", Policy::Capability(CLAUDE_CODE)),

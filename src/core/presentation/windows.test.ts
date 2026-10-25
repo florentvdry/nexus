@@ -5,6 +5,7 @@ import {
   EMPTY_WINDOWS,
   closeAllWindows,
   closeLastWindow,
+  closeWindow,
   focusWindow,
   moveWindow,
   openWindow,
@@ -34,6 +35,40 @@ function request(id: string): WindowRequest {
 }
 
 describe("gestion des fenêtres", () => {
+  it("n'ouvre jamais deux fois la même fenêtre : elle passe au premier plan", () => {
+    let state = EMPTY_WINDOWS;
+    state = openWindow(state, request("a"), context);
+    state = openWindow(state, request("b"), context);
+    const again = openWindow(state, { id: "a-bis", content: card("a"), source }, context);
+    expect(again.open).toHaveLength(2);
+    expect(again.open.at(-1)?.id).toBe("a");
+    expect(again.open.some((window) => window.id === "a-bis")).toBe(false);
+  });
+
+  it("garde deux confirmations distinctes, même texte, car chacune attend sa propre réponse", () => {
+    const confirmation = (requestId: string): PresentedContent => ({
+      kind: "confirmation",
+      requestId,
+      title: "Supprimer ?",
+      rows: [],
+      approve: "Autoriser",
+      refuse: "Refuser",
+    });
+    let state = openWindow(EMPTY_WINDOWS, { id: "c1", content: confirmation("p1"), source }, context);
+    state = openWindow(state, { id: "c2", content: confirmation("p2"), source }, context);
+    expect(state.open).toHaveLength(2);
+  });
+
+  it("rouvrir depuis l'historique une fenêtre déjà ouverte ne la duplique pas", () => {
+    let state = openWindow(EMPTY_WINDOWS, request("a"), context);
+    state = closeWindow(state, "a", 1);
+    // Le même contenu est présenté de nouveau : une fenêtre ouverte, et l'ancienne entrée reste dans l'historique.
+    state = openWindow(state, { id: "a2", content: card("a"), source }, context);
+    const reopened = reopenFromHistory(state, "a", context);
+    expect(reopened.open.map((window) => window.id)).toEqual(["a2"]);
+    expect(reopened.history.some((entry) => entry.id === "a")).toBe(false);
+  });
+
   it("ouvre des fenêtres sans chevauchement", () => {
     let state = EMPTY_WINDOWS;
     for (const id of ["a", "b", "c"]) state = openWindow(state, request(id), context);

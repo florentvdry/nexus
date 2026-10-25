@@ -32,6 +32,8 @@ export type PresentedContent =
   | { kind: "draft"; title: string; recipient?: string; text: string; note: string }
   /** Résumé d'un sujet (Wikipédia), avec la page d'origine. */
   | { kind: "article-card"; title: string; extract: string; page: string }
+  /** Fichier affiché dans la visionneuse. Seul le chemin circule : le contenu est lu par le natif à l'ouverture. */
+  | { kind: "file-view"; title: string; path: string }
   /** Demande de confirmation : les boutons répondent au natif, qui décide de l'action. */
   | {
       kind: "confirmation";
