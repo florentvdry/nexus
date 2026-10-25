@@ -126,6 +126,9 @@ Idées de l'utilisateur, à discuter avant de les lancer :
 - [ ] Captures d'écran pour le README : à prendre sur l'application de bureau.
 - [ ] Installateur public Windows (`pnpm tauri build` existe, reste à publier).
 - [x] README refait, guide de développement dans `CONTRIBUTING.md`.
+- [ ] Sécurité : une redirection ou un nom de domaine qui pointe vers une adresse privée n'est pas bloqué (la vérification porte sur l'adresse écrite). Résoudre le nom avant la requête (voir `docs/DECISIONS.md`, « Lecture des pages »).
+- [ ] Banc de tests de compréhension : ajouter à `src/core/language-model/benchmark.ts` les cas « lance X », « tu connais X », « elle », « ça », à rejouer sur le modèle réel.
+- [ ] Recherche web : préférer les sites officiels et Wikipédia, et dire quand une source est un site commercial.
 
 ## 10. Décisions prises (pour mémoire)
 
