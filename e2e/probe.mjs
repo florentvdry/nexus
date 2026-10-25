@@ -1,0 +1,14 @@
+import { NexusApp, sleep } from "./lib.mjs";
+const app = new NexusApp();
+await app.connect();
+await app.main.send("Page.reload");
+await sleep(4000);
+app.evaluate(app.main, `window.__TAURI_INTERNALS__.invoke("files_operate", { operation: { kind: "trash", path: "C:\\Users\\flore\\Documents\\nexus-scene-test.txt" } }).then(v => "OK " + v, e => "REFUS " + JSON.stringify(e))`).then((r) => console.log("invoke:", r));
+await app.waitForConfirmation(/Autoriser/, 30000);
+await sleep(2000);
+await app.screenshot("C:/Users/flore/AppData/Local/Temp/claude/C--Users-flore-Desktop-Nexus/73c903e3-d529-4488-b26b-7b3c782a78c5/scratchpad/scene-confirm-main.png");
+await app.screenshot("C:/Users/flore/AppData/Local/Temp/claude/C--Users-flore-Desktop-Nexus/73c903e3-d529-4488-b26b-7b3c782a78c5/scratchpad/scene-confirm-window.png", app.confirm);
+await app.clickButton("Refuser", app.confirm);
+await sleep(2000);
+console.log("fichier:", (await import("node:fs")).existsSync(process.env.USERPROFILE + "/Documents/nexus-scene-test.txt"));
+app.close();
