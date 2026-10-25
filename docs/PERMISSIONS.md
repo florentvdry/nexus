@@ -60,6 +60,8 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | `window.read` | automatic | oui | `actions.window-control` : liste des fenêtres visibles (Windows) |
 | `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) |
 | `plugin.manage` | confirmation | oui (demande à chaque fois) | `actions.plugin-manager` : examiner, installer, supprimer un plugin de données |
+| `connector.install` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_install` : installer un connecteur MCP. Le courtier affiche la commande exacte (`npx -y paquet@version`), le dépôt et les noms des variables |
+| `connector.call` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_call` : chaque appel d'outil, avec les arguments complets |
 
 ### Qui peut appeler quoi : l'identité de l'appelant
 
@@ -76,7 +78,7 @@ déclarée sans être accordée, ou accordée sans être déclarée, fait échou
 | `agents.claude-code` | `agent.run` (confirmé) |
 | `actions.window-control` | `window.read`, `window.control` (confirmé) |
 | `actions.plugin-manager` | `plugin.manage` (confirmé à chaque étape) |
-| `core` (interface) | répondre aux confirmations, gérer le journal. Rien d'autre. |
+| `core` (interface) | répondre aux confirmations, gérer le journal, installer ou appeler un connecteur (chacun confirmé par le courtier natif). Rien d'autre. |
 
 Chaque plugin ne reçoit qu'un pont attribué à son identifiant : il ne peut pas agir au nom d'un autre plugin
 en passant par ce pont. Une confirmation affiche « Demandé par » avec l'identifiant de l'appelant.
@@ -185,7 +187,7 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 | Messages | Un brouillon est affiché avec un bouton « Copier ». NEXUS n'envoie rien. | Aucun envoi possible |
 | Voix neurale (Piper) | Téléchargement du moteur et de la voix française depuis des adresses fixes, avec somme SHA-256 vérifiée. | Clic sur « Installer » |
 | Ollama et modèle de langage | Installation d'Ollama par `winget` et du modèle choisi. NEXUS ne parle qu'à `127.0.0.1:11434`. | Accord au premier lancement |
-| NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, les demandes vont à `integrate.api.nvidia.com`, seul hôte autorisé. | Activation et clé dans les réglages |
+| NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, les demandes vont à `integrate.api.nvidia.com`, seul hôte autorisé. La clé est chiffrée par Windows (DPAPI) et ne quitte pas le natif. | Activation et clé dans les réglages |
 | Démarrage avec Windows | Écrit la valeur `NEXUS` dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Sans droits administrateur, jamais à l'installation. | Case cochée dans les réglages |
 
 ## Restant à faire

@@ -37,7 +37,7 @@ Hors périmètre : la reconnaissance faciale de personnes non volontaires et le 
 ## Retours de test (24/10, ADR-040)
 
 - [x] Dossiers français, premier lancement qui refuse les salutations, fiche de compétences, libellé « Chargement ».
-- [~] NVIDIA NIM en option : écrit et testé hors ligne ; reste à tester avec une vraie clé et à déplacer la clé vers le stockage natif chiffré.
+- [~] NVIDIA NIM en option : écrit et testé hors ligne ; la clé est désormais chiffrée côté natif (DPAPI). Reste à tester avec une vraie clé.
 
 ## 1. Modèle de langage local
 
@@ -70,8 +70,8 @@ Le modèle comprend toutes les demandes (ADR-029). Sans modèle prêt, NEXUS le 
 ## 4. Connecteurs MCP
 
 - [ ] **Test de bout en bout** avec un vrai connecteur (nécessite Node.js, un jeton de bot Discord et un modèle qui choisisse bien `NEEDS_CONNECTOR`).
-- [ ] **Chiffrer les jetons** : les valeurs sont gardées en clair dans `mcp/installed.json`. Chiffrement Windows (DPAPI) à faire.
-- [ ] **Pas de délai sur un appel d'outil** : un connecteur bloqué peut bloquer la tâche. À borner, ou à annuler proprement.
+- [x] **Chiffrer les jetons** : les valeurs sont chiffrées par DPAPI dans `mcp/installed.json` ; un ancien fichier en clair est migré à l'ouverture (`secrets.rs`). Testé sous Windows.
+- [x] **Délai sur un appel d'outil** : 120 s par session, processus arbre arrêté (`cmd` puis `node`). Testé par un serveur muet simulé ; pas encore sur un vrai connecteur.
 - [ ] **Deuxième source** : seul le registre officiel est utilisé. Smithery a été écarté pour l'installation (serveurs hébergés à distance).
 
 ## 5. Vérifications sur Windows
@@ -126,7 +126,7 @@ Idées de l'utilisateur, à discuter avant de les lancer :
 - [ ] Captures d'écran pour le README : à prendre sur l'application de bureau.
 - [ ] Installateur public Windows (`pnpm tauri build` existe, reste à publier).
 - [x] README refait, guide de développement dans `CONTRIBUTING.md`.
-- [ ] Sécurité : une redirection ou un nom de domaine qui pointe vers une adresse privée n'est pas bloqué (la vérification porte sur l'adresse écrite). Résoudre le nom avant la requête (voir `docs/DECISIONS.md`, « Lecture des pages »).
+- [x] Sécurité : une redirection ou un nom de domaine qui pointe vers une adresse privée est refusé à la connexion (résolveur DNS filtré, `web.rs`). Testé avec `localhost`.
 - [ ] Banc de tests de compréhension : ajouter à `src/core/language-model/benchmark.ts` les cas « lance X », « tu connais X », « elle », « ça », à rejouer sur le modèle réel.
 - [ ] Recherche web : préférer les sites officiels et Wikipédia, et dire quand une source est un site commercial.
 
