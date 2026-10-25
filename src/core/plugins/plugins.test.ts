@@ -40,6 +40,7 @@ describe("plugins livrés", () => {
       "actions/file-operations",
       "actions/file-search",
       "actions/file-view",
+      "actions/notes",
       "actions/plugin-manager",
       "actions/process-list",
       "actions/system-info",

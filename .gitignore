@@ -15,3 +15,6 @@ src-tauri/gen/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Worker copié pour l installateur
+src-tauri/binaries/

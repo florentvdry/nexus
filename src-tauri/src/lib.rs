@@ -6,6 +6,7 @@ pub mod model_download;
 pub mod ollama;
 pub mod audit;
 pub mod clipboard;
+pub mod notes;
 pub mod journal;
 pub mod mcp;
 pub mod secrets;
@@ -331,6 +332,35 @@ async fn window_focus(app: AppHandle, broker: State<'_, Broker>, id: usize) -> R
 async fn window_close(app: AppHandle, broker: State<'_, Broker>, id: usize) -> Result<(), AdapterError> {
     require(grants::WINDOW_CONTROL, Permission::WindowControl)?;
     window_action(app, broker.inner().clone_handle(), id, WindowAction::Close).await
+}
+
+/// Écrit une note dans le sous-dossier NEXUS d'un coffre Obsidian, après confirmation du courtier. Une note existante
+/// qui n'a pas été créée par NEXUS n'est jamais remplacée. L'empreinte de la demande va dans le journal d'audit.
+#[tauri::command]
+async fn note_save(app: AppHandle, broker: State<'_, Broker>, vault: String, relative: String, content: String) -> Result<String, AdapterError> {
+    require(grants::NOTES, Permission::FileWrite)?;
+    let broker = broker.inner().clone_handle();
+    let data_dir = app.path().app_data_dir().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault_path = PathBuf::from(vault.trim());
+        let target = notes::note_path(&vault_path, &relative)?;
+        let rows = vec![
+            Row { key: "vault".into(), value: vault.clone() },
+            Row { key: "note".into(), value: target.display().to_string() },
+            Row { key: "taille".into(), value: format!("{} octets", content.len()) },
+            Row { key: "requester".into(), value: grants::NOTES.into() },
+        ];
+        let fingerprint = audit::fingerprint(rows.iter().map(|row| (row.key.as_str(), row.value.as_str())));
+        if let Err(error) = permissions::confirm(&app, &broker, Permission::FileWrite, &rows) {
+            audit::record(data_dir.as_deref(), "notes.save", &fingerprint, "refused");
+            return Err(error);
+        }
+        let saved = notes::save(&vault_path, &relative, &content);
+        audit::record(data_dir.as_deref(), "notes.save", &fingerprint, if saved.is_ok() { "done" } else { "failed" });
+        saved.map(|path| path.display().to_string())
+    })
+    .await
+    .map_err(blocking_failed)?
 }
 
 /// Texte du presse-papiers, à la demande de l'interface principale seulement. Lecture seule, jamais en arrière-plan.
@@ -762,6 +792,7 @@ pub fn run() {
             window_close,
             ui_inspect,
             clipboard_read,
+            note_save,
             ui_invoke,
             agent_detect,
             agent_run,

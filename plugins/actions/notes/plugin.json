@@ -1,0 +1,25 @@
+{
+  "id": "actions.notes",
+  "name": "Notes Obsidian",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Écrit les souvenirs ou une réponse dans le sous-dossier NEXUS d'un coffre Obsidian. Chaque écriture demande votre accord.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "notes"
+  ],
+  "capabilities": [
+    "notes.save"
+  ],
+  "connectors": [],
+  "languages": [],
+  "permissions": [
+    "file.write"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}

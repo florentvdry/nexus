@@ -39,6 +39,7 @@ import { readWindowContext } from "./scene";
 import { createNativeBridge } from "../core/native/bridge";
 import { useVoice } from "./useVoice";
 import { notify } from "./notifications";
+import { readObsidianVault } from "./obsidian";
 
 type WindowAction =
   | { type: "open"; request: WindowRequest; context: WindowContext }
@@ -92,10 +93,12 @@ export interface AppProps {
 }
 
 export function App({ engine: injectedEngine }: AppProps) {
-  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath, onlineModel: readOnlineModel }));
+  const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath, onlineModel: readOnlineModel, obsidianVault: readObsidianVault }));
   const [locale, setLocale] = useState<Locale>(() => engine.locale);
   const [view, setView] = useState<View>("home");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /** Nombre total de réponses de NEXUS dans la session : ne se remet pas à zéro quand la liste affichée est tronquée. */
+  const [answerCount, setAnswerCount] = useState(0);
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [tasks, setTasks] = useState<Task[]>(() => engine.tasksSnapshot());
   const [windows, dispatch] = useReducer(windowsReducer, EMPTY_WINDOWS);
@@ -192,6 +195,7 @@ export function App({ engine: injectedEngine }: AppProps) {
           setMessages((items) =>
             [...items, { id: nextId("msg"), role: event.role, text: event.text, tone: event.tone }].slice(-MAX_MESSAGES),
           );
+          if (event.role === "assistant") setAnswerCount((count) => count + 1);
           return;
         case "orb":
           setOrbState(event.state);
@@ -276,6 +280,7 @@ export function App({ engine: injectedEngine }: AppProps) {
             locale={locale}
             onLocale={setLocale}
             messages={messages}
+            answerCount={answerCount}
             orbState={displayedOrb}
             statusLabel={statusLabel}
             modelLabel={readSelectedModel() ? t("scene.modelReady") : t("scene.noModel")}

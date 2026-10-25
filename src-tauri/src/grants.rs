@@ -27,6 +27,7 @@ pub const FILE_OPERATIONS: &str = "actions.file-operations";
 pub const CLAUDE_CODE: &str = "agents.claude-code";
 pub const WINDOW_CONTROL: &str = "actions.window-control";
 pub const UI_AUTOMATION: &str = "actions.ui-automation";
+pub const NOTES: &str = "actions.notes";
 pub const PLUGIN_MANAGER: &str = "actions.plugin-manager";
 
 /// Permissions accordées à chaque identité de capacité, d'après leurs manifestes.
@@ -38,6 +39,7 @@ const GRANTS: &[(&str, &[Permission])] = &[
     (CLAUDE_CODE, &[Permission::AgentRun]),
     (WINDOW_CONTROL, &[Permission::WindowRead, Permission::WindowControl]),
     (UI_AUTOMATION, &[Permission::WindowRead, Permission::WindowControl]),
+    (NOTES, &[Permission::FileWrite]),
     (PLUGIN_MANAGER, &[Permission::PluginManage]),
 ];
 
@@ -128,6 +130,7 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("window_close", Policy::Capability(WINDOW_CONTROL)),
     ("ui_inspect", Policy::Capability(UI_AUTOMATION)),
     ("clipboard_read", Policy::MainWindow),
+    ("note_save", Policy::Capability(NOTES)),
     ("ui_invoke", Policy::Capability(UI_AUTOMATION)),
     ("plugin_prepare", Policy::Capability(PLUGIN_MANAGER)),
     ("plugin_install", Policy::Capability(PLUGIN_MANAGER)),

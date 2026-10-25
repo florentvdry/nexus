@@ -24,6 +24,7 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "CLIPBOARD_ACTION",
   "WATCH_FOLDER",
   "WATCH_STOP",
+  "OBSIDIAN_SAVE",
   "UI_INVOKE",
   "PROCESS_LIST",
   "WINDOW_LIST",

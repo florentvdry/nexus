@@ -120,6 +120,10 @@ export function validateModelIntent(raw: unknown): Intent | null {
     }
     case "WATCH_STOP":
       return { type };
+    case "OBSIDIAN_SAVE": {
+      const destination = candidate.destination;
+      return destination === "memory" || destination === "report" ? { type, destination } : null;
+    }
     case "CLIPBOARD_ACTION": {
       const action = candidate.action;
       return action === "translate" || action === "summarize" ? { type, action } : null;

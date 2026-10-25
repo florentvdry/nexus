@@ -25,6 +25,7 @@ export type Intent =
   | { type: "CLIPBOARD_ACTION"; action: "translate" | "summarize" }
   | { type: "WATCH_FOLDER"; folderHint: string }
   | { type: "WATCH_STOP" }
+  | { type: "OBSIDIAN_SAVE"; destination: "memory" | "report" }
   | { type: "UI_INVOKE"; name: string }
   | { type: "PROCESS_LIST" }
   | { type: "WINDOW_LIST" }

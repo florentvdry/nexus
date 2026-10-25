@@ -20,7 +20,7 @@ mkdirSync(SCRATCH, { recursive: true });
 mkdirSync(SHOTS, { recursive: true });
 
 const shot = (app, name, page) => app.screenshot(join(SHOTS, `${name}.png`), page);
-const tasklist = (image) => execFileSync("tasklist", ["/FI", `IMAGENAME eq ${image}`], { encoding: "utf8" });
+const tasklist = (image) => execFileSync("tasklist", ["/FI", `IMAGENAME eq ${image}`], { encoding: "utf8" }).toLowerCase();
 
 /** Une réponse compte comme comprise si NEXUS a répondu quelque chose d'autre que son refus de comprendre. */
 const understood = (answer) => answer.length > 0 && !/Je n'ai pas compris|pas compris|didn't understand/i.test(answer.join(" "));

@@ -64,6 +64,8 @@ export interface EngineOptions {
   responseHoldMs?: number;
   /** Clé et modèle NVIDIA NIM, si l'utilisateur les a activés. Sinon null : tout reste sur ce poste. */
   onlineModel?: () => { model: string; share: ContextShare[] } | null;
+  /** Dossier du coffre Obsidian, s'il est configuré. Sans lui, rien n'est écrit. */
+  obsidianVault?: () => string | null;
   /** Chemin du fichier d'agenda (.ics), ou null. Lu seulement quand l'utilisateur demande son agenda. */
   agendaPath?: () => string | null;
   /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */
@@ -108,6 +110,12 @@ function replyFor(locale: Locale): Reply {
   return { locale, t: (key, params) => translate(locale, key, params) };
 }
 
+/** Horodatage de rapport : AAAA-MM-JJ-HHmm, en heure locale. */
+export function reportStamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "-" + pad(date.getHours()) + pad(date.getMinutes());
+}
+
 /** Heure locale hh:mm, dans le format de la langue de réponse. */
 export function formatClockTime(date: Date, locale: Locale): string {
   return date.toLocaleTimeString(locale === "en" ? "en-GB" : "fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -147,6 +155,7 @@ export class Engine {
   readonly #agendaPath: () => string | null;
   /** Modèle local qui rédige les réponses aux questions ouvertes sur le web. */
   readonly #model: () => string | null;
+  readonly #obsidianVault: (() => string | null) | undefined;
   /** Dernière application ouverte, pour apprendre une correction (« non, X »). */
   #lastApp: string | null = null;
   /** Échange récent, borné : le modèle s'y réfère pour les demandes qui parlent de ce qui précède. */
@@ -178,6 +187,7 @@ export class Engine {
     this.#routines = new RoutineDetector(options.routineStorage ?? (typeof window === "undefined" ? undefined : window.localStorage));
     this.#agendaPath = options.agendaPath ?? (() => null);
     this.#model = options.model ?? readSelectedModel;
+    this.#obsidianVault = options.obsidianVault;
     this.#schedule = new ScheduleController({
       bridge: this.#bridge,
       say: (text, tone) => this.#reply(replyFor(this.#locale), text, tone),
@@ -244,6 +254,35 @@ export class Engine {
       });
       this.#reply(reply, reply.t("alert.raised", { what, detail: alert.detail }));
       if (!isQuietHour(new Date())) this.#emit({ type: "notify", title: reply.t("alert.title"), body: `${what} — ${alert.detail}` });
+    }
+  }
+
+  /**
+   * Enregistre les souvenirs, ou la dernière réponse, dans le coffre Obsidian. Le natif demande l'accord avant d'écrire.
+   * Rien n'est écrit sans coffre configuré.
+   */
+  async #saveToObsidian(destination: "memory" | "report", reply: Reply): Promise<void> {
+    const vault = this.#obsidianVault?.() ?? null;
+    if (!vault) return this.#reply(reply, reply.t("obsidian.noVault"), "error");
+    let relative: string;
+    let content: string;
+    if (destination === "memory") {
+      const memories = await this.#memory.texts();
+      if (memories.length === 0) return this.#reply(reply, reply.t("memory.none"));
+      relative = "Memoire.md";
+      content = ["# Souvenirs", "", ...memories.map((text) => "- " + text)].join("\n");
+    } else {
+      const last = [...this.#history].reverse().find((entry) => entry.role === "assistant");
+      if (!last) return this.#reply(reply, reply.t("obsidian.noAnswer"), "error");
+      const stamp = reportStamp(new Date());
+      relative = "Rapports/" + stamp + ".md";
+      content = "# Rapport NEXUS — " + stamp + "\n\n" + last.text;
+    }
+    try {
+      const path = await this.#bridge.noteSave(vault, relative, content);
+      this.#reply(reply, reply.t("notes.saved", { path }));
+    } catch (error) {
+      this.#fail(toCapabilityError(error), reply);
     }
   }
 
@@ -425,6 +464,34 @@ export class Engine {
     this.#reply(reply, answer);
   }
 
+  /**
+   * Un nom sans dossier (« notes.txt ») est cherché dans les dossiers autorisés. Un seul fichier qui porte ce nom : il est
+   * pris. Plusieurs : NEXUS demande lequel, sans rien faire. Aucun : le nom est gardé, et le natif refusera avec son message.
+   * Rien n'est lu ni modifié ici : seul le chemin est résolu.
+   */
+  async #resolveFileIntent(intent: Intent, reply: Reply): Promise<Intent | null> {
+    if (intent.type !== "FILE_RENAME" && intent.type !== "FILE_MOVE" && intent.type !== "FILE_TRASH" && intent.type !== "FILE_VIEW" && intent.type !== "DOCUMENT_INSPECT") return intent;
+    if (/[\/:]/.test(intent.path)) return intent;
+    const wanted = intent.path.toLowerCase();
+    const matches = (await this.#bridge.searchFiles({ nameContains: intent.path }).catch(() => [])).filter((entry) => entry.name.toLowerCase() === wanted);
+    if (matches.length === 1) return { ...intent, path: matches[0].path };
+    if (matches.length === 0) return intent;
+    const options = matches.slice(0, 8).map((entry) => {
+      const command = intent.type === "FILE_RENAME"
+        ? `renomme ${entry.path} en ${intent.newName}`
+        : intent.type === "FILE_MOVE"
+          ? `déplace ${entry.path} dans ${intent.toDir}`
+          : intent.type === "FILE_TRASH"
+            ? `supprime ${entry.path}`
+            : intent.type === "FILE_VIEW"
+              ? `affiche ${entry.path}`
+              : `inspecte ${entry.path}`;
+      return { label: `${entry.name} · ${entry.path.replace(/[\/][^\/]*$/, "")}`, text: command };
+    });
+    this.#ask({ question: reply.t("files.pickOne", { name: intent.path }), options }, reply);
+    return null;
+  }
+
   /** Une demande répétée à la même heure devient une proposition ; rien n'est programmé sans « oui ». */
   #observeRoutine(text: string, reply: Reply): void {
     // Une tâche programmée qui se relance ne compte pas comme une habitude de l'utilisateur.
@@ -505,6 +572,11 @@ export class Engine {
   }
 
   async #route(intent: Intent, reply: Reply): Promise<void> {
+    if (intent.type === "FILE_RENAME" || intent.type === "FILE_MOVE" || intent.type === "FILE_TRASH" || intent.type === "FILE_VIEW" || intent.type === "DOCUMENT_INSPECT") {
+      const resolved = await this.#resolveFileIntent(intent, reply);
+      if (!resolved) return;
+      intent = resolved;
+    }
     switch (intent.type) {
       case "OPEN_APPLICATION": {
         // Aucun catalogue : le nom (ou son alias installé) est cherché sur ce PC par le natif.
@@ -607,6 +679,8 @@ export class Engine {
       }
       case "HELP":
         return this.#reply(reply, reply.t("intent.help"));
+      case "OBSIDIAN_SAVE":
+        return this.#saveToObsidian(intent.destination, reply);
       case "WATCH_FOLDER":
         return this.#startWatch(intent.folderHint, reply);
       case "WATCH_STOP":

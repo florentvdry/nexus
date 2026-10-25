@@ -343,3 +343,73 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Langue** : la voix lit la réponse dans la langue de la réponse. Sans voix installée pour cette langue, la voix Windows lit.
 - **Vérifié** : la somme de la voix française et de la configuration correspond aux fichiers publiés. L'installation d'une langue dont les fichiers sont présents ne retélécharge rien (1,6 s). La lecture française passe par la voix naturelle.
 - **Limites** : la voix anglaise n'est pas installée sur ce poste ; son téléchargement attend l'accord de l'utilisateur. Le son n'a pas été écouté par l'auteur du code. Les langues sont limitées à celles qui ont une voix dans `VOICES`.
+
+## ADR-045 — Compréhension mesurée sur le modèle réel ; le niveau reste choisi par la vitesse
+
+- **Contexte** : le banc de compréhension n'avait que 22 phrases, et la précision n'était plus un critère de choix (ADR-029, TODO §1).
+- **Choix** : un corpus partagé de 129 demandes FR/EN (simples, politesse, fautes, anglais, composées, mémoire, bavardage, ambiguës), dans `src/core/language-model/corpus.json`. Le même fichier sert au test TypeScript (structure) et au banc Rust (`comprehension_bench`, ignoré par défaut), qui appelle le modèle Ollama réel avec la vraie consigne.
+- **Mesures** (ce poste, RTX 4060 8 Go, 25/10/2026) :
+
+  | Modèle | Justes | Moyenne | p95 |
+  |---|---|---|---|
+  | qwen2.5:14b | 128/129 (99,2 %) | 4,6 s | 8,4 s |
+  | qwen2.5:7b | 125/129 (96,9 %) | 0,5 s | 1,2 s |
+  | qwen2.5:1.5b | 112/129 (86,8 %) | 0,7 s | 0,4 s |
+
+- **Décision** : le choix automatique reste celui du plus précis qui répond en moins de 3 s. Sur cette machine, c'est le 7 B : 2,3 points de moins que le 14 B, environ neuf fois plus rapide. Le 14 B n'est plus proposé sur une carte de 8 Go (ADR-045 et `hardware.ts`).
+- **Consigne** : les règles ajoutées décrivent des cas généraux (fenêtre sans nom, document à analyser). Aucune phrase du corpus n'est recopiée dans la consigne, sinon la mesure serait gonflée.
+- **Limites** : « ferme cette fenêtre » reste lu comme WINDOW_CLOSE par les modèles 7 B et 14 B. Les mesures valent pour ce poste ; elles ne disent rien d'une autre machine.
+
+## ADR-046 — Souvenirs envoyés au modèle : pertinents et bornés
+
+- **Décision** : pour une demande, le modèle reçoit au plus 12 souvenirs. 60 % viennent de ceux qui partagent des mots avec la demande (mots vides et accents ignorés, pluriels reconnus), les autres sont les plus récents. Sans recouvrement, les plus récents remplissent la place. Le résultat garde l'ordre chronologique.
+- **Pourquoi pas d'embeddings** : aucun modèle d'embedding n'est installé sur ce poste, et la correspondance par mots couvre les demandes courantes. La recherche sémantique reste à faire (TODO §2).
+- **Garanties** : la mémoire n'a toujours pas de limite de nombre (les souvenirs restent sur le disque) ; seul ce que le modèle reçoit est borné. NVIDIA NIM suit les mêmes règles que le modèle local.
+
+## ADR-047 — Annulation de la dernière action et journal d'audit des fichiers
+
+- **Annulation** : après une action réussie, NEXUS garde l'action inverse en mémoire, une seule. « Annule la dernière action » repasse par le même aperçu et la même confirmation du courtier, avec la permission de l'inverse (une restauration depuis la corbeille est une écriture ; défaire une copie envoie la copie à la corbeille, donc suppose une suppression confirmée). Rien n'est écrasé : si l'emplacement d'origine est occupé, l'annulation est refusée.
+- **Restauration** : la corbeille est lue par la bibliothèque `trash` (`os_limited`). L'élément le plus récent envoyé depuis cet emplacement est restauré. Vérifié sur Windows (test ignoré `live_restore_brings_a_file_back_from_the_recycle_bin`).
+- **Journal d'audit** (`audit/actions.jsonl`, dans le dossier de données) : une ligne par demande (`confirmed`, `refused`, `done`, `failed`), avec l'heure, l'action et une empreinte SHA-256 de ce qui a été présenté à l'utilisateur. Aucun chemin ni contenu en clair. Le journal sert à vérifier plus tard qu'une action correspond à ce qui avait été accordé.
+- **Limites** : une seule annulation, perdue à la fermeture de NEXUS ; pas de « rétablir ».
+
+## ADR-048 — Thème suivant Windows ; sources web classées
+
+- **Thème** : « Suivre Windows » par défaut (`prefers-color-scheme`), clair ou sombre imposé dans l'accessibilité. Le choix est gardé dans le navigateur, comme la taille du texte. Le thème clair est une palette de variables CSS ; les effets lumineux de l'orbe n'ont pas été revus sur fond clair (à regarder).
+- **Sources** : la recherche classe les résultats : officiel (gouv, edu, int, europe) et référence (Wikipédia, documentations de langages et de systèmes) d'abord, autres ensuite, boutiques et comparateurs en dernier. Un site commercial est signalé au modèle dans la liste des sources, pour que la réponse le dise. Le classement est indicatif : une source commerciale n'est pas fausse.
+
+## ADR-049 — Lecture et activation des contrôles de la fenêtre active (UI Automation)
+
+- **Périmètre** : la fenêtre visée est la plus haute qui n'appartient pas à NEXUS. Une demande tapée dans NEXUS ne lit donc jamais NEXUS. Les champs de mot de passe, et leur contenu, ne sont jamais lus ; les valeurs des champs ne le sont pas non plus. Lecture limitée à 150 contrôles et six niveaux.
+- **Activation** : seul un bouton unique, activable, peut être invoqué. Un nom ambigu ou absent ne déclenche rien. L'aperçu vérifie la cible, le courtier confirme avec la fenêtre et le bouton exacts, puis l'action revérifie la fenêtre et le bouton. Un changement de fenêtre entre les deux étapes annule l'action.
+- **Vérification** : la lecture a été exécutée sur une vraie fenêtre (Chrome). L'activation n'a pas été vérifiée de bout en bout : Windows refuse de mettre le Bloc-notes au premier plan depuis un test lancé en arrière-plan. Le test `live_invoke_maximizes_the_notepad_window` est à lancer avec le Bloc-notes au premier plan.
+- **Limites** : seule l'activation de bouton existe (pas de saisie, de sélection ni de défilement) ; les noms de contrôles sont ceux de l'application, en français ou en anglais selon elle.
+
+## ADR-050 — Champs obligatoires : le modèle les reçoit, la mesure les compte
+
+- **Constat** : le schéma de sortie n'offrait ni `request` (texte du rappel) ni `question`, et le modèle 7 B omettait `newName` dans les renommages. Une bonne intention sans son champ était refusée par la validation, et l'utilisateur voyait « Je n'ai pas compris ». Le banc, qui ne comparait que le type, ne le voyait pas.
+- **Décision** : le schéma offre `request`, `question` et `action`. La consigne demande explicitement les champs obligatoires. La validation accepte les noms de champ que le modèle utilise réellement (`query`, `text`) pour le nouveau nom, le pseudo, le domaine et le dossier de destination, avec les mêmes règles (nom de fichier sans séparateur, domaine valide). Le banc miroir de la validation compte une intention sans son champ comme une erreur.
+- **Mesure** (25/10/2026, 138 demandes, champs obligatoires comptés) : qwen2.5:14b 96,4 % (5,0 s en moyenne) ; qwen2.5:7b 95,7 % (0,46 s) ; qwen2.5:1.5b 79,0 % (0,19 s). Le 1,5 B baisse parce qu'il omet les champs : c'est la mesure qui le montre.
+- **Garanties** : un alias ne contourne rien. Un nouveau nom qui sort du dossier reste refusé, quel que soit le champ.
+
+## ADR-051 — Presse-papiers : traduire ou résumer, à la demande, avec le modèle local seulement
+
+- **Décision** : « traduis le presse-papiers » et « résume ce qui est dans le presse-papiers » lisent le texte du presse-papiers à cette demande seulement (commande native réservée à l'interface principale), jusqu'à 8 000 caractères sans caractères de contrôle. Le texte est envoyé au modèle local, jamais à NVIDIA, même si l'option est active.
+- **Garanties** : rien n'est lu en arrière-plan, rien n'est écrit dans le presse-papiers, et la réponse est affichée comme une réponse ordinaire. Un presse-papiers sans texte donne un message explicite.
+
+## ADR-052 — Surveillance de dossiers et notifications Windows
+
+- **Surveillance** : « surveille mes téléchargements » prend un instantané du dossier, puis annonce toutes les minutes les nouveaux fichiers (au plus cinq noms par annonce). Lecture seule : NEXUS n'ouvre, ne déplace et ne lit aucun fichier de ce dossier. La surveillance vaut pour la session ; « arrête la surveillance » la coupe.
+- **Notifications** : les alertes proactives peuvent être envoyées en notification Windows (plugin officiel). Désactivées par défaut, activées dans la section Notifications des réglages. Rien n'est envoyé entre 22 h et 7 h : l'alerte reste affichée dans NEXUS. Pas encore de regroupement ni d'historique « pourquoi NEXUS me prévient ».
+
+## ADR-053 — Enregistrements DNS (MX, TXT, NS) et métadonnées EXIF
+
+- **DNS** : les enregistrements MX, TXT et NS sont demandés directement au résolveur configuré dans Windows (`hickory-resolver`). Passif : aucune requête vers le domaine lui-même. Vérifié sur example.com (serveurs de noms obtenus sur ce poste).
+- **EXIF** : appareil, fabricant, date de prise de vue et logiciel des images (JPEG, TIFF, HEIF, WebP). La présence de coordonnées GPS est signalée, les coordonnées ne sont ni lues ni affichées. Les PDF et les documents Office n'ont pas encore leurs métadonnées.
+
+## ADR-054 — Profils de modèle, mode strict hors ligne, cache et réponses ouvertes
+
+- **Profils** : rapide (1,5 B), équilibré (7 B), précis (14 B), chacun choisi s'il est installé. Le mode strict hors ligne coupe toute demande vers NVIDIA, même si l'option est cochée ; le réactiver se fait à la main dans la section NIM.
+- **Réponses ouvertes** : les questions sur le web et le presse-papiers utilisent le modèle le plus précis installé ; les commandes gardent le modèle choisi, plus rapide.
+- **Cache** : une classification identique (même modèle, même texte, même contexte) n'est pas reposée au modèle. Elle passe toujours par la validation et la confirmation.
+- **Corrections** : « non, X » juste après une application enregistre l'association en souvenir ; NEXUS propose la commande, il ne lance rien.

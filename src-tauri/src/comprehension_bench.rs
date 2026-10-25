@@ -69,6 +69,7 @@ mod tests {
             "SHOW_TOPIC" | "SHOW_IMAGE" | "CANCEL_SCHEDULE" => &["query"],
             "ASK_WEB" | "SCREEN_VIEW" => &["question|query|text"],
             "WATCH_FOLDER" => &["folderHint"],
+            "OBSIDIAN_SAVE" => &["destination"],
             "CLIPBOARD_ACTION" => &["action"],
             "NEEDS_CONNECTOR" => &["task"],
             _ => &[],

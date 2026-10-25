@@ -34,6 +34,8 @@ interface SceneViewProps {
   onLocale: (locale: Locale) => void;
   /** Échanges récents : la scène n'en montre que le dernier, la question et la réponse. */
   messages: ChatMessage[];
+  /** Nombre total de réponses de la session (la liste affichée peut être tronquée). */
+  answerCount: number;
   orbState: OrbState;
   statusLabel: string;
   /** État du modèle local, affiché en haut : « Modèle local prêt » ou « Aucun modèle choisi ». */
@@ -58,6 +60,7 @@ export function SceneView({
   locale,
   onLocale,
   messages,
+  answerCount,
   orbState,
   statusLabel,
   modelLabel,
@@ -73,7 +76,6 @@ export function SceneView({
 }: SceneViewProps) {
   const lastRequest = [...messages].reverse().find((message) => message.role === "user");
   const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant");
-  const answerCount = messages.filter((message) => message.role === "assistant").length;
   const empty = messages.length === 0;
 
   return (

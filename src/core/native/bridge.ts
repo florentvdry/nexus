@@ -188,6 +188,8 @@ export interface NativeBridge {
   uiInvoke(name: string): Promise<string>;
   /** Texte du presse-papiers, à la demande. Jamais lu en arrière-plan. */
   clipboardRead(): Promise<string>;
+  /** Écrit une note dans le sous-dossier NEXUS d'un coffre Obsidian, après confirmation. Renvoie le chemin écrit. */
+  noteSave(vault: string, relative: string, content: string): Promise<string>;
   /** Plugins de données : examen, installation, suppression. Chaque étape demande votre accord. */
   pluginPrepare(source: string): Promise<PreparedPlugin>;
   pluginInstall(stagingId: string, digest: string): Promise<InstalledPlugin>;
@@ -375,6 +377,10 @@ export class TauriNativeBridge implements NativeBridge {
 
   clipboardRead(): Promise<string> {
     return this.#call<string>("clipboard_read");
+  }
+
+  noteSave(vault: string, relative: string, content: string): Promise<string> {
+    return this.#call<string>("note_save", { vault, relative, content });
   }
 
   pluginPrepare(source: string): Promise<PreparedPlugin> {
@@ -671,6 +677,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   uiInspect = () => this.unavailable();
   uiInvoke = () => this.unavailable();
   clipboardRead = () => this.unavailable();
+  noteSave = () => this.unavailable();
   listProcesses = () => this.unavailable();
   searchFiles = () => this.unavailable();
   readFile = () => this.unavailable();

@@ -6,7 +6,6 @@ import { writeSelectedModel } from "../core/language-model/selection";
 import type { ModelTier } from "../core/language-model/tiers";
 import type { NativeBridge } from "../core/native/bridge";
 import type { MessageKey } from "../i18n/messages";
-import { Orb } from "./Orb";
 
 type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
@@ -154,12 +153,11 @@ export function ModelInstaller({ bridge, t, tiers, onFinish, autoStart = false }
     <div className="model-installer">
       <p className="field-hint">{t("install.description")}</p>
 
-      {/* Dès que l'installation démarre (ou va démarrer), l'orbe tourne avec le libellé : jamais un écran muet. */}
+      {/* Dès que l'installation démarre (ou va démarrer), un libellé le dit : jamais un écran muet. L'orbe n'est pas répétée ici : l'écran en a déjà une. */}
       {(busy || (autoStart && phase === "idle")) && (
-        <div className="installer-orb" aria-live="polite">
-          <Orb state="thinking" size="medium" />
-          <p className="field-hint" role="status">{t("install.loading")}</p>
-        </div>
+        <p className="field-hint installer-status" role="status" aria-live="polite">
+          {t("install.loading")}
+        </p>
       )}
 
       {percent !== null && (

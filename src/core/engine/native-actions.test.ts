@@ -108,6 +108,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     })),
     uiInvoke: vi.fn(async (name: string) => name),
     clipboardRead: vi.fn(async () => "Bonjour, je suis en retard."),
+    noteSave: vi.fn(async (vault: string, relative: string) => vault + "/NEXUS/" + relative),
     listProcesses: vi.fn(async () => [{ name: "Discord.exe", pid: 4242, cpuPercent: 3, memoryBytes: 512 * 1024 * 1024 }]),
     readFile: vi.fn(async () => new ArrayBuffer(0)),
     searchFiles: vi.fn(async () => [
@@ -205,8 +206,8 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
 
 const nativeDouble: NativeAdapter = { systemInfo: vi.fn(), launchApp: vi.fn() };
 
-function setup(bridge: NativeBridge, onlineModel?: () => { model: string; share: ContextShare[] } | null) {
-  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0, onlineModel });
+function setup(bridge: NativeBridge, onlineModel?: () => { model: string; share: ContextShare[] } | null, obsidianVault?: () => string | null) {
+  const engine = createEngine({ native: nativeDouble, bridge, osint: { run: vi.fn() }, model: () => TEST_MODEL, locale: "fr", responseHoldMs: 0, onlineModel, obsidianVault });
   const events: EngineEvent[] = [];
   engine.subscribe((event) => events.push(event));
   return { engine, events };
@@ -397,6 +398,54 @@ describe("presse-papiers : traduire ou résumer avec le modèle local seulement"
     const { engine, events } = setup(bridge);
     await engine.submit("résume le presse-papiers");
     expect(assistant(events).join(" ")).toContain("ne contient pas de texte");
+  });
+});
+
+describe("coffre Obsidian : mémoire écrite seulement dans le dossier configuré", () => {
+  it("enregistre les souvenirs dans le coffre, par la note native", async () => {
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "OBSIDIAN_SAVE", destination: "memory" })),
+      memoryList: vi.fn(async () => [{ id: 1, text: "Prénom : Ana", createdAt: 0, source: "user" as const }]),
+    });
+    const { engine, events } = setup(bridge, undefined, () => "C:\\Users\\ana\\Obsidian");
+    await engine.submit("enregistre mes souvenirs dans Obsidian");
+    expect(bridge.noteSave).toHaveBeenCalledWith("C:\\Users\\ana\\Obsidian", "Memoire.md", expect.stringContaining("Prénom : Ana"));
+    expect(assistant(events).join(" ")).toContain("Note enregistrée");
+  });
+
+  it("n'écrit rien sans coffre configuré", async () => {
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "OBSIDIAN_SAVE", destination: "memory" })),
+    });
+    const { engine, events } = setup(bridge, undefined, () => null);
+    await engine.submit("enregistre mes souvenirs dans Obsidian");
+    expect(bridge.noteSave).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("Aucun coffre Obsidian");
+  });
+});
+
+describe("fichier désigné par son seul nom", () => {  it("prend le fichier unique qui porte ce nom dans les dossiers autorisés", async () => {
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "FILE_TRASH", path: "nexus-e2e-b.txt" })),
+      searchFiles: vi.fn(async () => [{ path: "C:\Users\ana\Documents\nexus-e2e-b.txt", name: "nexus-e2e-b.txt", size: 1, modified: 1 }]),
+    });
+    const { engine } = setup(bridge);
+    await engine.submit("supprime nexus-e2e-b.txt");
+    expect(bridge.operateFile).toHaveBeenCalledWith({ kind: "trash", path: "C:\Users\ana\Documents\nexus-e2e-b.txt" });
+  });
+
+  it("demande lequel quand plusieurs fichiers portent le nom, sans rien supprimer", async () => {
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "FILE_TRASH", path: "notes.txt" })),
+      searchFiles: vi.fn(async () => [
+        { path: "C:\Users\ana\Documents\notes.txt", name: "notes.txt", size: 1, modified: 1 },
+        { path: "C:\Users\ana\Documents\Archives\notes.txt", name: "notes.txt", size: 1, modified: 1 },
+      ]),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("supprime notes.txt");
+    expect(bridge.operateFile).not.toHaveBeenCalled();
+    expect(assistant(events).join(" ")).toContain("lequel");
   });
 });
 
