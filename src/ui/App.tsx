@@ -20,28 +20,18 @@ import {
 import { readVoiceSettings, writeVoiceSettings, type VoiceSettings } from "../core/voice/settings";
 import type { Task } from "../core/tasks/taskManager";
 import { translate, type Locale, type MessageKey } from "../i18n/messages";
-import { CommandBar } from "./CommandBar";
+import type { VoiceControl } from "./CommandBar";
+import { ConversationView, type ChatMessage } from "./ConversationView";
 import { FloatingWindow } from "./FloatingWindow";
-import { HistoryMenu } from "./HistoryMenu";
-import { Orb } from "./Orb";
-import { TaskPanel } from "./TaskPanel";
-import { JournalSection } from "./JournalSection";
-import { MemorySection } from "./MemorySection";
-import { AccessibilitySection } from "./AccessibilitySection";
-import { NeuralVoiceSection } from "./NeuralVoiceSection";
-import { StartupSection } from "./StartupSection";
-import { AgendaSection } from "./AgendaSection";
+import { FirstRunSetup } from "./FirstRunSetup";
+import { HomeView } from "./HomeView";
+import { Rail, type View } from "./Rail";
+import { SchedulePanel } from "./SchedulePanel";
+import { SettingsView } from "./SettingsView";
 import { readAgendaPath } from "./agendaSettings";
-import { NimSection } from "./NimSection";
 import { readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
-import { FirstRunSetup } from "./FirstRunSetup";
-import { HardwareSection } from "./HardwareSection";
-import { ModelSection } from "./ModelSection";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
-import { PermissionsSection } from "./PermissionsSection";
-import { VoicePanel } from "./VoicePanel";
-import { SchedulePanel } from "./SchedulePanel";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readWindowContext } from "./scene";
 import { createNativeBridge } from "../core/native/bridge";
@@ -78,15 +68,7 @@ function windowsReducer(state: WindowsState, action: WindowAction): WindowsState
   }
 }
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  tone: "info" | "error";
-}
-
 const MAX_MESSAGES = 12;
-const VISIBLE_MESSAGES = 4;
 
 const ORB_LABEL: Record<OrbState, MessageKey> = {
   idle: "ui.orb.idle",
@@ -109,12 +91,12 @@ export interface AppProps {
 export function App({ engine: injectedEngine }: AppProps) {
   const [engine] = useState(() => injectedEngine ?? createEngine({ locale: readStoredLocale(), agendaPath: readAgendaPath, onlineModel: readOnlineModel }));
   const [locale, setLocale] = useState<Locale>(() => engine.locale);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [view, setView] = useState<View>("home");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [tasks, setTasks] = useState<Task[]>(() => engine.tasksSnapshot());
   const [windows, dispatch] = useReducer(windowsReducer, EMPTY_WINDOWS);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(readVoiceSettings);
-  const [panelOpen, setPanelOpen] = useState(false);
   const [planningOpen, setPlanningOpen] = useState(false);
   const windowsRef = useRef(windows);
   const [answerBridge] = useState(() => createNativeBridge());
@@ -183,6 +165,8 @@ export function App({ engine: injectedEngine }: AppProps) {
     const handleEvent = (event: EngineEvent) => {
       switch (event.type) {
         case "message":
+          // Depuis l'accueil, un échange (tapé, dit ou une réponse) ouvre la conversation ; les réglages restent ouverts.
+          setView((current) => (current === "home" ? "conversation" : current));
           setMessages((items) =>
             [...items, { id: nextId("msg"), role: event.role, text: event.text, tone: event.tone }].slice(-MAX_MESSAGES),
           );
@@ -224,94 +208,95 @@ export function App({ engine: injectedEngine }: AppProps) {
     };
   }, [engine, locale]);
 
-  const toggleLocale = () => setLocale((current) => (current === "fr" ? "en" : "fr"));
   const updateSettings = (patch: Partial<VoiceSettings>) => setVoiceSettings((current) => ({ ...current, ...patch }));
 
   // L'orbe suit d'abord les réponses du moteur, puis l'état du micro quand le moteur est au repos.
   const displayedOrb: OrbState =
     orbState === "idle" && voiceStatus !== "off" ? (voiceStatus === "recognizing" ? "recognizing" : "listening") : orbState;
 
-  return (
-    <div className="stage">
-      <TaskPanel tasks={tasks} t={t} onCancel={(id) => engine.cancelTask(id)} />
+  const submit = (text: string) => {
+    setView("conversation");
+    void voice.submitText(text);
+  };
 
-      <div className="topbar" data-hud>
-        <HistoryMenu
-          history={windows.history}
-          t={t}
-          onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
-        />
-        <button type="button" className="chip" onClick={() => setPlanningOpen((open) => !open)} aria-expanded={planningOpen}>
-          {t("schedule.open")}
-        </button>
-        {voiceSettings.enabled && (
-          <button type="button" className="chip" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
-            {t("voice.settings")}
-          </button>
+  // Les boutons vocaux n'apparaissent que si les fonctions vocales sont activées.
+  const commandVoice: VoiceControl | undefined = voiceSettings.enabled
+    ? {
+        status: voiceStatus,
+        onToggle: () => void voice.toggle(),
+        startLabel: t("voice.toggle"),
+        stopLabel: t("voice.stop"),
+        speaking: voiceSettings.replyMode !== "off",
+        // Activer la lecture lit toutes les réponses, tapées comprises : « voice » ne lit que les commandes vocales.
+        onToggleSpeaking: () => updateSettings({ replyMode: voiceSettings.replyMode === "off" ? "always" : "off" }),
+        speakingLabel: t("voice.spokenReplies"),
+      }
+    : undefined;
+
+  const statusLabel = t(ORB_LABEL[displayedOrb]);
+
+  return (
+    <div className="app">
+      <Rail
+        view={view}
+        planningOpen={planningOpen}
+        t={t}
+        onNavigate={setView}
+        onTogglePlanning={() => setPlanningOpen((open) => !open)}
+      />
+
+      <main className="workspace">
+        {view === "home" && (
+          <HomeView
+            t={t}
+            locale={locale}
+            onLocale={setLocale}
+            orbState={displayedOrb}
+            statusLabel={statusLabel}
+            placeholder={t("ui.placeholder")}
+            sendLabel={t("ui.send")}
+            voice={commandVoice}
+            onSubmit={submit}
+            onSuggest={submit}
+          />
         )}
-        <button type="button" className="chip" onClick={toggleLocale} aria-label={t("ui.language")}>
-          {locale.toUpperCase()}
-        </button>
-      </div>
+
+        {view === "conversation" && (
+          <ConversationView
+            t={t}
+            messages={messages}
+            orbState={displayedOrb}
+            statusLabel={statusLabel}
+            tasks={tasks}
+            history={windows.history}
+            voice={commandVoice}
+            placeholder={t("conversation.placeholder")}
+            sendLabel={t("ui.send")}
+            onSubmit={submit}
+            onCancelTask={(id) => engine.cancelTask(id)}
+            onReopen={(id) => dispatch({ type: "reopen", id, context: readWindowContext() })}
+            onNewConversation={() => {
+              setMessages([]);
+              setView("home");
+            }}
+          />
+        )}
+
+        {view === "settings" && (
+          <SettingsView
+            t={t}
+            locale={locale}
+            onLocale={setLocale}
+            bridge={answerBridge}
+            voiceSettings={voiceSettings}
+            onVoiceChange={updateSettings}
+            modelRevision={modelRevision}
+            onOpenSetup={() => setSetupOpen(true)}
+          />
+        )}
+      </main>
 
       {planningOpen && <SchedulePanel source={engine} locale={locale} t={t} onClose={() => setPlanningOpen(false)} />}
-
-      {panelOpen && (
-        <VoicePanel settings={voiceSettings} onChange={updateSettings} t={t} onClose={() => setPanelOpen(false)}>
-          <HardwareSection bridge={answerBridge} t={t} />
-          <ModelSection bridge={answerBridge} t={t} revision={modelRevision} />
-          <PermissionsSection bridge={answerBridge} locale={locale} t={t} />
-          <button type="button" className="chip" onClick={() => setSetupOpen(true)}>
-            {t("setup.open")}
-          </button>
-          <MemorySection bridge={answerBridge} locale={locale} t={t} />
-          <NeuralVoiceSection bridge={answerBridge} t={t} />
-          <AccessibilitySection t={t} />
-          <StartupSection bridge={answerBridge} t={t} />
-          <AgendaSection t={t} />
-          <NimSection t={t} />
-          <JournalSection bridge={answerBridge} locale={locale} t={t} />
-        </VoicePanel>
-      )}
-
-      <div className="orb-zone">
-        <Orb state={displayedOrb} />
-        <span className="orb-label" role="status">
-          {t(ORB_LABEL[displayedOrb])}
-        </span>
-      </div>
-
-      <div className="transcript" data-hud aria-live="polite">
-        {messages.length === 0 ? (
-          <p className="welcome">{t("ui.welcome")}</p>
-        ) : (
-          messages.slice(-VISIBLE_MESSAGES).map((message) => (
-            <p key={message.id} className={`${message.role}${message.tone === "error" ? " error" : ""}`}>
-              {message.role === "user" ? `› ${message.text}` : message.text}
-            </p>
-          ))
-        )}
-      </div>
-
-      <CommandBar
-        placeholder={t("ui.placeholder")}
-        sendLabel={t("ui.send")}
-        onSubmit={(text) => voice.submitText(text)}
-        voice={
-          voiceSettings.enabled
-            ? {
-                status: voiceStatus,
-                onToggle: () => void voice.toggle(),
-                startLabel: t("voice.toggle"),
-                stopLabel: t("voice.stop"),
-                speaking: voiceSettings.replyMode !== "off",
-                // Activer la lecture lit toutes les réponses, tapées comprises : « voice » ne lit que les commandes vocales.
-                onToggleSpeaking: () => updateSettings({ replyMode: voiceSettings.replyMode === "off" ? "always" : "off" }),
-                speakingLabel: t("voice.spokenReplies"),
-              }
-            : undefined
-        }
-      />
 
       <div className="windows-layer">
         {windows.open.map((item, index) => (

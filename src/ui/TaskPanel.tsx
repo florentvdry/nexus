@@ -29,7 +29,7 @@ export function TaskPanel({ tasks, t, onCancel }: TaskPanelProps) {
   const visible = tasks.slice(-VISIBLE_TASKS).reverse();
 
   return (
-    <section className="task-panel" data-hud aria-label={t("ui.tasks")}>
+    <section className="aside-section" aria-label={t("ui.tasks")}>
       <h2>{t("ui.tasks")}</h2>
       {visible.length === 0 ? (
         <p className="muted">{t("ui.noTasks")}</p>

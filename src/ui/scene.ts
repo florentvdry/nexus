@@ -1,4 +1,3 @@
-import { ORB_OUTER_RADIUS } from "./orb/painter";
 import type { WindowContext } from "../core/presentation/windows";
 import type { Rect } from "../core/presentation/types";
 
@@ -23,7 +22,7 @@ export function readWindowContext(now: number = Date.now()): WindowContext {
       orb: {
         cx: orbBox.x + orbBox.width / 2,
         cy: orbBox.y + orbBox.height / 2,
-        radius: (Math.min(orbBox.width, orbBox.height) / 2) * ORB_OUTER_RADIUS,
+        radius: Math.min(orbBox.width, orbBox.height) / 2,
       },
       obstacles: [...document.querySelectorAll("[data-hud]")].map(toRect),
     },

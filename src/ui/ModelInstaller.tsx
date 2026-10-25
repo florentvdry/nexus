@@ -157,7 +157,7 @@ export function ModelInstaller({ bridge, t, tiers, onFinish, autoStart = false }
       {/* Dès que l'installation démarre (ou va démarrer), l'orbe tourne avec le libellé : jamais un écran muet. */}
       {(busy || (autoStart && phase === "idle")) && (
         <div className="installer-orb" aria-live="polite">
-          <Orb state="thinking" />
+          <Orb state="thinking" size="medium" />
           <p className="field-hint" role="status">{t("install.loading")}</p>
         </div>
       )}
@@ -170,7 +170,7 @@ export function ModelInstaller({ bridge, t, tiers, onFinish, autoStart = false }
       )}
 
       {phase === "idle" && (
-        <button type="button" className="send" onClick={() => void start()}>
+        <button type="button" className="primary-button" onClick={() => void start()}>
           {t("install.start")}
         </button>
       )}

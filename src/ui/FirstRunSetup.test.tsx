@@ -52,7 +52,7 @@ describe("parcours de premier lancement", () => {
     render(<FirstRunSetup bridge={bridgeReturning(machine)} t={t} onClose={vi.fn()} />);
     await screen.findByText("16.0 Go");
     fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Installer" }));
     expect(screen.queryByRole("button", { name: "Commencer" })).toBeNull();
   });
 
@@ -60,12 +60,12 @@ describe("parcours de premier lancement", () => {
     render(<FirstRunSetup bridge={bridgeReturning({ memoryGiB: 2, cores: 2, avx2: false, gpu: null })} t={t} onClose={vi.fn()} />);
     await screen.findByText("2.0 Go");
     fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
-    const precise = (await screen.findByRole("radio", { name: "Plus précis : le niveau le plus élevé que la machine supporte" })) as HTMLInputElement;
-    const faster = screen.getByRole("radio", { name: "Plus rapide : niveau léger" }) as HTMLInputElement;
+    const precise = (await screen.findByRole("radio", { name: /Plus précis/ })) as HTMLInputElement;
+    const faster = screen.getByRole("radio", { name: /Plus rapide/ }) as HTMLInputElement;
     expect(precise.disabled).toBe(true);
     expect(faster.disabled).toBe(true);
     expect(screen.getByText("Ce niveau n'est pas disponible sur cette machine.")).toBeTruthy();
-    expect((screen.getByRole("radio", { name: "Automatique : un test sur votre machine décide" }) as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByRole("radio", { name: /Automatique/ }) as HTMLInputElement).disabled).toBe(false);
   });
 
   it("la page de mode annonce ce qui va être installé, puis l'étape de téléchargement démarre seule", async () => {
@@ -78,7 +78,7 @@ describe("parcours de premier lancement", () => {
     await screen.findByText("16.0 Go");
     fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
     expect(screen.getByText(/installer Ollama s'il manque, télécharger qwen2\.5:14b \(9 Go\)/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Installer" }));
     // Sans Ollama joignable dans ce pont de test, l'installation démarre et le dit : aucun clic n'a été nécessaire.
     expect(await screen.findByText(/Ollama ne répond pas sur ce poste/)).toBeTruthy();
     expect(bridge.ollamaStatus).toHaveBeenCalled();

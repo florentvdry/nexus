@@ -70,7 +70,7 @@ describe("App", () => {
     const native = simulatedNative();
     render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native, locale: "fr", responseHoldMs: 0 })} />);
 
-    expect(screen.getByText(/Je suis prêt/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Que puis-je faire pour vous ?" })).toBeTruthy();
     send("Jarvis, lance Discord.");
 
     await waitFor(() => expect(screen.getByText("Discord est ouvert.")).toBeTruthy());
@@ -86,7 +86,9 @@ describe("App", () => {
     expect(screen.getByText("Processeur à 12 %, mémoire utilisée à 25 %.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
-    await waitFor(() => expect(screen.queryByText("Ressources système")).toBeNull());
+    // La fenêtre quitte l'écran mais reste rouvrable dans « Fenêtres récentes ».
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Ressources système" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Rouvrir" })).toBeTruthy();
   });
 
   it("montre une carte d'erreur explicite quand l'application est absente", async () => {
@@ -110,7 +112,7 @@ describe("App", () => {
 
   it("bascule la langue de l'interface", () => {
     render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
-    fireEvent.click(screen.getByRole("button", { name: "Langue" }));
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
     expect(screen.getByPlaceholderText("Tell me what you want to do…")).toBeTruthy();
   });
 
@@ -120,10 +122,11 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText(/application de bureau NEXUS/)).toBeTruthy());
   });
 
-  it("ouvre le panneau de réglages vocaux", () => {
+  it("ouvre les réglages vocaux dans la page « Voix et lecture »", () => {
     render(<App engine={createEngine({ bridge: scriptedBridge(APP_ANSWERS), model: () => TEST_MODEL, native: simulatedNative(), locale: "fr", responseHoldMs: 0 })} />);
     fireEvent.click(screen.getByRole("button", { name: "Réglages" }));
-    expect(screen.getByRole("heading", { name: "Réglages vocaux" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Voix et lecture" }));
+    expect(screen.getByRole("heading", { name: "Voix et lecture" })).toBeTruthy();
     expect(screen.getByLabelText("Fonctions vocales activées")).toBeTruthy();
   });
 });

@@ -1,20 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { listSystemVoices, type SpeechVoice } from "../../plugins/speech/system-tts";
 import { readVoiceModelStatus, type VoiceModelStatus } from "../../plugins/speech/whisper-stt";
 import type { ReplyMode, VoiceSettings, VoiceLanguageSetting } from "../core/voice/settings";
 import type { MessageKey } from "../i18n/messages";
 
-interface VoicePanelProps {
+interface VoiceSettingsFieldsProps {
   settings: VoiceSettings;
   onChange: (patch: Partial<VoiceSettings>) => void;
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
-  onClose: () => void;
-  /** Sections supplémentaires des réglages, rendues sous les options vocales. */
-  children?: ReactNode;
 }
 
-export function VoicePanel({ settings, onChange, t, onClose, children }: VoicePanelProps) {
+/** Réglages de la voix : fonctions vocales, langue, lecture des réponses et voix du système. */
+export function VoiceSettingsFields({ settings, onChange, t }: VoiceSettingsFieldsProps) {
   const [voices, setVoices] = useState<SpeechVoice[]>([]);
   const [model, setModel] = useState<VoiceModelStatus | null | undefined>(undefined);
 
@@ -24,14 +22,7 @@ export function VoicePanel({ settings, onChange, t, onClose, children }: VoicePa
   }, []);
 
   return (
-    <section className="voice-panel" data-hud aria-label={t("voice.settingsTitle")}>
-      <header>
-        <h2>{t("voice.settingsTitle")}</h2>
-        <button type="button" className="icon-button" onClick={onClose} aria-label={t("ui.close")}>
-          ×
-        </button>
-      </header>
-
+    <div className="voice-fields">
       <label className="field toggle">
         <input type="checkbox" checked={settings.enabled} onChange={(event) => onChange({ enabled: event.target.checked })} />
         {t("voice.enabled")}
@@ -110,7 +101,6 @@ export function VoicePanel({ settings, onChange, t, onClose, children }: VoicePa
       </div>
 
       <p className="muted small">{t("voice.shortcut")}</p>
-      {children}
-    </section>
+    </div>
   );
 }
