@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use super::catalog::{Candidate, EnvSpec};
+use super::scope::{default_scopes, ToolClass};
 use crate::error::AdapterError;
 use crate::secrets;
 
@@ -28,6 +29,9 @@ pub struct Installed {
     /// Valeurs chiffrées (DPAPI, en hexadécimal) : le JSON de la table `values`, tel qu'écrit sur le disque.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protected: Option<String>,
+    /// Classes d'outils que le connecteur peut appeler. Lecture seule par défaut ; écriture et suppression s'accordent.
+    #[serde(default = "default_scopes")]
+    pub scopes: Vec<ToolClass>,
 }
 
 /// Vue pour l'interface : les noms des variables et s'ils sont renseignés, jamais leurs valeurs.
@@ -39,6 +43,7 @@ pub struct InstalledView {
     pub package: String,
     pub version: String,
     pub variables: Vec<VariableView>,
+    pub scopes: Vec<ToolClass>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -58,6 +63,7 @@ impl Installed {
             title: self.title.clone(),
             package: self.package.clone(),
             version: self.version.clone(),
+            scopes: self.scopes.clone(),
             variables: self
                 .env
                 .iter()
@@ -127,6 +133,7 @@ impl Store {
             env: candidate.env.clone(),
             values: BTreeMap::new(),
             protected: None,
+            scopes: default_scopes(),
         };
         let mut items = self.lock();
         items.retain(|item| item.id != installed.id);
@@ -136,6 +143,21 @@ impl Store {
     }
 
     /// Renseigne une variable déclarée par le connecteur. Un nom inconnu est refusé.
+    /// Change le périmètre d'un connecteur installé. L'accord de l'utilisateur est pris avant, par le courtier.
+    pub fn set_scopes(&self, id: &str, scopes: Vec<ToolClass>) -> Result<Installed, AdapterError> {
+        let mut items = self.lock();
+        let item = items.iter_mut().find(|item| item.id == id).ok_or_else(|| AdapterError::InvalidTarget("connecteur non installé".into()))?;
+        let previous = std::mem::replace(&mut item.scopes, scopes);
+        let updated = item.clone();
+        if let Err(error) = self.save(&items) {
+            if let Some(item) = items.iter_mut().find(|item| item.id == id) {
+                item.scopes = previous;
+            }
+            return Err(error);
+        }
+        Ok(updated)
+    }
+
     pub fn set_value(&self, id: &str, name: &str, value: &str) -> Result<(), AdapterError> {
         let value = value.trim();
         if value.is_empty() || value.chars().count() > MAX_VALUE_CHARS || value.contains(['\n', '\r']) {

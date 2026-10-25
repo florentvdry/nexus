@@ -4,6 +4,8 @@
 
 pub mod catalog;
 pub mod client;
+pub mod sandbox;
+pub mod scope;
 pub mod commands;
 pub mod schema;
 pub mod store;

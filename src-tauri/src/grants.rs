@@ -61,6 +61,7 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("mcp_set_value", Policy::MainWindow),
     ("mcp_tools", Policy::MainWindow),
     ("mcp_call", Policy::MainWindow),
+    ("mcp_set_scopes", Policy::MainWindow),
     ("memory_list", Policy::MainWindow),
     ("memory_add", Policy::MainWindow),
     ("memory_remove", Policy::MainWindow),

@@ -10,6 +10,7 @@ use tauri::{AppHandle, State};
 
 use super::catalog::{Candidate, Catalog, GITHUB, REGISTRY};
 use super::client::{self, Launch, Tool};
+use super::scope::{self, ToolClass};
 use super::store::{Installed, InstalledView, Store};
 use crate::error::AdapterError;
 use crate::grants::require_main;
@@ -69,6 +70,19 @@ fn install_rows(candidate: &Candidate) -> Vec<Row> {
         Row { key: "repository".into(), value: candidate.repository.clone() },
         Row { key: "command".into(), value: format!("npx -y {}@{}", candidate.package, candidate.version) },
         Row { key: "variables".into(), value: if names.is_empty() { "aucune".into() } else { names.join(", ") } },
+        Row { key: "scope".into(), value: "lecture seule, écriture et suppression refusées jusqu'à accord".into() },
+    ]
+}
+
+/// Lignes affichées avant un appel : le connecteur, l'outil, sa classe, les arguments complets et la commande exacte.
+/// La description de l'outil n'y figure pas : elle est écrite par le serveur.
+fn call_rows(connector: &str, launch: &Launch, tool: &Tool, arguments: &Value) -> Vec<Row> {
+    vec![
+        Row { key: "connector".into(), value: connector.to_string() },
+        Row { key: "tool".into(), value: tool.name.clone() },
+        Row { key: "scope".into(), value: scope::classify(tool).label().to_string() },
+        Row { key: "arguments".into(), value: arguments.to_string() },
+        Row { key: "command".into(), value: format!("npx -y {}@{}", launch.package, launch.version) },
     ]
 }
 
@@ -108,7 +122,8 @@ pub async fn mcp_tools(state: State<'_, McpState>, webview: tauri::Webview, id: 
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
-/// Appel d'un outil, après accord du courtier natif, avec les arguments complets. Renvoie le texte de la réponse.
+/// Appel d'un outil. Le nom, les arguments et le périmètre sont contrôlés avant toute question ; ensuite seulement le
+/// courtier demande l'accord, avec la classe de l'outil et les arguments complets. Renvoie le texte de la réponse.
 #[tauri::command]
 pub async fn mcp_call(
     app: AppHandle,
@@ -120,17 +135,50 @@ pub async fn mcp_call(
     arguments: Value,
 ) -> Result<String, AdapterError> {
     require_main(&webview)?;
-    let launch = launch_for(&installed_or_error(&state.store, &id)?)?;
-    let rows = vec![
-        Row { key: "connector".into(), value: id.clone() },
-        Row { key: "tool".into(), value: tool.clone() },
-        Row { key: "arguments".into(), value: arguments.to_string() },
-        Row { key: "command".into(), value: format!("npx -y {}@{}", launch.package, launch.version) },
-    ];
+    let installed = installed_or_error(&state.store, &id)?;
+    let launch = launch_for(&installed)?;
+    let granted = installed.scopes.clone();
     let broker = broker.inner().clone_handle();
     tauri::async_runtime::spawn_blocking(move || {
-        permissions::confirm(&app, &broker, Permission::ConnectorCall, &rows)?;
-        client::call_tool(&launch, &tool, &arguments)
+        client::call_tool(&launch, &tool, &arguments, &granted, |found| {
+            let rows = call_rows(&id, &launch, found, &arguments);
+            permissions::confirm(&app, &broker, Permission::ConnectorCall, &rows)
+        })
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+}
+
+/// Lignes affichées avant de modifier le périmètre d'un connecteur : les accès demandés, en clair.
+fn scope_rows(installed: &Installed, scopes: &[ToolClass]) -> Vec<Row> {
+    let granted: Vec<&str> = scopes.iter().map(|class| class.label()).collect();
+    vec![
+        Row { key: "connector".into(), value: installed.title.clone() },
+        Row { key: "scope".into(), value: if granted.is_empty() { "aucun accès".into() } else { granted.join(", ") } },
+    ]
+}
+
+/// Modifie les accès d'un connecteur installé (écriture, suppression), après accord du courtier natif.
+#[tauri::command]
+pub async fn mcp_set_scopes(
+    app: AppHandle,
+    broker: State<'_, Broker>,
+    state: State<'_, McpState>,
+    webview: tauri::Webview,
+    id: String,
+    scopes: Vec<ToolClass>,
+) -> Result<InstalledView, AdapterError> {
+    require_main(&webview)?;
+    let installed = installed_or_error(&state.store, &id)?;
+    let mut scopes = scopes;
+    scopes.sort();
+    scopes.dedup();
+    let rows = scope_rows(&installed, &scopes);
+    let broker = broker.inner().clone_handle();
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        permissions::confirm(&app, &broker, Permission::ConnectorScope, &rows)?;
+        Ok(store.set_scopes(&id, scopes)?.view())
     })
     .await
     .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -174,6 +222,7 @@ mod tests {
             env: vec![EnvSpec { name: "TOKEN".into(), required: true, secret: true, description: String::new() }],
             values: Default::default(),
             protected: None,
+            scopes: vec![ToolClass::Read],
         };
         let error = launch_for(&installed).unwrap_err();
         assert!(error.to_string().contains("TOKEN"), "{error}");

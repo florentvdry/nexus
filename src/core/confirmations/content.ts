@@ -17,6 +17,7 @@ const PERMISSION_TITLE: Record<string, MessageKey> = {
   "plugin.manage": "confirm.title.pluginManage",
   "connector.install": "confirm.title.connectorInstall",
   "connector.call": "confirm.title.connectorCall",
+  "connector.scope": "confirm.title.connectorScope",
 };
 
 /** Libellé de chaque ligne de détail d'une demande de confirmation. */
@@ -44,6 +45,7 @@ const ROW_LABEL: Record<string, MessageKey> = {
   permissions: "confirm.row.permissions",
   commands: "confirm.row.commands",
   previous: "confirm.row.previous",
+  scope: "confirm.row.scope",
 };
 
 export function permissionTitle(locale: Locale, permission: string): string {

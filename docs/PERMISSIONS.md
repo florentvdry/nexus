@@ -61,7 +61,8 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 | `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) |
 | `plugin.manage` | confirmation | oui (demande à chaque fois) | `actions.plugin-manager` : examiner, installer, supprimer un plugin de données |
 | `connector.install` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_install` : installer un connecteur MCP. Le courtier affiche la commande exacte (`npx -y paquet@version`), le dépôt et les noms des variables |
-| `connector.call` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_call` : chaque appel d'outil, avec les arguments complets |
+| `connector.call` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_call` : chaque appel d'outil, avec sa classe et les arguments complets |
+| `connector.scope` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_set_scopes` : accorder l'écriture ou la suppression à un connecteur |
 
 ### Qui peut appeler quoi : une politique par commande, décidée côté natif
 
@@ -216,10 +217,14 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 
 ## Connecteurs MCP
 
-- **Installation** : seulement après « oui » à la proposition, qui montre le nom du connecteur, ses étoiles GitHub et son dépôt. Un connecteur absent du registre officiel, ou sans assez d'étoiles, n'est jamais proposé.
-- **Variables** : saisies une à une dans la conversation, puis gardées sur ce poste (fichier `mcp/installed.json` du dossier de données, en clair). L'interface ne les relit jamais.
-- **Appel d'un outil** : toujours précédé d'un récapitulatif (outil et arguments) et d'un « oui ». Un outil hors de la liste du serveur, ou des arguments qui ne sont pas un objet, sont refusés avant tout lancement.
-- **Non couvert** : le courtier de permissions natif ne contrôle pas ces appels (pas de `permission.*` dédiée) ; la confirmation est faite dans la conversation.
+- **Installation** : seulement après accord du courtier natif (`connector.install`), qui montre le nom, le dépôt, la commande exacte (`npx -y paquet@version`) et le nom des variables. Un connecteur absent du registre officiel, ou sans assez d'étoiles, n'est jamais proposé.
+- **Variables** : chiffrées par DPAPI, liées au compte Windows (`mcp/installed.json`). Le fichier ne contient plus leur texte ; un ancien fichier en clair est migré. L'interface ne les relit jamais.
+- **Périmètre** : chaque outil est classé en *lecture*, *écriture* ou *suppression*. Le classement retient le plus risqué entre les annotations du serveur et le nom de l'outil ; la description n'entre jamais en compte. Un connecteur n'a que la lecture par défaut. Accorder l'écriture ou la suppression passe par le courtier (`connector.scope`, jamais mémorisé) ; il n'existe pas encore de réglage dans l'interface pour le faire.
+- **Appel d'un outil** : dans l'ordre, NEXUS vérifie le nom (annoncé par le serveur), les arguments (schéma), puis le périmètre. Seulement après, le courtier demande l'accord (`connector.call`), avec la classe de l'outil, les arguments complets et la commande exacte. Un outil hors périmètre n'est jamais présenté.
+- **Isolation sous Windows** : le connecteur tourne dans un *job object* : tous ses processus (cmd, node, enfants) s'arrêtent à la fin de la session, même si NEXUS plante ; au plus 64 processus, 2 Go de mémoire chacun. Son environnement est vidé : seules quelques variables système lui sont transmises, plus les siennes. Les variables de NEXUS et de l'utilisateur ne lui parviennent pas (testé avec un serveur simulé).
+- **Délai** : 120 s par session, la confirmation non comprise ; un serveur muet est arrêté (testé).
+- **Limites non couvertes** : aucune restriction réseau ni de fichiers pour le connecteur. Un job object ne restreint ni l'un ni l'autre ; une isolation plus forte (AppContainer, bac à sable Windows) reste une décision à prendre. Le job est attribué juste après le lancement : un enfant créé pendant cet instant échappe au job. L'intégrité du paquet est celle de npm ; NEXUS ne vérifie pas la provenance.
+- **Serveur hostile** : un serveur peut mentir sur ses annotations ou écrire des consignes dans ses descriptions. Le nom de l'outil et le périmètre accordé l'emportent ; l'accord montre toujours les arguments exacts.
 
 ## Mémoire de l'utilisateur
 

@@ -617,6 +617,7 @@ pub fn run() {
             mcp::commands::mcp_set_value,
             mcp::commands::mcp_tools,
             mcp::commands::mcp_call,
+            mcp::commands::mcp_set_scopes,
             memory::memory_list,
             memory::memory_add,
             memory::memory_remove,

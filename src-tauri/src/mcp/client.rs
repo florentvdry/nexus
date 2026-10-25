@@ -1,9 +1,10 @@
 //! Client MCP minimal, transport stdio : des messages JSON-RPC, un par ligne. Le serveur est lancé avec `npx` pour le
-//! paquet approuvé, avec les seules variables de ce connecteur, et arrêté dès que la lecture ou l'appel est terminé.
-//! Un délai global borne chaque session (premier téléchargement du paquet compris) : au-delà, le processus est arrêté,
-//! même s'il ne produit aucune ligne.
+//! paquet approuvé, dans un job object (`sandbox.rs`) et avec un environnement réduit, puis arrêté dès que la lecture
+//! ou l'appel est terminé. Un délai borne chaque session : au-delà, le processus et ses enfants sont arrêtés, même s'il
+//! ne produit aucune ligne.
 //!
-//! Un appel d'outil ne part qu'après vérification des arguments contre le schéma annoncé par le serveur (`schema.rs`).
+//! Un appel d'outil suit cet ordre, dans la même session : liste des outils, contrôle du nom, des arguments (schéma) et du
+//! périmètre (`scope.rs`), puis confirmation par le courtier, puis exécution. Rien n'est confirmé pour un appel refusé.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -13,7 +14,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use super::sandbox;
 use super::schema;
+use super::scope::{self, ToolClass};
 use crate::error::AdapterError;
 
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
@@ -32,6 +35,9 @@ pub struct Tool {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
+    /// Indications du serveur (`readOnlyHint`, `destructiveHint`). Non fiables : voir `scope.rs`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<Value>,
 }
 
 /// Ce qu'il faut pour lancer un connecteur : paquet approuvé, version, et ses variables.
@@ -44,36 +50,58 @@ pub struct Launch {
 
 /// Outils proposés par le serveur, avec leur description et le schéma de leurs arguments.
 pub fn list_tools(launch: &Launch) -> Result<Vec<Tool>, AdapterError> {
-    let mut session = Session::start(launch)?;
+    let mut session = Session::start(launch, SESSION_TIMEOUT)?;
     session.handshake()?;
     session.list_tools()
 }
 
-/// Appelle un outil et renvoie son texte, borné. Le nom doit être un outil annoncé par le serveur, et les arguments
-/// doivent respecter son schéma. Tout se fait dans la même session : le serveur n'est lancé qu'une fois.
-pub fn call_tool(launch: &Launch, name: &str, arguments: &Value) -> Result<String, AdapterError> {
+/// Appelle un outil et renvoie son texte, borné.
+///
+/// Le nom doit être un outil annoncé par le serveur, les arguments doivent respecter son schéma, et la classe de l'outil
+/// doit être accordée (`granted`). Alors seulement, `confirm` demande l'accord de l'utilisateur, avec l'outil connu : un
+/// refus ou une erreur arrête l'appel avant son exécution.
+pub fn call_tool<C>(launch: &Launch, name: &str, arguments: &Value, granted: &[ToolClass], confirm: C) -> Result<String, AdapterError>
+where
+    C: FnOnce(&Tool) -> Result<(), AdapterError>,
+{
     if !valid_tool_name(name) {
         return Err(AdapterError::InvalidTarget("nom d'outil invalide".into()));
     }
     if !arguments.is_object() {
         return Err(AdapterError::InvalidTarget("les arguments d'un outil doivent être un objet".into()));
     }
-    let mut session = Session::start(launch)?;
+    let mut session = Session::start(launch, SESSION_TIMEOUT)?;
     session.handshake()?;
+    run_call(&mut session, name, arguments, granted, confirm)
+}
+
+/// Le déroulement d'un appel dans une session déjà ouverte : contrôle, puis accord, puis exécution.
+fn run_call<C>(session: &mut Session, name: &str, arguments: &Value, granted: &[ToolClass], confirm: C) -> Result<String, AdapterError>
+where
+    C: FnOnce(&Tool) -> Result<(), AdapterError>,
+{
     let tools = session.list_tools()?;
-    check_call(&tools, name, arguments)?;
+    let tool = prepare_call(&tools, name, arguments, granted)?;
+    confirm(tool)?;
+    // La confirmation peut durer : le délai de la session repart de l'accord, pas du lancement.
+    session.extend_deadline(SESSION_TIMEOUT);
     let result = session.request("tools/call", json!({ "name": name, "arguments": arguments }))?;
     tool_text(&result)
 }
 
-/// Un appel n'est autorisé que vers un outil annoncé par le serveur, avec des arguments conformes à son schéma.
+/// Décide un appel sans rien exécuter : outil annoncé, arguments conformes au schéma, classe accordée.
 /// Fonction pure : aucun processus n'est lancé pour la décider.
-fn check_call(tools: &[Tool], name: &str, arguments: &Value) -> Result<(), AdapterError> {
+fn prepare_call<'a>(tools: &'a [Tool], name: &str, arguments: &Value, granted: &[ToolClass]) -> Result<&'a Tool, AdapterError> {
     let tool = tools
         .iter()
         .find(|tool| tool.name == name)
         .ok_or_else(|| AdapterError::InvalidTarget(format!("outil inconnu pour ce connecteur : {name}")))?;
-    schema::validate(&tool.input_schema, arguments).map_err(|reason| AdapterError::InvalidTarget(format!("arguments refusés pour {name} : {reason}")))
+    schema::validate(&tool.input_schema, arguments).map_err(|reason| AdapterError::InvalidTarget(format!("arguments refusés pour {name} : {reason}")))?;
+    let class = scope::classify(tool);
+    if !scope::covers(granted, class) {
+        return Err(AdapterError::PermissionRefused(format!("{name} : accès « {} » non accordé à ce connecteur", class.label())));
+    }
+    Ok(tool)
 }
 
 pub fn valid_tool_name(name: &str) -> bool {
@@ -90,6 +118,7 @@ fn parse_tools(result: &Value) -> Vec<Tool> {
                 name: name.to_string(),
                 description: tool.get("description").and_then(Value::as_str).unwrap_or_default().to_string(),
                 input_schema: tool.get("inputSchema").cloned().unwrap_or_else(|| json!({ "type": "object" })),
+                annotations: tool.get("annotations").filter(|value| value.is_object()).cloned(),
             })
         })
         .collect()
@@ -144,6 +173,27 @@ struct TimedLines {
     deadline: Instant,
 }
 
+/// Lit la sortie ligne à ligne. Un octet non UTF-8 ne coupe pas la session : la ligne est décodée avec remplacement.
+fn read_lines(mut reader: impl BufRead, sender: &mpsc::Sender<std::io::Result<String>>) {
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        match reader.read_until(b'\n', &mut buffer) {
+            Ok(0) => break,
+            Ok(_) => {
+                let line = String::from_utf8_lossy(&buffer).trim_end_matches(['\r', '\n']).to_string();
+                if sender.send(Ok(line)).is_err() {
+                    break;
+                }
+            }
+            Err(error) => {
+                let _ = sender.send(Err(error));
+                break;
+            }
+        }
+    }
+}
+
 impl Iterator for TimedLines {
     type Item = std::io::Result<String>;
 
@@ -163,10 +213,13 @@ struct Session {
     stdin: ChildStdin,
     lines: TimedLines,
     next_id: u64,
+    /// Tous les processus du connecteur. Le fermer arrête l'arbre entier.
+    #[cfg(windows)]
+    job: Option<sandbox::Job>,
 }
 
 impl Session {
-    fn start(launch: &Launch) -> Result<Session, AdapterError> {
+    fn start(launch: &Launch, timeout: Duration) -> Result<Session, AdapterError> {
         let spec = format!("{}@{}", launch.package, launch.version);
         let mut command = if cfg!(windows) {
             let mut command = Command::new("cmd");
@@ -177,7 +230,12 @@ impl Session {
             command.args(["-y", &spec]);
             command
         };
-        command.envs(launch.env.iter().map(|(name, value)| (name.as_str(), value.as_str())));
+        sandbox::isolate_environment(&mut command, &launch.env);
+        Session::spawn(command, timeout)
+    }
+
+    /// Lance une commande comme connecteur : entrée et sortie en tuyaux, isolation, délai de la session.
+    fn spawn(mut command: Command, timeout: Duration) -> Result<Session, AdapterError> {
         command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         #[cfg(windows)]
         {
@@ -185,19 +243,34 @@ impl Session {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             command.creation_flags(CREATE_NO_WINDOW);
         }
-        let mut child = command.spawn().map_err(|error| AdapterError::Operation(format!("npx introuvable, Node.js est requis ({error})")))?;
+        let mut child = command.spawn().map_err(|error| AdapterError::Operation(format!("connecteur impossible à lancer ({error})")))?;
+        #[cfg(windows)]
+        let job = {
+            let job = sandbox::Job::new()?;
+            // Dès le lancement, avant que le connecteur n'ait pu créer un enfant hors du job.
+            if let Err(error) = job.assign(&child) {
+                let _ = child.kill();
+                return Err(error);
+            }
+            job
+        };
         let stdin = child.stdin.take().ok_or_else(|| AdapterError::Operation("entrée du connecteur indisponible".into()))?;
         let stdout = child.stdout.take().ok_or_else(|| AdapterError::Operation("sortie du connecteur indisponible".into()))?;
         let (sender, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
-            for line in BufReader::new(stdout).lines() {
-                if sender.send(line).is_err() {
-                    break;
-                }
-            }
-        });
-        let lines = TimedLines { receiver, deadline: Instant::now() + SESSION_TIMEOUT };
-        Ok(Session { child, stdin, lines, next_id: 0 })
+        std::thread::spawn(move || read_lines(BufReader::new(stdout), &sender));
+        let lines = TimedLines { receiver, deadline: Instant::now() + timeout };
+        Ok(Session {
+            child,
+            stdin,
+            lines,
+            next_id: 0,
+            #[cfg(windows)]
+            job: Some(job),
+        })
+    }
+
+    fn extend_deadline(&mut self, timeout: Duration) {
+        self.lines.deadline = Instant::now() + timeout;
     }
 
     /// Toutes les pages de la liste d'outils, bornées en nombre.
@@ -240,18 +313,9 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // Sous Windows, le processus lancé est `cmd`, qui lance `node` : on arrête tout l'arbre, sinon `node` survit.
+        // Le job arrête tout l'arbre des processus à sa fermeture ; sans lui, on arrête au moins le processus lancé.
         #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            let _ = Command::new("taskkill")
-                .args(["/PID", &self.child.id().to_string(), "/T", "/F"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .creation_flags(CREATE_NO_WINDOW)
-                .status();
-        }
+        drop(self.job.take());
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -260,6 +324,7 @@ impl Drop for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn lines(items: &[&str]) -> std::vec::IntoIter<std::io::Result<String>> {
         items.iter().map(|item| Ok(item.to_string())).collect::<Vec<_>>().into_iter()
@@ -285,15 +350,17 @@ mod tests {
     }
 
     #[test]
-    fn the_tool_list_keeps_valid_names_and_defaults_the_schema() {
+    fn the_tool_list_keeps_valid_names_annotations_and_defaults_the_schema() {
         let tools = parse_tools(&json!({ "tools": [
-            { "name": "send_message", "description": "Envoie", "inputSchema": { "type": "object", "properties": { "channel": { "type": "string" } } } },
+            { "name": "send_message", "description": "Envoie", "inputSchema": { "type": "object", "properties": { "channel": { "type": "string" } } }, "annotations": { "readOnlyHint": false } },
             { "name": "bad name!" },
             { "name": "list" }
         ] }));
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].name, "send_message");
+        assert_eq!(tools[0].annotations, Some(json!({ "readOnlyHint": false })));
         assert_eq!(tools[1].input_schema, json!({ "type": "object" }));
+        assert_eq!(tools[1].annotations, None);
     }
 
     #[test]
@@ -307,29 +374,42 @@ mod tests {
     #[test]
     fn invalid_tool_names_and_arguments_never_start_a_server() {
         let launch = Launch { package: "pkg".into(), version: "1.0.0".into(), env: vec![] };
-        assert!(call_tool(&launch, "../rm", &json!({})).is_err());
-        assert!(call_tool(&launch, "send_message", &json!("texte")).is_err());
+        let never = |_: &Tool| -> Result<(), AdapterError> { panic!("confirmation demandée pour un appel invalide") };
+        assert!(call_tool(&launch, "../rm", &json!({}), &scope::default_scopes(), never).is_err());
+        assert!(call_tool(&launch, "send_message", &json!("texte"), &scope::default_scopes(), never).is_err());
     }
 
     fn server_tools() -> Vec<Tool> {
         parse_tools(&json!({ "tools": [
-            { "name": "send_message", "description": "Envoie", "inputSchema": {
+            { "name": "read_channel", "description": "Lit", "inputSchema": {
                 "type": "object",
                 "properties": { "channel": { "type": "string" } },
                 "required": ["channel"],
-                "additionalProperties": false } }
+                "additionalProperties": false }, "annotations": { "readOnlyHint": true } },
+            { "name": "delete_channel", "description": "Supprime", "inputSchema": { "type": "object" }, "annotations": { "readOnlyHint": false } }
         ] }))
     }
 
     #[test]
     fn a_call_is_checked_against_the_tools_the_server_announced() {
         let tools = server_tools();
-        assert!(check_call(&tools, "send_message", &json!({ "channel": "general" })).is_ok());
+        let read = json!({ "channel": "general" });
+        assert!(prepare_call(&tools, "read_channel", &read, &scope::default_scopes()).is_ok());
         // Outil absent de la liste annoncée : refusé, même si le nom est bien formé.
-        assert!(matches!(check_call(&tools, "delete_everything", &json!({})), Err(AdapterError::InvalidTarget(_))));
-        // Champ non prévu par le schéma : refusé avant tout appel.
-        let error = check_call(&tools, "send_message", &json!({ "channel": "a", "to_all": true })).unwrap_err();
+        assert!(matches!(prepare_call(&tools, "shutdown_all", &json!({}), &scope::default_scopes()), Err(AdapterError::InvalidTarget(_))));
+        // Champ non prévu par le schéma : refusé avant toute confirmation.
+        let error = prepare_call(&tools, "read_channel", &json!({ "channel": "a", "to_all": true }), &scope::default_scopes()).unwrap_err();
         assert!(error.to_string().contains("to_all"), "{error}");
+    }
+
+    /// Le périmètre refuse un outil dont la classe n'est pas accordée, avant toute confirmation.
+    #[test]
+    fn a_tool_outside_the_granted_scope_is_refused_before_confirmation() {
+        let tools = server_tools();
+        let error = prepare_call(&tools, "delete_channel", &json!({}), &scope::default_scopes()).unwrap_err();
+        assert!(matches!(error, AdapterError::PermissionRefused(_)), "{error}");
+        assert!(error.to_string().contains("suppression"), "{error}");
+        assert!(prepare_call(&tools, "delete_channel", &json!({}), &[ToolClass::Read, ToolClass::Delete]).is_ok());
     }
 
     /// Un serveur qui ne produit aucune ligne ne doit pas bloquer NEXUS au-delà de l'échéance.
@@ -342,5 +422,121 @@ mod tests {
         assert!(matches!(error, AdapterError::ConnectorTimeout(_)), "{error}");
         assert!(started.elapsed() < Duration::from_secs(5));
         drop(sender);
+    }
+
+    // ---------- serveur MCP simulé (PowerShell), de bout en bout : Windows seulement ----------
+    #[cfg(windows)]
+    mod connector_e2e {
+        use super::*;
+
+
+        fn fake_server(mode: &str) -> Command {
+            let script: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests", "fixtures", "fake-mcp.ps1"].iter().collect();
+            let mut command = Command::new("powershell.exe");
+            command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]).arg(script).args(["-Mode", mode]);
+            command
+        }
+
+        /// Démarre le serveur simulé, avec le même isolement qu'un vrai connecteur, et son délai.
+        fn fake_session(mode: &str, timeout: Duration, env: &[(String, String)]) -> Session {
+            let mut command = fake_server(mode);
+            sandbox::isolate_environment(&mut command, env);
+            let mut session = Session::spawn(command, timeout).unwrap();
+            session.handshake().unwrap();
+            session
+        }
+
+        /// Un refus de l'utilisateur arrête l'appel : l'outil n'est pas exécuté.
+    #[test]
+    fn a_refused_confirmation_stops_the_call() {
+        let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+        let refused = run_call(&mut session, "read_note", &json!({ "id": "1" }), &scope::default_scopes(), |_| Err(AdapterError::ConfirmationRefused));
+        assert!(matches!(refused, Err(AdapterError::ConfirmationRefused)), "{refused:?}");
+    }
+
+    /// Un outil hors périmètre n'est même pas présenté à l'utilisateur : la confirmation n'est jamais demandée.
+    #[test]
+    fn an_out_of_scope_tool_is_never_offered_for_confirmation() {
+        let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+        let outcome = run_call(&mut session, "delete_note", &json!({ "id": "1" }), &scope::default_scopes(), |_| panic!("confirmation demandée"));
+        assert!(matches!(outcome, Err(AdapterError::PermissionRefused(_))), "{outcome:?}");
+    }
+
+    /// Un serveur qui annonce « lecture seule » pour un outil qui supprime ne passe pas le périmètre lecture.
+    #[test]
+    fn a_lying_annotation_does_not_pass_the_read_scope() {
+        let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+        let outcome = run_call(&mut session, "purge_all", &json!({}), &scope::default_scopes(), |_| panic!("confirmation demandée"));
+        assert!(matches!(outcome, Err(AdapterError::PermissionRefused(_))), "{outcome:?}");
+    }
+
+    /// La description d'un outil ne change pas la classe présentée : l'accord montre « lecture », sans ses consignes.
+    #[test]
+    fn the_confirmation_shows_the_class_not_the_injected_instructions() {
+        let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+        let mut shown = None;
+        let outcome = run_call(&mut session, "summarize", &json!({ "text": "bonjour" }), &scope::default_scopes(), |tool| {
+            shown = Some(scope::classify(tool));
+            Ok(())
+        });
+        assert_eq!(shown, Some(ToolClass::Read));
+        assert_eq!(outcome.unwrap(), "execute : summarize");
+    }
+
+    fn call(session: &mut Session, name: &str, arguments: Value) -> Result<String, AdapterError> {
+            let tools = session.list_tools()?;
+            prepare_call(&tools, name, &arguments, &scope::default_scopes())?;
+            let result = session.request("tools/call", json!({ "name": name, "arguments": arguments }))?;
+            tool_text(&result)
+        }
+
+        #[test]
+            fn the_fake_server_lists_tools_and_answers_a_read() {
+            let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+            let tools = session.list_tools().unwrap();
+            assert!(tools.iter().any(|tool| tool.name == "read_note"));
+            assert_eq!(call(&mut session, "read_note", json!({ "id": "1" })).unwrap(), "execute : read_note");
+        }
+
+        /// Le connecteur ne voit pas les variables de NEXUS ni de l'utilisateur : seulement les siennes.
+        #[test]
+            fn the_connector_never_inherits_the_host_secrets() {
+            std::env::set_var("NEXUS_HOST_SECRET_TEST", "valeur-hote");
+            let mut session = fake_session("normal", Duration::from_secs(60), &[("NEXUS_CANARY".into(), "valeur-connecteur".into())]);
+            // La variable propre au connecteur est bien transmise ; celle de l'hôte n'arrive pas.
+            assert_eq!(call(&mut session, "echo_env", json!({ "name": "NEXUS_CANARY" })).unwrap(), "valeur-connecteur");
+            assert_eq!(call(&mut session, "echo_env", json!({ "name": "NEXUS_HOST_SECRET_TEST" })).unwrap(), "");
+            std::env::remove_var("NEXUS_HOST_SECRET_TEST");
+        }
+
+        /// Fermer la session arrête le serveur et le processus qu'il a lancé.
+        #[cfg(windows)]
+        #[test]
+            fn closing_the_session_stops_the_connector_and_its_children() {
+            let mut session = fake_session("normal", Duration::from_secs(60), &[]);
+            let child_pid: u32 = call(&mut session, "spawn_child", json!({})).unwrap().trim().parse().unwrap();
+            assert!(process_alive(child_pid), "le processus enfant doit exister pendant la session");
+            drop(session);
+            let started = Instant::now();
+            while process_alive(child_pid) && started.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            assert!(!process_alive(child_pid), "le processus enfant survit à la session");
+        }
+
+        #[cfg(windows)]
+        fn process_alive(pid: u32) -> bool {
+            let output = Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output().unwrap();
+            String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\""))
+        }
+
+        #[test]
+            fn a_hanging_connector_is_stopped_by_the_session_deadline() {
+            let started = Instant::now();
+            let mut session = fake_session("hang", Duration::from_secs(3), &[]);
+            let error = session.list_tools().unwrap_err();
+            assert!(matches!(error, AdapterError::ConnectorTimeout(_)), "{error}");
+            assert!(started.elapsed() < Duration::from_secs(30));
+        }
     }
 }

@@ -49,10 +49,12 @@ pub enum Permission {
     ConnectorInstall,
     /// Appel d'un outil d'un connecteur MCP : l'outil agit au nom de l'utilisateur, à chaque fois après accord.
     ConnectorCall,
+    /// Modification du périmètre d'un connecteur : accorder l'écriture ou la suppression, à chaque fois.
+    ConnectorScope,
 }
 
 /// Toutes les permissions natives, dans l'ordre d'affichage des réglages.
-pub const ALL: [Permission; 10] = [
+pub const ALL: [Permission; 11] = [
     Permission::SystemRead,
     Permission::FileRead,
     Permission::FileWrite,
@@ -63,6 +65,7 @@ pub const ALL: [Permission; 10] = [
     Permission::PluginManage,
     Permission::ConnectorInstall,
     Permission::ConnectorCall,
+    Permission::ConnectorScope,
 ];
 
 impl Permission {
@@ -78,6 +81,7 @@ impl Permission {
             Permission::PluginManage => "plugin.manage",
             Permission::ConnectorInstall => "connector.install",
             Permission::ConnectorCall => "connector.call",
+            Permission::ConnectorScope => "connector.scope",
         }
     }
 
@@ -94,7 +98,8 @@ impl Permission {
             | Permission::WindowControl
             | Permission::PluginManage
             | Permission::ConnectorInstall
-            | Permission::ConnectorCall => Tier::Confirmation,
+            | Permission::ConnectorCall
+            | Permission::ConnectorScope => Tier::Confirmation,
         }
     }
 
@@ -570,7 +575,14 @@ mod tests {
 
     #[test]
     fn deletion_window_closing_and_plugins_are_never_remembered() {
-        for permission in [Permission::FileDelete, Permission::WindowControl, Permission::PluginManage, Permission::ConnectorCall, Permission::ConnectorInstall] {
+        for permission in [
+            Permission::FileDelete,
+            Permission::WindowControl,
+            Permission::PluginManage,
+            Permission::ConnectorCall,
+            Permission::ConnectorInstall,
+            Permission::ConnectorScope,
+        ] {
             assert!(!permission.rememberable(), "{} ne doit jamais être mémorisée", permission.id());
         }
         assert!(Permission::FileWrite.rememberable());
