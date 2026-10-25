@@ -4,6 +4,8 @@
 
 pub mod catalog;
 pub mod client;
+#[cfg(windows)]
+pub mod container;
 pub mod sandbox;
 pub mod scope;
 pub mod commands;
