@@ -66,9 +66,29 @@ describe("validation de la sortie du modèle", () => {
 });
 
 describe("champs donnés sous un autre nom", () => {
+  it("accepte le nouveau nom donné sous « target »", () => {
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "nexus-e2e-a.txt", target: "nexus-e2e-renomme.txt" })).toEqual({ type: "FILE_RENAME", path: "nexus-e2e-a.txt", newName: "nexus-e2e-renomme.txt" });
+  });
+  it("accepte le dossier d'un plugin donné sous « path »", () => {
+    expect(validateModelIntent({ type: "PLUGIN_INSTALL", path: "C:\\plugins\\convertisseur" })).toEqual({ type: "PLUGIN_INSTALL", target: "C:\\plugins\\convertisseur" });
+  });
   it("accepte le nouveau nom donné sous « query » ou « text »", () => {
     expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt", query: "b.txt" })).toEqual({ type: "FILE_RENAME", path: "a.txt", newName: "b.txt" });
     expect(validateModelIntent({ type: "FILE_RENAME", path: "photo.jpg", text: "vacances.jpg" })).toEqual({ type: "FILE_RENAME", path: "photo.jpg", newName: "vacances.jpg" });
+  });
+
+  it("ne traite une conversion d'unités comme une action sur le presse-papiers que si la demande le nomme", () => {
+    expect(validateModelIntent({ type: "CLIPBOARD_ACTION", action: "translate" }, "convertis 12 km en miles")).toBeNull();
+    expect(validateModelIntent({ type: "CLIPBOARD_ACTION", action: "translate" }, "traduis le presse-papiers")).toEqual({ type: "CLIPBOARD_ACTION", action: "translate" });
+  });
+
+  it("prend le nouveau nom dans la demande quand la réponse ne le donne pas", () => {
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "nexus-e2e-a.txt" }, "Renomme nexus-e2e-a.txt en nexus-e2e-renomme.txt")).toEqual({ type: "FILE_RENAME", path: "nexus-e2e-a.txt", newName: "nexus-e2e-renomme.txt" });
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt" }, "rename a.txt to final.pdf")).toEqual({ type: "FILE_RENAME", path: "a.txt", newName: "final.pdf" });
+  });
+
+  it("ne prend jamais un nom qui sort du dossier depuis la demande", () => {
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt" }, "Renomme a.txt en ../secret.txt")).toBeNull();
   });
 
   it("refuse un nouveau nom qui sort du dossier, même sous un autre nom de champ", () => {

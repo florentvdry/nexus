@@ -54,11 +54,11 @@ Le micro n'est pas une permission du registre de capacités : c'est une fonction
 |---|---|---|---|
 | `system.read` | automatic | oui | `system.processes` (processus actifs, lecture seule) |
 | `file.read` | automatic | oui | `files.search` (recherche dans les dossiers utilisateur) ; `files.view` (visionneuse : lecture seule, 100 Mo au plus) |
-| `file.write` | confirmation | oui (demande à chaque fois) | `files.operate` : renommer, déplacer, copier |
-| `file.delete` | confirmation | oui (demande à chaque fois) | `files.operate` : envoi à la corbeille |
+| `file.write` | confirmation | oui (demande à chaque fois) | `files.operate` : renommer, déplacer, copier ; restauration depuis la corbeille et annulation (`Annule la dernière action`) |
+| `file.delete` | confirmation | oui (demande à chaque fois) | `files.operate` : envoi à la corbeille ; annulation d'une copie (envoi de la copie à la corbeille) |
 | `agent.run` | confirmation | oui (demande à chaque fois) | `agent.claude-code` |
 | `window.read` | automatic | oui | `actions.window-control` : liste des fenêtres visibles (Windows) |
-| `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) |
+| `window.control` | confirmation | oui (demande à chaque fois) | `actions.window-control` : activer une fenêtre, demander sa fermeture (Windows) ; `actions.ui-automation` : activer un bouton de la fenêtre active (Windows) |
 | `plugin.manage` | confirmation | oui (demande à chaque fois) | `actions.plugin-manager` : examiner, installer, supprimer un plugin de données |
 | `connector.install` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_install` : installer un connecteur MCP. Le courtier affiche la commande exacte (`npx -y paquet@version`), le dépôt et les noms des variables |
 | `connector.call` | confirmation | oui (demande à chaque fois, jamais mémorisée) | `mcp_call` : chaque appel d'outil, avec sa classe et les arguments complets |
@@ -85,6 +85,7 @@ Chaque commande native a une politique, dans la table `POLICIES` de `src-tauri/s
 | `actions.file-operations` | `file.write`, `file.delete` (chacune confirmée) |
 | `agents.claude-code` | `agent.run` (confirmé) |
 | `actions.window-control` | `window.read`, `window.control` (confirmé) |
+| `actions.ui-automation` | `window.read` (lecture des contrôles, sans mot de passe ni valeur de champ) ; `window.control` (activation d'un bouton unique, confirmée avec la fenêtre et le bouton exacts) |
 | `actions.plugin-manager` | `plugin.manage` (confirmé à chaque étape) |
 
 La visionneuse de fichiers ajoute une seule ouverture de la CSP : `blob:` pour `img-src` et `media-src`, afin d'afficher
@@ -213,11 +214,20 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 | NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, la demande part à `integrate.api.nvidia.com`, seul hôte autorisé ; le reste du contexte seulement si l'utilisateur l'a coché. La clé est chiffrée par Windows (DPAPI) et ne quitte pas le natif. | Activation, clé et cases dans les réglages |
 | Démarrage avec Windows | Écrit la valeur `NEXUS` dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Sans droits administrateur, jamais à l'installation. | Case cochée dans les réglages |
 
+## Annulation et journal des actions sur les fichiers (ADR-047)
+
+- **Annuler la dernière action** : une seule action réussie est gardée, en mémoire. L'annulation repasse par l'aperçu et la confirmation du courtier. Elle refuse de remplacer un élément qui existe déjà.
+- **Journal d'audit** (`audit/actions.jsonl`, dossier de données) : une ligne par demande, avec l'heure, l'action, le résultat (`confirmed`, `refused`, `done`, `failed`) et une empreinte SHA-256 de ce qui a été présenté. Aucun chemin ni contenu n'y est écrit en clair. Le journal ne sort pas du poste.
+
+## Accès des connecteurs MCP (réglages)
+
+Dans les réglages, section « Autorisations mémorisées », chaque connecteur installé montre les accès accordés : lecture (toujours), écriture, suppression. Chaque changement passe par la confirmation du courtier (`mcp_set_scopes`), et n'est jamais mémorisé.
+
 ## Restant à faire
 
 - Désactivation du microphone et de chaque module.
 - Arrêt immédiat des opérations en cours (l'annulation existe déjà dans le moteur de tâches).
-- Chiffrement des jetons des connecteurs MCP (`mcp/installed.json`) et de la clé NIM, aujourd'hui en clair.
+- Chiffrement des jetons des connecteurs MCP (`mcp/installed.json`) et de la clé NIM : fait avec DPAPI ; les souvenirs, eux, restent en clair sur le disque (chiffrement au repos à décider).
 
 ## Connecteurs MCP
 

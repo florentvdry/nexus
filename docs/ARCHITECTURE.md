@@ -151,7 +151,8 @@ Le DOM n'est lu que par `src/ui/scene.ts`. Le moteur reste testable sans navigat
   - `schedule/tasks.json` : tâches programmées (100 au plus), écriture atomique ;
   - `permission_rules.json` : autorisations mémorisées, révocables une à une ;
   - base SQLite du journal des commandes (désactivé par défaut, 500 entrées au plus) ;
-  - `mcp/installed.json` : connecteurs MCP installés ; leurs variables sont gardées en clair (chiffrement à faire) ;
+  - `mcp/installed.json` : connecteurs MCP installés ; leurs variables sont chiffrées par DPAPI (un ancien fichier en clair est migré) ;
+  - `audit/actions.jsonl` : journal d'audit des actions sur les fichiers (empreintes, sans chemin ni contenu, ADR-047) ;
   - `voices/` : moteur Piper et voix installées, après accord.
 - Dans le stockage local du navigateur : préférence de langue et routines détectées (`nexus.routines.v1`). La clé NVIDIA NIM, si l'option est activée, y est aussi gardée, en clair (à déplacer vers le stockage natif chiffré). Un stockage bloqué désactive simplement la fonctionnalité concernée.
 
@@ -167,6 +168,6 @@ Le DOM n'est lu que par `src/ui/scene.ts`. Le moteur reste testable sans navigat
 - Une tâche programmée ne tourne que si NEXUS est ouvert ; une tâche manquée s'exécute une fois à la réouverture.
   Le démarrage avec Windows est une case des réglages (ADR-035).
 - Pas encore d'installateur public. Le worker `nexus-worker` doit être déclaré comme binaire externe (`bundle.externalBinaries`) avant tout installateur.
-- Le contrôle des fenêtres Windows et le lancement d'applications n'ont pas encore été vérifiés sur une machine Windows
-  (voir `docs/TODO.md`, section 5).
+- Les contrôles d'interface (UI Automation) ne lisent que la fenêtre au premier plan hors NEXUS, et n'activent que des boutons uniques ; saisie, sélection et défilement ne sont pas faits.
 - Pas encore de traduction (Argos), ni d'analyse d'adresses email, d'enregistrements MX/TXT/NS ou de métadonnées EXIF : prévus, non livrés.
+- Le suivi complet des points restants est dans `docs/TODO.md`.

@@ -1,6 +1,7 @@
 import type { PluginApi } from "../../../src/core/plugins/types";
 import type { CapabilityContext, CapabilityHandler, CapabilityInput, CapabilityManifest, CapabilityResult } from "../../../src/core/capabilities/types";
 import type { WindowEntry } from "../../../src/core/native/bridge";
+import type { Intent } from "../../../src/core/intent/types";
 import { normalize } from "../../../src/core/intent/normalize";
 import type { PresentedContent } from "../../../src/core/presentation/types";
 
@@ -82,15 +83,20 @@ export const listWindows: CapabilityHandler = async (_input, context) => {
 
 type Target = { window: WindowEntry } | { outcome: CapabilityResult };
 
+type WindowAction = "WINDOW_FOCUS" | "WINDOW_CLOSE";
+
 /**
  * Trouve la fenêtre visée. `#<identifiant>` désigne une fenêtre précise (choisie dans une question). Un nom qui
  * correspond à plusieurs fenêtres ne déclenche rien : la réponse pose la question, avec une option par fenêtre.
+ * Chaque option porte l'intention exacte : le choix ne repasse pas par le modèle.
  */
-async function findTarget(manifest: CapabilityManifest, input: CapabilityInput, context: CapabilityContext, verb: string): Promise<Target> {
+async function findTarget(manifest: CapabilityManifest, input: CapabilityInput, context: CapabilityContext, action: WindowAction): Promise<Target> {
   const name = (input.name ?? "").trim();
   const { t } = context;
   const windows = await context.bridge.listWindows();
-  const byId = /^#(\d+)$/.exec(name);
+  // Le modèle recopie souvent le libellé d'une fenêtre listée avec son identifiant : « Sans titre – Bloc-notes (#12) ».
+  // Seul l'identifiant compte ; le libellé ne sert pas à désigner la fenêtre.
+  const byId = /#(\d+)\)?$/.exec(name);
   if (byId) {
     const window = windows.find((candidate) => candidate.id === Number(byId[1]));
     return window ? { window } : { outcome: outcome(manifest, t("windows.gone")) };
@@ -100,25 +106,30 @@ async function findTarget(manifest: CapabilityManifest, input: CapabilityInput, 
   if (matches.length === 0) return { outcome: outcome(manifest, t("windows.notFound", { name })) };
   if (matches.length === 1) return { window: matches[0] };
   const question = t("windows.ambiguous", { name });
+  const verb = action === "WINDOW_CLOSE" ? "ferme" : "passe sur";
   return {
     outcome: {
       ...outcome(manifest, question),
       clarification: {
-        options: matches.slice(0, 8).map((window) => ({ label: `${window.title} (${window.process})`, text: `${verb} la fenêtre #${window.id}` })),
+        options: matches.slice(0, 8).map((window) => {
+          const reference = `#${window.id}`;
+          const intent: Intent = action === "WINDOW_CLOSE" ? { type: "WINDOW_CLOSE", name: reference } : { type: "WINDOW_FOCUS", name: reference };
+          return { label: `${window.title} (${window.process})`, text: `${verb} la fenêtre ${reference}`, intent };
+        }),
       },
     },
   };
 }
 
 export const focusWindow: CapabilityHandler = async (input, context) => {
-  const target = await findTarget(WINDOW_FOCUS_MANIFEST, input, context, "passe sur");
+  const target = await findTarget(WINDOW_FOCUS_MANIFEST, input, context, "WINDOW_FOCUS");
   if ("outcome" in target) return target.outcome;
   await context.bridge.focusWindow(target.window.id);
   return outcome(WINDOW_FOCUS_MANIFEST, context.t("windows.focused", { title: target.window.title }));
 };
 
 export const closeWindow: CapabilityHandler = async (input, context) => {
-  const target = await findTarget(WINDOW_CLOSE_MANIFEST, input, context, "ferme");
+  const target = await findTarget(WINDOW_CLOSE_MANIFEST, input, context, "WINDOW_CLOSE");
   if ("outcome" in target) return target.outcome;
   await context.bridge.closeWindow(target.window.id);
   return outcome(WINDOW_CLOSE_MANIFEST, context.t("windows.closeSent", { title: target.window.title }));

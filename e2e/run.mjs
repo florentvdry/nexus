@@ -30,7 +30,8 @@ async function step(app, name, body) {
   try {
     await body();
   } catch (error) {
-    app.record(name, false, error.message);
+    const said = app.lastAnswer ? " · réponse de NEXUS : " + app.lastAnswer.slice(0, 200) : "";
+    app.record(name, false, error.message + said);
     await shot(app, `erreur-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`).catch(() => {});
   }
 }
@@ -41,6 +42,22 @@ async function answerConfirmation(app, approve) {
   await app.clickButton(approve ? "Autoriser" : "Refuser", app.confirm);
   await sleep(1500);
   return text;
+}
+
+/** Nombre de fenêtres dans la réponse de « Liste mes fenêtres » (« 27 fenêtre(s) ouverte(s). »). */
+function windowCount(answer) {
+  const found = /(\d+) fenêtre/.exec(answer.join(" "));
+  return found ? Number(found[1]) : NaN;
+}
+
+/** Accepte chaque demande de confirmation qui arrive, tant qu'une nouvelle apparaît (une installation en demande plusieurs). */
+async function approveAll(app, max = 3) {
+  for (let i = 0; i < max; i += 1) {
+    const text = await app.waitForConfirmation(/Autoriser/, 30_000).catch(() => null);
+    if (!text) break;
+    await app.clickButton("Autoriser", app.confirm);
+    await sleep(1500);
+  }
 }
 
 const scenarios = {
@@ -146,6 +163,11 @@ const scenarios = {
   },
 
   async applications(app) {
+    // Les fenêtres Bloc-notes laissées par un passage précédent faussent la fermeture : elles sont fermées d'abord.
+    try {
+      execFileSync("powershell", ["-NoProfile", "-Command", "Get-Process notepad -ErrorAction SilentlyContinue | ForEach-Object { [void]$_.CloseMainWindow() }"]);
+      await sleep(1500);
+    } catch {}
     await step(app, "applications : lancer le Bloc-notes", async () => {
       await app.ask("Lance le Bloc-notes");
       // Le Bloc-notes met parfois plusieurs secondes à apparaître : on attend au plus 15 s.
@@ -162,12 +184,16 @@ const scenarios = {
       await shot(app, "10-fenetres-liste");
     });
     await step(app, "fenêtres : fermer le Bloc-notes, après accord", async () => {
-      await app.ask("Ferme la fenêtre du Bloc-notes");
+      const before = windowCount(await app.ask("Liste mes fenêtres"));
+      const asked = await app.ask("Ferme la fenêtre du Bloc-notes");
+      // Plusieurs fenêtres Bloc-notes : NEXUS demande laquelle, et la première est désignée par son numéro.
+      if (/laquelle|plusieurs fenêtres/i.test(asked.join(" "))) await app.ask("1");
       const text = await answerConfirmation(app, true);
       await shot(app, "11-confirmation-fermer-fenetre", app.confirm);
       await sleep(1500);
       app.record("fenêtres : confirmation affichée dans la fenêtre dédiée", /Autoriser/.test(text), text.slice(0, 160));
-      app.record("fenêtres : Bloc-notes fermé après accord", !tasklist("notepad.exe").includes("notepad.exe"));
+      // Plusieurs fenêtres Bloc-notes partagent un processus : on compte les fenêtres listées, pas les processus.
+      app.record("fenêtres : une fenêtre de moins après accord", windowCount(await app.ask("Liste mes fenêtres")) === before - 1);
     });
   },
 
@@ -287,10 +313,8 @@ const scenarios = {
   async screen(app) {
     await step(app, "écran : lecture après accord", async () => {
       await app.ask("Qu'est-ce qui est affiché à l'écran ?");
-      await answerConfirmation(app, true);
-      await shot(app, "22-confirmation-ecran", app.confirm).catch(() => {});
-      await sleep(1000);
-      const answer = await app.waitForText(/\w{4,}/, { timeout: 120_000 }).catch(() => "");
+      // La capture se demande en conversation : NEXUS attend un « oui » écrit, pas une fenêtre de confirmation.
+      const answer = await app.ask("oui", { timeout: 120_000 });
       app.record("écran : réponse du modèle de vision", understood(answer));
       await shot(app, "23-ecran-lu");
     });
@@ -318,9 +342,20 @@ const scenarios = {
       app.record("plugins : liste", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "26-plugins");
     });
+    const plugin = join(ROOT, "examples", "plugins", "community.exemple.convertisseur");
+    await step(app, "plugins : installation du convertisseur, deux accords", async () => {
+      await app.ask("installe le plugin " + plugin);
+      await approveAll(app);
+      await sleep(1500);
+    });
     await step(app, "plugins : convertisseur (WebAssembly)", async () => {
       const answer = await app.ask("convertis 12 km en miles");
-      app.record("plugins : conversion par le plugin", /mi/.test(answer.join(" ")), answer.join(" | ").slice(0, 200));
+      app.record("plugins : conversion par le plugin", /\d[\d.,]* ?miles?\b/i.test(answer.join(" ")), answer.join(" | ").slice(0, 200));
+    });
+    await step(app, "plugins : retrait du convertisseur, après accord", async () => {
+      await app.ask("supprime le plugin community.exemple.convertisseur");
+      await answerConfirmation(app, true);
+      await sleep(1000);
     });
   },
 

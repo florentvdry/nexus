@@ -1,0 +1,222 @@
+[
+  {
+    "name": "premier lancement : écran de bienvenue",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "premier lancement : choix du mode affiché",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "premier lancement : modèle installé et testé",
+    "ok": true,
+    "detail": "Modèle prêt : qwen2.5:7b. Il est sélectionné ; vous pouvez le changer dans les réglages."
+  },
+  {
+    "name": "première conversation : questions répondues",
+    "ok": true,
+    "detail": "7 réponses"
+  },
+  {
+    "name": "conversation : nouvelle conversation vide",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "conversation : salutation",
+    "ok": true,
+    "detail": "Je peux lancer une application (« Lance Discord »), afficher les ressources de ton ordinateur (« Affiche les informations de mon ordinateur »), annuler les tâches en cours (« Annule ») ou fermer une fenêtre (« Ferme cette fenêtre »)."
+  },
+  {
+    "name": "conversation : heure",
+    "ok": true,
+    "detail": "Il est 21:50."
+  },
+  {
+    "name": "conversation : demande incomprise, sans invention",
+    "ok": true,
+    "detail": "Bonjour ! Comment puis-je vous aider aujourd'hui ?"
+  },
+  {
+    "name": "conversation : réponse en anglais",
+    "ok": true,
+    "detail": "It is 21:50."
+  },
+  {
+    "name": "système : informations",
+    "ok": true,
+    "detail": "Processeur à 18 %, mémoire utilisée à 53 %."
+  },
+  {
+    "name": "processus : liste",
+    "ok": true,
+    "detail": "27 fenêtre(s) ouverte(s)."
+  },
+  {
+    "name": "applications : Bloc-notes lancé (vérifié dans le système)",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "fenêtres : liste",
+    "ok": true,
+    "detail": "27 fenêtre(s) ouverte(s)."
+  },
+  {
+    "name": "fenêtres : confirmation affichée dans la fenêtre dédiée",
+    "ok": true,
+    "detail": "Agir sur une fenêtre ?\nFenêtre\nSans titre – Bloc-notes\nProcessus\nNotepad.exe\nDemandé par\nactions.window-control\nAutoriser\nRefuser"
+  },
+  {
+    "name": "fenêtres : une fenêtre de moins après accord",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "fichiers : fichiers de test créés dans Documents",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "fichiers : recherche",
+    "ok": true,
+    "detail": "3 fichier(s) trouvé(s)."
+  },
+  {
+    "name": "fichiers : renommage effectué après accord",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "fichiers : suppression refusée, fichier conservé",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "agenda : rendez-vous du jour lu",
+    "ok": true,
+    "detail": "1 rendez-vous aujourd'hui."
+  },
+  {
+    "name": "messages : brouillon proposé",
+    "ok": true,
+    "detail": "Voici un brouillon, prêt à copier."
+  },
+  {
+    "name": "mémoire : préférence retenue",
+    "ok": true,
+    "detail": "Retenu : « que je préfère Firefox »."
+  },
+  {
+    "name": "mémoire : préférence visible dans les réglages",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "mémoire : oubli demandé",
+    "ok": true,
+    "detail": "J'ai oublié 1 souvenir(s)."
+  },
+  {
+    "name": "planification : rappel créé",
+    "ok": true,
+    "detail": "Programmé : « rappelle-moi demain à 9 h de sortir les poubelles », 26/10/2026 09:00."
+  },
+  {
+    "name": "web : fiche Wikipédia",
+    "ok": true,
+    "detail": "Résumé : Ada Lovelace"
+  },
+  {
+    "name": "web : photo avec son auteur et sa licence",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "web : actualités",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "web : recherche avec sources",
+    "ok": true,
+    "detail": "Je cherche sur le web : « Rust async »…"
+  },
+  {
+    "name": "écran : réponse du modèle de vision",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "OSINT : rapport sur un domaine",
+    "ok": true,
+    "detail": "Indiquez le chemin complet du fichier à afficher : lecteur, dossiers et nom."
+  },
+  {
+    "name": "connecteurs : proposition de connecteur",
+    "ok": true,
+    "detail": "Je n'ai trouvé aucun connecteur fiable pour « Discord » : le registre officiel n'en propose pas assez populaire."
+  },
+  {
+    "name": "plugins : liste",
+    "ok": true,
+    "detail": "1 plugin(s) installé(s)."
+  },
+  {
+    "name": "plugins : conversion par le plugin",
+    "ok": false,
+    "detail": "Je n'ai pas compris « convertis 12 km en miles ». Essaie par exemple : « Affiche une photo de Macron », « Qui est Marie Curie ? », « Rappelle-moi demain à 9 h de… » ou « Lance le Bloc-notes »."
+  },
+  {
+    "name": "réglages : volet « Général »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Modèle et performances »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Voix et lecture »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Autorisations »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Journal »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Accessibilité »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Démarrage »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Agenda »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Service en ligne »",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "réglages : volet « Diagnostic »",
+    "ok": true,
+    "detail": ""
+  }
+]

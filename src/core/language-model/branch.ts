@@ -37,7 +37,7 @@ export async function understandWithModel(input: string, classifier: Classifier 
   if (answer === null) return { intent: { type: "UNKNOWN", text: input }, source: "unavailable" };
   const reply = chatReply(answer);
   if (reply !== null) return { intent: { type: "CHAT", text: reply }, source: "model" };
-  const intent = validateModelIntent(answer);
+  const intent = validateModelIntent(answer, input);
   return intent ? { intent, source: "model" } : { intent: { type: "UNKNOWN", text: input }, source: "model" };
 }
 

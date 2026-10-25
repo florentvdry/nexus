@@ -30,7 +30,10 @@ pnpm tauri dev          # application de bureau en développement
 pnpm test               # tests frontend (Vitest)
 pnpm typecheck          # TypeScript strict
 cd src-tauri && cargo test                          # tests Rust
-cd src-tauri && cargo test -- --ignored            # transcription réelle, exige NEXUS_WHISPER_MODEL
+cd src-tauri && cargo test -- --ignored            # tests réels : Whisper (NEXUS_WHISPER_MODEL), corbeille, contrôles de fenêtre, Claude Code
+cd src-tauri && cargo clippy --all-targets -- -D warnings   # doit passer avant tout commit
+# Compréhension sur un modèle Ollama installé (corpus de 129 demandes) :
+cd src-tauri && NEXUS_BENCH_MODEL=qwen2.5:7b cargo test comprehension_bench -- --ignored --nocapture
 pnpm tauri build        # installateur Windows (à partir de Windows)
 ```
 

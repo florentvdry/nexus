@@ -11,6 +11,7 @@ plugins/                              ← code TypeScript et manifestes (un doss
   actions/file-view/                  ← visionneuse : PDF, images, texte, Markdown, CSV, audio et vidéo (lecture seule)
   actions/file-operations/            ← renommer, déplacer, copier, corbeille (sous confirmation)
   actions/window-control/             ← fenêtres Windows (lecture, activation, fermeture sous confirmation)
+  actions/ui-automation/              ← contrôles de la fenêtre active (lecture ; activation d'un bouton unique sous confirmation)
   actions/plugin-manager/             ← installation et suppression des plugins de données
   agents/claude-code/                 ← Claude Code, via le CLI officiel, sous confirmation
   sources/domain-analysis/            ← OSINT : DNS et certificats publics
@@ -33,7 +34,7 @@ Chaque dossier de plugin contient :
 
 | Type | Contribue | Exemple |
 |---|---|---|
-| `actions` | capacités sur la machine | `system-info`, `app-launch`, `process-list`, `file-search`, `file-view`, `file-operations`, `window-control`, `plugin-manager` |
+| `actions` | capacités sur la machine | `system-info`, `app-launch`, `process-list`, `file-search`, `file-view`, `file-operations`, `window-control`, `ui-automation`, `plugin-manager` |
 | `sources` | connecteurs de données passifs, exécutés dans le worker isolé | `domain-analysis` |
 | `documents` | analyse locale de fichiers désignés explicitement | `file-inspect` |
 | `speech` | moteurs vocaux (entrée, sortie) | `whisper-stt`, `system-tts` |

@@ -9,7 +9,7 @@ et les captures sont dans le [README](../README.md#tests-de-bout-en-bout) et dan
 - **Pilotage** : le débogage distant de WebView2 (protocole Chrome DevTools) sur le port 9222. Le script `e2e/run.mjs`
   saisit les demandes comme un utilisateur (saisie puis Entrée), attend les réponses, clique sur les boutons, et prend les
   captures. Aucune dépendance : Node 22 ou plus.
-- **Modèle** : Ollama sur ce poste, avec `qwen2.5:14b` (classification), `qwen2.5:7b` et `qwen2.5vl` (vision).
+- **Modèle** : Ollama sur ce poste. Le premier lancement choisit `qwen2.5:7b` ; `qwen2.5vl` sert à la lecture d'écran.
 - **Réseau** : les sources publiques (Wikipédia, Wikimedia Commons, Google Actualités, DuckDuckGo, RDAP) sont
   interrogées réellement. NVIDIA NIM n'est pas activé : aucune donnée ne part vers NVIDIA.
 

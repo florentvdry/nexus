@@ -122,7 +122,9 @@ export class NexusApp {
       await sleep(400);
     }
     await sleep(1200);
-    return this.lastAnswers(before);
+    const answers = await this.lastAnswers(before);
+    this.lastAnswer = answers.join(" | ");
+    return answers;
   }
 
   /** Réponse affichée par la scène, si elle est postérieure à `since` (le fil n'existe plus : seule la dernière réponse est visible). */

@@ -47,6 +47,12 @@ describe("capacités de fenêtres", () => {
     expect(result.caption).toContain("Réunion équipe - Discord");
   });
 
+  it("désigne la fenêtre par son identifiant même quand le modèle le recopie avec le libellé", async () => {
+    const closeWindowNative = vi.fn(async () => {});
+    await closeWindow({ name: "Réunion équipe - Discord (#102)" }, context({ listWindows: vi.fn(async () => windows), closeWindow: closeWindowNative }));
+    expect(closeWindowNative).toHaveBeenCalledExactlyOnceWith(102);
+  });
+
   it("n'agit pas quand aucune fenêtre ne correspond", async () => {
     const focusNative = vi.fn(async () => {});
     const result = await focusWindow({ name: "photoshop" }, context({ listWindows: vi.fn(async () => windows), focusWindow: focusNative }));

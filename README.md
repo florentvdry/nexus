@@ -7,27 +7,29 @@
 Vous formulez une intention, NEXUS choisit les outils. Les demandes sont comprises par un modèle de langage qui tourne
 sur votre PC (Ollama). Sans compte et sans abonnement. Un service en ligne n'est utilisé que si vous l'activez.
 
-> **Statut** : les phases 1, 3 et 4 sont livrées (validation sous Windows en cours), la phase 2 est partielle et la phase 5
-> est en cours. La reconnaissance vocale attend le modèle Whisper, et le contrôle des fenêtres Windows n'a pas encore été
-> vérifié sur Windows. Le détail et les limites sont dans [docs/PLAN.md](docs/PLAN.md) et [docs/TODO.md](docs/TODO.md).
+> **Statut** : application utilisable sur Windows. Les tests de bout en bout ont tourné sur l'application réelle, sur
+> ce poste (résultats plus bas). Ce qui reste à faire, et ce qui n'est pas vérifié, est listé dans
+> [docs/TODO.md](docs/TODO.md). Pas encore d'installateur public.
 
 ## Ce que fait NEXUS
 
 | Domaine | Exemples de demandes | Remarques |
 | --- | --- | --- |
-| Applications | « Lance le Bloc-notes », « Ouvre Discord », « Open Google Chrome » | Toute application trouvée sur ce PC par son nom (menu Démarrer, registre, dossiers des programmes). Aucune liste fixe. |
+| Applications | « Lance le Bloc-notes », « Ouvre Discord », « Open Google Chrome » | Toute application trouvée sur ce PC par son nom (menu Démarrer, registre, dossiers des programmes). |
 | Système | « Affiche les informations de mon ordinateur », « Affiche l'utilisation CPU » | Processeur, mémoire, disques, durée de fonctionnement, réels. |
 | Alertes | Automatiques | Disque presque plein, mémoire saturée, batterie faible non branchée. Une alerte par événement. |
 | Fenêtres | « Liste mes fenêtres », « passe sur la fenêtre Word », « ferme la fenêtre Discord » | Windows uniquement. Chaque action demande votre accord. |
-| Fichiers | « Cherche mes fichiers PDF téléchargés cette semaine », « Renomme a.pdf en b.pdf » | Recherche dans Documents, Téléchargements, Bureau et Images. Renommer, déplacer, copier et supprimer demandent votre accord ; la suppression passe par la corbeille. |
+| Contrôles de la fenêtre active | « Qu'est-ce qu'il y a dans cette fenêtre ? », « clique sur le bouton Enregistrer » | Lit les boutons et champs de la fenêtre au premier plan, hors NEXUS ; les mots de passe ne sont jamais lus. Activer un bouton demande votre accord, et seulement si son nom est unique. |
+| Fichiers | « Cherche mes PDF téléchargés cette semaine », « Renomme a.pdf en b.pdf », « Annule la dernière action » | Recherche dans Documents, Téléchargements, Bureau et Images. Renommer, déplacer, copier et supprimer demandent votre accord ; la suppression passe par la corbeille, et la dernière action peut être annulée. |
+| Visionneuse | « Affiche le fichier notes.md » | PDF, image, texte, Markdown, CSV, audio et vidéo, en lecture seule. |
 | Processus | « Quelles applications sont ouvertes ? » | Lecture seule, triée par mémoire utilisée. |
 | Agenda et messages | « Qu'est-ce que j'ai aujourd'hui ? », « écris à Alice que je suis en retard » | L'agenda se lit depuis un fichier .ics que vous désignez, en lecture seule. Un message n'est qu'un brouillon à copier : NEXUS n'envoie rien. |
 | Écran | « Qu'est-ce qui est affiché à l'écran ? » | Une seule capture, après votre « oui », lue par un modèle de vision local. Rien n'est enregistré sur le disque. |
-| Questions et actualités | « Qui est Ada Lovelace ? », « Montre une photo de la tour Eiffel », « Quelles sont les actus ? », « Actus sur le climat » | Sources publiques : recherche web sans clé, Wikipédia, Wikimedia Commons, Google Actualités. Chaque réponse cite ses sources. |
+| Questions et actualités | « Qui est Ada Lovelace ? », « Montre une photo de la tour Eiffel », « Quelles sont les actus ? » | Sources publiques : recherche web sans clé, Wikipédia, Wikimedia Commons, Google Actualités. Les sources officielles passent avant les sites commerciaux, qui sont signalés. |
 | Tâches programmées | « Rappelle-moi demain à 9 h », « Chaque lundi, résume mes actus » | Exécutées pendant que NEXUS est ouvert. Liste et annulation dans le panneau Planning. |
 | OSINT | « Analyse example.com », « Recherche le pseudo alice », « Analyse le fichier C:\\Users\\Ana\\contrat.pdf » | Sources publiques. Chaque résultat indique sa source, sa référence et son statut. Une correspondance n'est pas une identité. |
 | Claude Code | « Lance Claude Code dans C:\\Dev\\projet : corrige le test en échec » | Lance le CLI officiel `claude` dans ce dossier, après votre accord. Le CLI doit être installé et connecté. |
-| Connecteurs | « Envoie un message Discord » | Serveurs MCP du registre officiel, seulement s'ils ont au moins 50 étoiles sur GitHub, installés après votre accord. Node.js est requis. |
+| Connecteurs | « Envoie un message Discord » | Serveurs MCP du registre officiel, seulement s'ils ont au moins 50 étoiles sur GitHub, installés après votre accord. Vous réglez ensuite l'écriture et la suppression. Node.js est requis. |
 | Plugins | « installe le plugin <dossier ou adresse HTTPS> », « liste mes plugins » | Plugins de données (vocabulaire, sans code) et plugins WebAssembly (bac à sable). Chaque installation demande deux confirmations. |
 
 Les commandes se formulent en français ou en anglais, et NEXUS retient ce dont on parle : après « cherche mes fichiers txt »,
@@ -38,39 +40,58 @@ destructive passe toujours par une confirmation, y compris après une référenc
 
 - Chaque demande est comprise par un modèle qui tourne sur ce PC, via Ollama (adresse `127.0.0.1` seulement).
   Au premier lancement, NEXUS propose d'installer Ollama et un modèle, après votre accord. Le modèle dépend de la machine
-  (Qwen2.5 1,5 B, 7 B ou 14 B, de 1 à 9 Go) et reste modifiable dans les réglages.
+  (Qwen2.5 1,5 B, 7 B ou 14 B) et reste modifiable dans les réglages.
 - Sa réponse est contrainte par un schéma et validée avant usage. Elle n'est jamais exécutée telle quelle.
 - Sans modèle prêt, NEXUS le signale et ne devine rien.
-- **NVIDIA NIM (option, désactivé par défaut)** : avec votre clé, les demandes sont envoyées à NVIDIA. Sans clé, ou en cas
-  d'échec, le modèle local répond.
-- **Mémoire** : le modèle retient les informations durables que vous donnez (prénom, préférences). « Oublie X » les efface,
-  et la liste se consulte dans les réglages. La conversation elle-même n'est pas conservée au redémarrage.
+- **Mesures** sur ce poste (RTX 4060 8 Go, 129 demandes FR/EN, corpus dans `src/core/language-model/corpus.json`) :
 
-## Autorisations mémorisées
+  | Modèle | Justes | Moyenne par demande | Choisi automatiquement ici |
+  | --- | --- | --- | --- |
+  | qwen2.5:14b | 99,2 % | 4,6 s | non : trop lent pour la limite de 3 s |
+  | qwen2.5:7b | 96,9 % | 0,5 s | oui |
+  | qwen2.5:1.5b | 86,8 % | 0,7 s | non |
+
+  Le 14 B n'est pas proposé sur une carte de 8 Go : il déborderait dans la mémoire vive (ADR-045).
+- **NVIDIA NIM (option, désactivé par défaut)** : avec votre clé, les demandes sont envoyées à NVIDIA, avec seulement les
+  catégories que vous cochez. Sans clé, ou en cas d'échec, le modèle local répond.
+- **Mémoire** : le modèle retient les informations durables que vous donnez (prénom, préférences). « Oublie X » les efface,
+  et la liste se consulte dans les réglages. Pour chaque demande, il ne reçoit que les souvenirs qui s'y rapportent, et
+  les plus récents, au plus douze (ADR-046). La conversation elle-même n'est pas conservée au redémarrage.
+
+## Autorisations, annulation et journal
 
 Pour les actions répétitives, la case **« Toujours autoriser »** de la carte de confirmation évite de répondre à chaque fois :
 
 - écriture de fichiers dans un dossier donné (sous-dossiers compris) ;
 - lancement de Claude Code pour un projet donné.
 
-Elle n'est jamais proposée pour la suppression, la fermeture de fenêtre ni les plugins. Chaque approbation automatique est
-annoncée dans la conversation, journalisée, et chaque règle se révoque dans les réglages. Détails dans
-[docs/PERMISSIONS.md](docs/PERMISSIONS.md).
+Elle n'est jamais proposée pour la suppression, la fermeture de fenêtre, l'activation de bouton ni les plugins. Chaque
+approbation automatique est annoncée dans la conversation, journalisée, et chaque règle se révoque dans les réglages.
+
+- **Annuler la dernière action** : renommage, déplacement, copie et corbeille peuvent être défaits. Une seule action est
+  gardée, et l'annulation passe par la même confirmation (ADR-047).
+- **Journal d'audit** : chaque demande sur les fichiers laisse une ligne avec une empreinte, sans chemin ni contenu.
+- Détails dans [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
 ## Voix
 
-- Clic sur le bouton micro, ou raccourci global `Ctrl+Alt+Espace`. La saisie texte reste disponible.
+- Clic sur le bouton micro, ou raccourci global `Ctrl+Alt+Espace` (il peut déjà être pris par une autre application). La saisie texte reste disponible.
 - Reconnaissance hors ligne avec whisper.cpp et Silero VAD : aucun audio n'est envoyé à un service externe.
 - Lecture à voix haute avec une voix neurale locale (Piper). La voix française s'installe depuis les réglages vocaux, sur
   votre clic. Sans cette voix, ou pour l'anglais, la voix installée sur Windows lit la réponse.
 - Langue automatique, ou français ou anglais imposé.
-- Réponses à voix haute : jamais, après une commande vocale (par défaut), ou toujours.
+- Pas de mot de réveil : l'écoute ne s'ouvre que sur votre action.
 
 **Modèle de reconnaissance** : il n'est pas inclus dans NEXUS. Téléchargez `ggml-base.bin` (multilingue, environ 148 Mo)
 depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affiché dans les réglages vocaux :
 
 - Windows : `%APPDATA%\fr.nexus.assistant\models\ggml-base.bin`
 - Autre : valeur de la variable d'environnement `NEXUS_WHISPER_MODEL`, si elle est définie.
+
+## Thème
+
+« Suivre Windows » par défaut : clair ou sombre selon le réglage de Windows. Le choix se fait dans l'accessibilité, avec la
+taille du texte (ADR-048).
 
 ## Plugins
 
@@ -80,6 +101,7 @@ depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affic
 - **Plugins WebAssembly** : écrits en Rust (SDK `sdk/nexus-plugin-sdk`), ils ne s'exécutent que dans un bac à sable. Ils ne
   reçoivent que le stockage et le réseau déclarés dans leur manifeste, approuvés à l'installation.
   Exemple : `examples/plugins/community.exemple.convertisseur` (« convertis 12 km en miles », « retiens … », « rappelle »).
+- Les plugins livrés, et leurs permissions : [docs/PLUGINS.md](docs/PLUGINS.md).
 
 ## Journal des commandes
 
@@ -102,6 +124,28 @@ pnpm tauri dev
 Au premier lancement, NEXUS installe Ollama et le modèle de langage après votre accord. Le téléchargement peut peser
 plusieurs Go.
 
+## Tests
+
+Les vérifications automatiques et le parcours de bout en bout sont décrits dans [docs/TESTING.md](docs/TESTING.md).
+
+- `pnpm typecheck`, `pnpm test` (TypeScript, Vitest) et `cargo test --lib`, `cargo clippy --all-targets -- -D warnings`
+  (Rust) passent sur ce poste.
+- Les tests marqués `ignored` touchent le vrai bureau ou le vrai modèle : corpus de compréhension
+  (`NEXUS_BENCH_MODEL=qwen2.5:7b cargo test comprehension_bench -- --ignored --nocapture`), corbeille, contrôles de
+  fenêtre. Leur liste est dans [docs/TESTING.md](docs/TESTING.md).
+
+### Tests de bout en bout
+
+Dernier passage sur ce poste, avec l'application de bureau réelle et le modèle `qwen2.5:7b` : **43 vérifications sur 44 réussies**. Les parcours couvrent le premier lancement, la conversation, les informations système, les fenêtres, les fichiers, l'agenda, la mémoire, la planification, le web, la lecture d'écran, l'OSINT, les connecteurs, les plugins et les réglages.
+
+Une vérification échoue : la conversion par le plugin installé (« convertis 12 km en miles »). L'installation et la désinstallation réussissent, et la commande du plugin figure dans le contexte donné au modèle, qui répond pourtant « Je n'ai pas compris ». La cause n'est pas encore isolée : il faut examiner la réponse du modèle, pas l'installation.
+
+Le détail de chaque vérification est dans `e2e/results.json` ; les captures sont dans [docs/screenshots/](docs/screenshots/).
+
+![Demande de confirmation avant de fermer une fenêtre](docs/screenshots/11-confirmation-fermer-fenetre.png)
+
+![Liste des plugins installés](docs/screenshots/26-plugins.png)
+
 ## Confidentialité
 
 - Les demandes sont comprises par le modèle local, sur ce PC. Elles ne partent vers NVIDIA que si vous activez l'option NIM
@@ -111,6 +155,7 @@ plusieurs Go.
   résultats sont lues, sans compte.
 - Les recherches OSINT interrogent les sources publiques que leur résultat cite.
 - Aucune capture d'écran sans votre « oui », et aucune capture n'est enregistrée.
+- Les contrôles de fenêtre ne lisent ni les mots de passe ni les valeurs des champs.
 - Les voix sont téléchargées une seule fois, après votre accord. La lecture se fait sur ce PC.
 - Aucun micro n'est utilisé sans que vous l'activiez.
 - Le démarrage avec Windows est une case des réglages. Rien n'est écrit à l'installation.
@@ -119,11 +164,11 @@ plusieurs Go.
 
 ## Documentation
 
+- [docs/TODO.md](docs/TODO.md) : ce qui reste à faire, et ce qui n'est pas vérifié. Seul document de suivi.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : structure du code et flux de données.
-- [docs/PERMISSIONS.md](docs/PERMISSIONS.md) : permissions, confirmations, autorisations mémorisées.
+- [docs/PERMISSIONS.md](docs/PERMISSIONS.md) : permissions, confirmations, autorisations mémorisées, journal d'audit.
 - [docs/DECISIONS.md](docs/DECISIONS.md) : décisions d'architecture (ADR). Une décision remplacée le dit en tête.
-- [docs/PLAN.md](docs/PLAN.md) : état des phases et limites connues.
-- [docs/TODO.md](docs/TODO.md) : ce qui reste à faire et à vérifier.
+- [docs/TESTING.md](docs/TESTING.md) : tests automatiques et parcours de bout en bout sur l'application réelle.
 - [docs/PLUGINS.md](docs/PLUGINS.md) et [docs/PLUGIN-SPEC.md](docs/PLUGIN-SPEC.md) : plugins et paquets de données.
 
 ## Contribuer

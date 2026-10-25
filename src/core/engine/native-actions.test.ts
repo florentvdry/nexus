@@ -655,6 +655,25 @@ describe("conversation : références, questions et demandes enchaînées (phase
     expect(bridge.closeWindow).toHaveBeenCalledExactlyOnceWith(202);
   });
 
+  it("le choix d'une fenêtre ne repasse pas par le modèle : même mal lu, il ferme la fenêtre choisie", async () => {
+    const bridge = fakeBridge({
+      listWindows: vi.fn(async () => [
+        { id: 201, title: "Notes - Bloc-notes", process: "notepad.exe", pid: 1 },
+        { id: 202, title: "Notes de réunion - Word", process: "WINWORD.EXE", pid: 2 },
+      ]),
+    });
+    const previous = MODEL_ANSWERS["ferme la fenêtre #202"];
+    MODEL_ANSWERS["ferme la fenêtre #202"] = { type: "CLOSE_WINDOW" };
+    try {
+      const { engine } = setup(bridge);
+      await engine.submit("ferme la fenêtre notes");
+      await engine.submit("le deuxième");
+      expect(bridge.closeWindow).toHaveBeenCalledExactlyOnceWith(202);
+    } finally {
+      MODEL_ANSWERS["ferme la fenêtre #202"] = previous;
+    }
+  });
+
   it("un nom inconnu n'est pas deviné : le natif cherche sur le PC et dit qu'il n'est pas installé", async () => {
     vi.mocked(nativeDouble.launchApp).mockRejectedValueOnce(new NativeCallError("not-installed", "application non installée : Discrd"));
     const bridge = fakeBridge();

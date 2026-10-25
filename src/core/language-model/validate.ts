@@ -49,8 +49,17 @@ function days(value: unknown): number | undefined | null {
 }
 
 /** Renvoie l'intention validée, ou `null` si la forme n'est pas celle attendue. */
-export function validateModelIntent(raw: unknown): Intent | null {
-  if (typeof raw !== "object" || raw === null) return null;
+/**
+ * Le nouveau nom d'un renommage, s'il manque dans la réponse : le mot qui suit « en » (ou « to ») en fin de demande.
+ * Le nom passe par les mêmes règles que les autres ; l'aperçu le montre, et rien n'est renommé sans accord.
+ */
+function renameTargetFromWords(words: string | undefined): string | null {
+  if (!words) return null;
+  const match = /\s(?:en|to|as)\s+([^\s,;:]+?)\s*[.!?]?$/i.exec(words.trim());
+  return match ? match[1] : null;
+}
+
+export function validateModelIntent(raw: unknown, sourceText?: string): Intent | null {  if (typeof raw !== "object" || raw === null) return null;
   const candidate = raw as Record<string, unknown>;
   const type = candidate.type;
   if (typeof type !== "string") return null;
@@ -96,12 +105,12 @@ export function validateModelIntent(raw: unknown): Intent | null {
     case "FILE_RENAME": {
       const path = text(candidate.path, 1000);
       // Le nouveau nom, parfois donné sous « query » ou « text » : même règle de nom de fichier dans tous les cas.
-      const newName = fileName(candidate.newName ?? candidate.query ?? candidate.text);
+      const newName = fileName(candidate.newName ?? candidate.query ?? candidate.text ?? candidate.target ?? renameTargetFromWords(sourceText));
       return path && newName ? { type, path, newName } : null;
     }
     case "FILE_MOVE": {
       const path = text(candidate.path, 1000);
-      const toDir = text(candidate.toDir ?? candidate.query, 1000);
+      const toDir = text(candidate.toDir ?? candidate.query ?? candidate.target, 1000);
       return path && toDir ? { type, path, toDir } : null;
     }
     case "FILE_TRASH": {
@@ -126,6 +135,8 @@ export function validateModelIntent(raw: unknown): Intent | null {
     }
     case "CLIPBOARD_ACTION": {
       const action = candidate.action;
+      // Traduire ou résumer le presse-papiers n'est pas une conversion d'unités : la demande doit nommer le presse-papiers.
+      if (sourceText !== undefined && !/presse|clipboard/i.test(sourceText)) return null;
       return action === "translate" || action === "summarize" ? { type, action } : null;
     }
     case "UI_INVOKE": {
@@ -138,7 +149,8 @@ export function validateModelIntent(raw: unknown): Intent | null {
       return name ? { type, name } : null;
     }
     case "PLUGIN_INSTALL": {
-      const target = text(candidate.target, 1000);
+      // Le modèle range parfois le dossier ou l'adresse sous « path » ou « query » : même valeur, mêmes contrôles.
+      const target = text(candidate.target ?? candidate.path ?? candidate.query, 1000);
       return target ? { type, target } : null;
     }
     case "PLUGIN_REMOVE": {

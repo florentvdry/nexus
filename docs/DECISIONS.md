@@ -413,3 +413,21 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Réponses ouvertes** : les questions sur le web et le presse-papiers utilisent le modèle le plus précis installé ; les commandes gardent le modèle choisi, plus rapide.
 - **Cache** : une classification identique (même modèle, même texte, même contexte) n'est pas reposée au modèle. Elle passe toujours par la validation et la confirmation.
 - **Corrections** : « non, X » juste après une application enregistre l'association en souvenir ; NEXUS propose la commande, il ne lance rien.
+
+## ADR-055 — Obsidian pour la mémoire et les rapports
+
+- **Décision** : un coffre Obsidian est un dossier de fichiers `.md`. NEXUS y écrit sans plugin ni API Obsidian, et seulement dans son sous-dossier `NEXUS/` : « enregistre ma mémoire dans Obsidian » écrit `NEXUS/Memoire.md`, « enregistre le rapport dans Obsidian » écrit `NEXUS/Rapports/<date>.md`. Le coffre se règle dans la section Obsidian des réglages.
+- **Garanties** : chaque écriture est confirmée par le courtier, et l'empreinte de la demande va dans le journal d'audit. Une note qui ne porte pas la marque « créé par NEXUS » n'est jamais remplacée. Un chemin relatif, un chemin qui sort du sous-dossier ou une note de plus de 200 000 octets est refusé. L'écriture passe par un fichier temporaire puis un renommage.
+- **Vérification** : les règles de chemin et de remplacement sont testées (`notes.rs`). L'enregistrement dans un vrai coffre n'a pas encore été vérifié dans l'application.
+- **Limites** : NEXUS ne relit pas les notes de l'utilisateur. Un rapport n'est encore qu'un texte ; pas de mise en forme Obsidian (liens, propriétés).
+
+## ADR-056 — Le worker natif est construit avec l'application
+
+- **Décision** : `nexus-worker`, le processus séparé qui exécute l'OSINT et les plugins WebAssembly, est déclaré comme binaire externe de Tauri (`bundle.externalBin`). `scripts/build-worker.mjs` pose un fichier de remplacement si besoin (Tauri exige qu'il existe à la compilation), compile le worker en debug ou en release, puis le copie à sa place. `beforeDevCommand` et `beforeBuildCommand` appellent ce script.
+- **Garanties** : le worker est cherché à côté de l'exécutable (`worker_path()`), et `src-tauri/binaries/` est ignoré par git. Sans ce pas, l'OSINT échouait en développement avec « worker indisponible ».
+
+## ADR-057 — Un choix proposé est exécuté tel quel
+
+- **Constat** : après « ferme la fenêtre notes », NEXUS propose plusieurs fenêtres, et la réponse « 1 » était réécrite en « ferme la fenêtre #<identifiant> », puis relue par le modèle. La probe a reçu « Fenêtre fermée. », la réponse de `CLOSE_WINDOW` (la fenêtre flottante de NEXUS), sans carte de confirmation : la phrase a donc été lue comme « ferme cette fenêtre », et la fenêtre visée n'a jamais été proposée à la confirmation.
+- **Décision** : une option de question porte l'intention déjà décidée (`WINDOW_CLOSE` ou `WINDOW_FOCUS` avec `#identifiant`). Le moteur l'exécute directement, sans repasser par le modèle. Le texte de l'option reste pour le journal et l'affichage.
+- **Garanties** : test de régression qui fait lire le choix au modèle comme « ferme cette fenêtre » : seule la fenêtre choisie est fermée, après confirmation. Les options sans intention (fichiers) gardent le passage par le modèle.

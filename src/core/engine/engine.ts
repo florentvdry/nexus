@@ -415,6 +415,11 @@ export class Engine {
       this.#conversation.clearPending();
       const answer = answerClarification(pending, text);
       if (answer === "cancel") return this.#reply(reply, reply.t("clarify.cancelled"));
+      // Un choix dont l'intention est connue n'est pas relu par le modèle.
+      if (answer?.intent) {
+        this.#journal(answer.text, answer.intent.type);
+        return this.#route(answer.intent, reply);
+      }
       if (answer) return this.#handle(answer.text, reply);
     }
 
