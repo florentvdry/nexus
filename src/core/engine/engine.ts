@@ -5,7 +5,7 @@ import { FirstConversation } from "../onboarding/firstConversation";
 import { CapabilityError, toCapabilityError } from "../capabilities/errors";
 import { CapabilityRegistry } from "../capabilities/registry";
 import type { CapabilityContext, CapabilityInput, CapabilityResult, Permission, SourceRef } from "../capabilities/types";
-import { applicationSearchName, pluginCommandsForModel, registerLanguageDictionary } from "../intent/registry";
+import { applicationSearchName, commandFor, pluginCommandsForModel, registerLanguageDictionary } from "../intent/registry";
 import { loadBuiltinPlugins } from "../plugins/builtin";
 import type { PluginStatus } from "../plugins/types";
 import type { Intent } from "../intent/types";
@@ -423,7 +423,13 @@ export class Engine {
       if (answer) return this.#handle(answer.text, reply);
     }
 
-    const { intent, source } = await understandWithModel(text, this.#classifier);
+    const understood = await understandWithModel(text, this.#classifier);
+    const { source } = understood;
+    // Le modèle omet parfois la commande : elle se déduit des déclencheurs du plugin, dans la demande même.
+    const intent =
+      understood.intent.type === "PLUGIN_ACTION" && !understood.intent.command
+        ? { ...understood.intent, command: commandFor(understood.intent.pluginId, text) ?? "" }
+        : understood.intent;
     // Mémorisé avant le journal et le routage : une correction reste possible même si le lancement échoue.
     if (intent.type === "OPEN_APPLICATION") this.#lastApp = intent.appName;
     this.#journal(text, intent.type);
@@ -534,7 +540,12 @@ export class Engine {
     const now = new Date();
     const commands = pluginCommandsForModel();
     const system = [`Date et heure actuelles : ${localDateTime(now)} (${now.toLocaleDateString("fr-FR", { weekday: "long" })}).`];
-    if (commands.length > 0) system.push(`Commandes des plugins installées (PLUGIN_ACTION : pluginId, command, text) : ${commands.join(" ; ")}`);
+    // La règle n'existe que si un plugin est installé : sans plugin, le modèle n'a rien à choisir ici.
+    if (commands.length > 0) {
+      system.push(
+        `Commandes des plugins installées (PLUGIN_ACTION : pluginId, command, text) : ${commands.join(" ; ")}. Si une de ces commandes correspond à la demande (une conversion d'unités, par exemple), réponds PLUGIN_ACTION avec son pluginId, son command, et text = la partie de la demande qui suit le mot de la commande (« 12 km en miles »). N'invente jamais une commande absente de cette liste.`,
+      );
+    }
     return buildContext(
       {
         conversation: this.#recentConversation(),
@@ -625,8 +636,11 @@ export class Engine {
         return this.#runCapability("plugin.list", {}, { labelKey: "task.pluginList" }, reply);
       case "PLUGIN_INSTALL":
         return this.#runCapability("plugin.install", { target: intent.target }, { labelKey: "task.pluginInstall", labelParams: { target: intent.target }, cancellable: true }, reply);
-      case "PLUGIN_ACTION":
-        return this.#runCapability("plugin.run", { pluginId: intent.pluginId, command: intent.command, text: intent.text }, { labelKey: "task.pluginAction", labelParams: { command: intent.command }, cancellable: true }, reply);
+      case "PLUGIN_ACTION": {
+        const { command } = intent;
+        if (!command) return this.#reply(reply, reply.t("intent.unknown", { text: intent.text }), "error");
+        return this.#runCapability("plugin.run", { pluginId: intent.pluginId, command, text: intent.text }, { labelKey: "task.pluginAction", labelParams: { command }, cancellable: true }, reply);
+      }
       case "PLUGIN_REMOVE":
         return this.#runCapability("plugin.remove", { id: intent.id }, { labelKey: "task.pluginRemove", labelParams: { id: intent.id } }, reply);
       case "WINDOW_LIST":
@@ -950,7 +964,7 @@ export class Engine {
   }
 
   /**
-   * Une demande de confirmation attend. Le natif la présente dans sa fenêtre dédiée, la seule qui peut y répondre :
+   * Une demande de confirmation attend. Le natif la présente dans le cadre d'autorisation de l'interface principale, seule à pouvoir y répondre :
    * la conversation annonce seulement qu'elle attend, avec son titre.
    */
   #presentConfirmation(notice: ConfirmationNotice): void {
@@ -958,7 +972,7 @@ export class Engine {
     const title = permissionTitle(this.#locale, notice.permission);
     this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.asked", { title }), tone: "info", locale: reply.locale });
     this.#emit({ type: "message", role: "assistant", text: reply.t("confirm.answerInWindow"), tone: "info", locale: reply.locale });
-    // Une carte sans boutons : l'interface principale montre ce qui attend, la décision se prend dans la fenêtre dédiée.
+    // Une carte sans boutons : l'interface principale montre ce qui attend, la décision se prend dans le cadre d'autorisation.
     this.#emit({
       type: "present",
       content: {

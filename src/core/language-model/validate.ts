@@ -159,9 +159,10 @@ export function validateModelIntent(raw: unknown, sourceText?: string): Intent |
     }
     case "PLUGIN_ACTION": {
       const pluginId = text(candidate.pluginId, 200);
-      const command = text(candidate.command, 100);
+      // Le modèle omet parfois la commande : le moteur la déduit des déclencheurs du plugin (commandFor).
+      const command = text(candidate.command, 100) ?? "";
       const body = text(candidate.text);
-      return pluginId && command && body ? { type, pluginId, command, text: body } : null;
+      return pluginId && body ? { type, pluginId, command, text: body } : null;
     }
     case "AGENT_RUN": {
       const project = optionalText(candidate.project, 1000);

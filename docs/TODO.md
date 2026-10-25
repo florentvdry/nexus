@@ -58,16 +58,16 @@ Dernière mise à jour : 25/10/2026, après les commits de la session (langage m
 - [ ] Texte sélectionné : pas fait.
 - [ ] Mise à jour Windows dans les alertes : pas faite.
 - [ ] Contrôle `.cmd` de Claude Code et chemins avec lettre de lecteur : à valider avec un appel réel.
-- [ ] Reconnaissance vocale : le modèle Whisper n'est pas installé sur ce poste ; son installation attend votre accord (téléchargement).
-- [ ] Voix Piper : à écouter, et la voix anglaise à installer.
+- [x] Reconnaissance vocale Whisper (« small » quantifié) : installée avec la voix, aller-retour Kokoro vers Whisper vérifié (ADR-058). Le micro n'a pas été testé.
+- [ ] Voix Kokoro : qualité à écouter (non jugée à l'oreille), voix anglaise à installer et vérifier.
 
 ## 6. Voix
 
-- [x] Voix neurale locale Piper, française, installée après accord, repli sur la voix Windows (ADR-043, ADR-044).
-- [~] Lecture à voix haute par Piper : le moteur et la voix s'installent et répondent ; la qualité n'a pas été écoutée sur ce poste.
+- [x] Voix neurale locale Kokoro, française et anglaise, installée après accord, repli sur la voix Windows (ADR-058).
+- [~] Lecture à voix haute par Kokoro : l'application rend un WAV 24 kHz à la demande ; la qualité n'a pas été écoutée sur ce poste.
 - [ ] Écoute permanente avec mot de réveil « Jarvis » : [ ] décision à prendre avec vous. Principe actuel : pas d'écoute sans activation. Un mot de réveil local et opt-in est possible, mais demande un modèle et un accord explicite.
 - [ ] Barge-in (interrompre la réponse en la parlant) et lecture par segments.
-- [ ] Synthèse vocale Kokoro (demandée, pas faite). Décisions attendues : moteur ONNX via `ort` (télécharge ONNX Runtime au build) ou `tract` (déjà utilisé pour la détection de voix, mais à vérifier sur les opérateurs de Kokoro) ; phonétisation par espeak-ng (licence GPL : installé par vous, ou téléchargé après accord) ; modèle quantifié d'environ 92 Mo, téléchargé seulement après accord.
+- [x] Synthèse vocale Kokoro (demandée) : faite, ADR-058. ONNX Runtime 1.31 et espeak-ng sont téléchargés avec le modèle, sur accord.
 - [ ] Routage vocal « jev » : demande non comprise, à préciser (Jarvis ?).
 - [~] Obsidian pour la mémoire et les rapports : écriture confirmée dans `NEXUS/` (ADR-055), règles de chemin testées ; pas encore vérifiée dans l'application avec un vrai coffre.
 
@@ -121,7 +121,7 @@ Dernière mise à jour : 25/10/2026, après les commits de la session (langage m
 
 - [x] README refait : fonctions réelles, mesures, tests de bout en bout, captures d'écran.
 - [x] Documentation triée : un seul suivi (ce fichier), décisions dans `DECISIONS.md`, permissions dans `PERMISSIONS.md`.
-- [x] `model_download.rs` gardé : il sert au téléchargement des voix Piper (la note précédente était fausse).
+- [x] `model_download.rs` gardé : il sert au téléchargement des voix et des modèles (la note précédente était fausse).
 - [x] Clippy (`-D warnings`), tests Rust et tests TypeScript passent sur ce poste.
 - [ ] Installateur public Windows : `pnpm tauri build` existe, il manque le worker déclaré comme binaire externe, la signature et la publication (geste public, à confirmer).
 - [ ] Mises à jour vérifiées, migrations, récupération après mise à jour.

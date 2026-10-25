@@ -2,7 +2,7 @@ import { spokenSentences } from "./spoken";
 import type { SpeakOptions, SpeechOutput } from "./types";
 
 /**
- * Voix naturelle : le natif synthétise la réponse en WAV (Piper, en local), et l'interface la joue avec l'audio du
+ * Voix naturelle : le natif synthétise la réponse en WAV (Kokoro, en local), et l'interface la joue avec l'audio du
  * navigateur. Sans voix installée, ou si la synthèse échoue, la voix Windows prend le relais : la réponse est toujours lue.
  */
 

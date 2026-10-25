@@ -9,6 +9,7 @@ import { TEST_MODEL } from "../testing/scripted";
 // Ce que le modèle local répond à chaque phrase de ces tests (intention JSON, validée ensuite par le moteur).
 const MODEL_ANSWERS: Record<string, unknown> = {
   "convertis 12 km en miles": { type: "PLUGIN_ACTION", pluginId: "community.exemple.convertisseur", command: "convertit", text: "12 km en miles" },
+  "convertis 3 kg en livres": { type: "PLUGIN_ACTION", pluginId: "community.exemple.convertisseur", text: "3 kg en livres" },
   "installe le plugin https://example.org/ana/verbes.git": { type: "PLUGIN_INSTALL", target: "https://example.org/ana/verbes.git" },
   "installe le plugin community.ana.verbes": { type: "PLUGIN_INSTALL", target: "community.ana.verbes" },
   "installe le plugin community.inconnu.rien": { type: "PLUGIN_INSTALL", target: "community.inconnu.rien" },
@@ -235,6 +236,28 @@ describe("commandes de plugins WebAssembly (phase 5)", () => {
     await engine.submit("convertis 12 km en miles");
     expect(bridge.pluginRun).toHaveBeenCalledWith("community.exemple.convertisseur", "convertit", "12 km en miles");
     expect(assistant(events)).toContain("12,00 km = 7,46 mi");
+  });
+
+  it("complète la commande omise quand le plugin n'en propose qu'une", async () => {
+    const bridge = fakeBridge({
+      pluginPacks: vi.fn(async () => [converter]),
+      pluginRun: vi.fn(async () => ({ caption: "3,00 kg = 6,61 lb", table: null })),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("convertis 3 kg en livres");
+    expect(bridge.pluginRun).toHaveBeenCalledWith("community.exemple.convertisseur", "convertit", "3 kg en livres");
+    expect(assistant(events)).toContain("3,00 kg = 6,61 lb");
+  });
+
+  it("choisit la commande dont un déclencheur figure dans la demande, quand le plugin en propose plusieurs", async () => {
+    const twoCommands = { ...converter, actions: [...converter.actions, { name: "memorise", triggers: ["retiens"], description: "Garde une note" }] };
+    const bridge = fakeBridge({
+      pluginPacks: vi.fn(async () => [twoCommands]),
+      pluginRun: vi.fn(async () => ({ caption: "3,00 kg = 6,61 lb", table: null })),
+    });
+    const { engine } = setup(bridge);
+    await engine.submit("convertis 3 kg en livres");
+    expect(bridge.pluginRun).toHaveBeenCalledExactlyOnceWith("community.exemple.convertisseur", "convertit", "3 kg en livres");
   });
 
   it("ne lance aucune commande quand aucun plugin n'est installé", async () => {
@@ -527,13 +550,13 @@ describe("opérations sur fichiers : confirmation présentée, action native", (
     expect(assistant(events)).toEqual(["Envoyé à la corbeille : /home/ana/Documents/vieux.txt"]);
   });
 
-  it("annonce qu'une confirmation attend, avec son titre, et renvoie à la fenêtre dédiée : aucune carte ici", () => {
+  it("annonce qu'une confirmation attend, avec son titre, et renvoie au cadre d'autorisation : aucune carte ici", () => {
     const bridge = fakeBridge();
     const { events } = setup(bridge);
     bridge.emitConfirmationNotice({ id: "perm-1", permission: "file.delete", expiresInSecs: 120 });
     expect(assistant(events)).toEqual([
       "Confirmation demandée : Envoyer à la corbeille ?",
-      "Réponds dans la fenêtre de confirmation de NEXUS : rien n'est fait sans ton accord.",
+      "Réponds dans le cadre d'autorisation ci-dessous : rien n'est fait sans ton accord.",
     ]);
     expect(presented(events).filter((content) => content.kind === "confirmation")).toEqual([]);
   });

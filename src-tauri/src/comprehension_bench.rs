@@ -180,4 +180,18 @@ mod tests {
             println!("rapport : {path}");
         }
     }
+
+    /// Diagnostic : la réponse brute du modèle à une demande de plugin, avec la ligne des commandes installées.
+    #[test]
+    #[ignore = "exige Ollama et NEXUS_BENCH_MODEL : affiche la réponse brute"]
+    fn plugin_routing_probe_prints_the_raw_answer() {
+        let model = std::env::var("NEXUS_BENCH_MODEL").expect("définir NEXUS_BENCH_MODEL");
+        let commands = "Commandes des plugins installées (PLUGIN_ACTION : pluginId, command, text) : community.exemple.convertisseur / convertit (ex. : convertis, convertir). Si une de ces commandes correspond à la demande (une conversion d'unités, par exemple), réponds PLUGIN_ACTION avec son pluginId, son command, et text = la partie de la demande qui suit le mot de la commande (« 12 km en miles »). N'invente jamais une commande absente de cette liste.".to_string();
+        for text in ["Renomme nexus-e2e-a.txt en nexus-e2e-renomme.txt", "convertis 12 km en miles"] {
+            let with_plugin = ollama::classify_at(ollama::ENDPOINT, &model, text, std::slice::from_ref(&commands));
+            let without = ollama::classify_at(ollama::ENDPOINT, &model, text, &[]);
+            println!("{text} => avec plugin: {with_plugin:?}");
+            println!("{text} => sans plugin: {without:?}");
+        }
+    }
 }

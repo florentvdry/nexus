@@ -329,6 +329,8 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 
 ## ADR-043 — Voix naturelle locale : Piper, installé avec accord, repli sur la voix Windows
 
+*Statut : remplacée par ADR-058 (Kokoro et Whisper). Le texte ci-dessous est gardé pour l'historique.*
+
 - **Choix** : Piper (moteur neural hors ligne, rhasspy/piper 2023.11.14-2, Windows x64) et la voix française `fr_FR-siwis-medium` (Hugging Face, 63 Mo). Rien n'est envoyé en ligne au moment de parler.
 - **Installation** : téléchargée seulement après accord, dans `%APPDATA%\fr.nexus.assistant\voices\` (moteur dans `piper\piper\`, voix à la racine du dossier). Aucune installation système.
 - **Fonctionnement** : la réponse est nettoyée (`src/core/voice/spoken.ts`), envoyée au moteur par son entrée standard, et rendue en WAV. L'interface la joue par Web Audio, qui n'est pas bloquée par la CSP. Le chemin du moteur et de la voix est fixe côté Rust : l'interface ne transmet que le texte et la vitesse.
@@ -431,3 +433,26 @@ Apache-2.0). Les composants vocaux de la phase 2 devront être vérifiés indivi
 - **Constat** : après « ferme la fenêtre notes », NEXUS propose plusieurs fenêtres, et la réponse « 1 » était réécrite en « ferme la fenêtre #<identifiant> », puis relue par le modèle. La probe a reçu « Fenêtre fermée. », la réponse de `CLOSE_WINDOW` (la fenêtre flottante de NEXUS), sans carte de confirmation : la phrase a donc été lue comme « ferme cette fenêtre », et la fenêtre visée n'a jamais été proposée à la confirmation.
 - **Décision** : une option de question porte l'intention déjà décidée (`WINDOW_CLOSE` ou `WINDOW_FOCUS` avec `#identifiant`). Le moteur l'exécute directement, sans repasser par le modèle. Le texte de l'option reste pour le journal et l'affichage.
 - **Garanties** : test de régression qui fait lire le choix au modèle comme « ferme cette fenêtre » : seule la fenêtre choisie est fermée, après confirmation. Les options sans intention (fichiers) gardent le passage par le modèle.
+## ADR-058 — Voix naturelle : Kokoro pour la synthèse, Whisper pour la reconnaissance, installés sur accord
+
+- **Choix** : Kokoro (Apache-2.0), modèle quantifié `onnx-community/Kokoro-82M-v1.0-ONNX` (92 Mo), voix française `ff_siwis` et anglaise `af_heart`. Whisper (MIT), modèle « small » quantifié 5 bits (190 Mo). Ils remplacent Piper (ADR-043, ADR-044).
+- **Moteur** : ONNX Runtime 1.31.0 (MIT), chargé à l'exécution avec `ort` 2.0.0-rc.15 (`load-dynamic`). Seules `onnxruntime.dll` et `onnxruntime_providers_shared.dll` sont gardées de l'archive officielle (83 Mo). La phonétique vient d'espeak-ng (GPL-3.0) : sa bibliothèque et ses données sont prises dans l'archive du moteur Piper, téléchargée, vérifiée puis utilisée à l'exécution. NEXUS ne redistribue rien de tout cela.
+- **Pourquoi pas autre chose** : `tract` ne sait pas exécuter le modèle quantifié (opérateur `DynamicQuantizeLSTM` absent) ni le modèle complet (échec sur `STFT`). L'ONNX Runtime 1.14 de l'archive Piper est trop ancien pour Kokoro. Le modèle complet (325 Mo) dépasse la taille approuvée. Le modèle `base` de Whisper est plus faible en français.
+- **Installation** : un clic sur « Installer » par langue. Environ 390 Mo la première fois (Kokoro 92, runtime 83, espeak 22, Whisper 190), puis 0,5 Mo par langue suivante. Chaque fichier vient d'une adresse HTTPS fixée et n'est utilisé qu'après vérification de sa somme SHA-256. Tout est rangé sous `%APPDATA%\fr.nexus.assistant\voices\` et `models\`.
+- **Mesures** (ce poste, processeur) : chargement de la session 1,4 s ; 1,42 s d'audio synthétisés en 0,4 s. Depuis l'application, « Bonjour, je suis NEXUS. » rend un WAV 24 kHz. Aller-retour : Kokoro dit « Lance Discord. », Whisper le reconnaît (« discord », langue forcée en français).
+- **Limites** : la qualité de la voix n'a pas été jugée à l'oreille. La voix anglaise n'a pas été vérifiée. Les audios de `tests/fixtures` sont synthétiques (espeak, voix robotique) : le modèle « small » les transcrit mal. Le test qui fait foi est l'aller-retour Kokoro vers Whisper. Les anciens fichiers Piper restent dans `voices\` et ne servent plus : à supprimer à la main.
+- **Garanties** : la synthèse est locale, et rien n'est envoyé en ligne au moment de parler.
+
+## ADR-059 — Routage des demandes de plugin : le modèle ne choisit que ce qui est possible
+
+- **Constat** : « convertis 12 km en miles » était classé CLIPBOARD_ACTION (traduction du presse-papiers). La validation le rejetait, la demande ne nommant pas le presse-papiers, et NEXUS répondait « Je n'ai pas compris ». Le texte transmis au plugin était en outre la phrase entière, alors que le convertisseur attend « 12 km en miles ».
+- **Décision** : (1) CLIPBOARD_ACTION n'est pas une réponse possible du schéma tant que la demande ne nomme pas le presse-papiers. (2) La consigne décrit PLUGIN_ACTION, avec un exemple, et `text` est la partie qui suit le mot de commande. (3) Si le modèle omet la commande et que le plugin n'en propose qu'une, le moteur la complète (`onlyCommandOf`). Plusieurs commandes : rien n'est deviné.
+- **Garanties** : tests du schéma (CLIPBOARD_ACTION absent ou présent selon la demande), de la validation (commande omise acceptée), et du moteur (commande complétée et exécutée). Sonde réelle : PLUGIN_ACTION, pluginId exact, text « 12 km en miles ».
+- **Limite** : à confirmer par le parcours e2e complet.
+## ADR-060 — Demandes d'autorisation dans un cadre de l'interface ; fenêtres redimensionnables
+
+- **Décision** : les demandes d'autorisation ne s'ouvrent plus dans une seconde fenêtre. Elles apparaissent dans un cadre centré sur l'interface principale, avec le titre, les paramètres, « toujours autoriser » si la règle le permet, et Autoriser / Refuser. Fermer le cadre refuse la demande. Les fenêtres de résultat se redimensionnent par la poignée du coin bas droit ; la taille minimale et les limites de l'écran s'appliquent (`resizeRect`).
+- **Garantie perdue (assumée)** : avant, seule une fenêtre séparée pouvait approuver une action ; l'interface principale ne le pouvait pas, même si du code y était injecté. Désormais l'interface principale répond. Restent : la CSP (pas de script en ligne, pas d'évaluation de chaîne), le texte affiché jamais interprété comme du HTML, et les commandes de réponse réservées à la fenêtre `main`. Une injection de script dans l'interface principale pourrait donc répondre à une demande. Un canal de réponse séparé remettrait cette garantie, à reconsidérer si l'interface doit afficher du contenu non maîtrisé en HTML.
+- **Mode discret** : il masque les fenêtres, jamais une demande. Le cadre reste visible, pour que la décision reste toujours possible.
+- **Vérification** : `grants.rs` (seule la fenêtre `main` répond ; une seule capacité, pour `main`), tests de redimensionnement (taille minimale, limites de l'écran, premier plan), et sur l'application : la demande de renommage affiche le cadre avec tous ses paramètres ; une poignée glissée de +100 × +60 agrandit la fenêtre de 342 × 134 à 442 × 194.
+

@@ -18,11 +18,10 @@ export default defineConfig({
     target: "es2022",
     outDir: "dist",
     emptyOutDir: true,
-    // Deux pages : l'interface principale, et la fenêtre de confirmation, seule à pouvoir répondre aux demandes.
+    // Une seule page : les demandes de confirmation s'affichent dans l'interface principale.
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
-        confirm: fileURLToPath(new URL("./confirm.html", import.meta.url)),
       },
     },
   },

@@ -36,7 +36,7 @@ async function step(app, name, body) {
   }
 }
 
-/** Répond à la prochaine demande de confirmation, dans la fenêtre dédiée. */
+/** Répond à la prochaine demande de confirmation, dans le cadre d'autorisation. */
 async function answerConfirmation(app, approve) {
   const text = await app.waitForConfirmation();
   await app.clickButton(approve ? "Autoriser" : "Refuser", app.confirm);
@@ -191,7 +191,7 @@ const scenarios = {
       const text = await answerConfirmation(app, true);
       await shot(app, "11-confirmation-fermer-fenetre", app.confirm);
       await sleep(1500);
-      app.record("fenêtres : confirmation affichée dans la fenêtre dédiée", /Autoriser/.test(text), text.slice(0, 160));
+      app.record("fenêtres : confirmation affichée dans le cadre d'autorisation", /Autoriser/.test(text), text.slice(0, 160));
       // Plusieurs fenêtres Bloc-notes partagent un processus : on compte les fenêtres listées, pas les processus.
       app.record("fenêtres : une fenêtre de moins après accord", windowCount(await app.ask("Liste mes fenêtres")) === before - 1);
     });
@@ -344,9 +344,12 @@ const scenarios = {
     });
     const plugin = join(ROOT, "examples", "plugins", "community.exemple.convertisseur");
     await step(app, "plugins : installation du convertisseur, deux accords", async () => {
-      await app.ask("installe le plugin " + plugin);
+      const asked = await app.ask("installe le plugin " + plugin);
       await approveAll(app);
       await sleep(1500);
+      // Sans carte d'accord, rien n'est installé : la liste le dit, et l'échec apparaît au lieu d'être silencieux.
+      const listed = await app.ask("liste mes plugins");
+      if (!/1 plugin/.test(listed.join(" "))) throw new Error("installation non réalisée · réponse : " + asked.join(" | ").slice(0, 160));
     });
     await step(app, "plugins : convertisseur (WebAssembly)", async () => {
       const answer = await app.ask("convertis 12 km en miles");

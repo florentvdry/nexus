@@ -77,16 +77,13 @@ approbation automatique est annoncée dans la conversation, journalisée, et cha
 
 - Clic sur le bouton micro, ou raccourci global `Ctrl+Alt+Espace` (il peut déjà être pris par une autre application). La saisie texte reste disponible.
 - Reconnaissance hors ligne avec whisper.cpp et Silero VAD : aucun audio n'est envoyé à un service externe.
-- Lecture à voix haute avec une voix neurale locale (Piper). La voix française s'installe depuis les réglages vocaux, sur
-  votre clic. Sans cette voix, ou pour l'anglais, la voix installée sur Windows lit la réponse.
+- Lecture à voix haute avec Kokoro, une synthèse neuronale locale. Reconnaissance avec Whisper. La voix française et la
+  reconnaissance s'installent depuis les réglages vocaux, sur votre clic, en une fois (environ 390 Mo). Sans elles, la voix
+  installée sur Windows lit la réponse.
 - Langue automatique, ou français ou anglais imposé.
 - Pas de mot de réveil : l'écoute ne s'ouvre que sur votre action.
 
-**Modèle de reconnaissance** : il n'est pas inclus dans NEXUS. Téléchargez `ggml-base.bin` (multilingue, environ 148 Mo)
-depuis le dépôt officiel de whisper.cpp, puis placez-le à l'emplacement affiché dans les réglages vocaux :
-
-- Windows : `%APPDATA%\fr.nexus.assistant\models\ggml-base.bin`
-- Autre : valeur de la variable d'environnement `NEXUS_WHISPER_MODEL`, si elle est définie.
+**Modèles** : rien n'est inclus dans NEXUS. Le clic sur « Installer » télécharge depuis les dépôts officiels (GitHub, Hugging Face), vérifie chaque fichier par sa somme SHA-256, puis range les fichiers dans `%APPDATA%\fr.nexus.assistant\`. Les versions utilisées sont décrites dans [ADR-058](docs/DECISIONS.md).
 
 ## Thème
 
@@ -136,9 +133,9 @@ Les vérifications automatiques et le parcours de bout en bout sont décrits dan
 
 ### Tests de bout en bout
 
-Dernier passage sur ce poste, avec l'application de bureau réelle et le modèle `qwen2.5:7b` : **43 vérifications sur 44 réussies**. Les parcours couvrent le premier lancement, la conversation, les informations système, les fenêtres, les fichiers, l'agenda, la mémoire, la planification, le web, la lecture d'écran, l'OSINT, les connecteurs, les plugins et les réglages.
+Dernier passage complet sur ce poste, avec l'application de bureau réelle et le modèle `qwen2.5:7b` : **42 vérifications sur 44 réussies**. Les parcours couvrent le premier lancement, la conversation, les informations système, les fenêtres, les fichiers, l'agenda, la mémoire, la planification, le web, la lecture d'écran, l'OSINT, les connecteurs, les plugins et les réglages.
 
-Une vérification échoue : la conversion par le plugin installé (« convertis 12 km en miles »). L'installation et la désinstallation réussissent, et la commande du plugin figure dans le contexte donné au modèle, qui répond pourtant « Je n'ai pas compris ». La cause n'est pas encore isolée : il faut examiner la réponse du modèle, pas l'installation.
+Les deux vérifications en échec, la conversion par plugin et le renommage de fichier, ont été corrigées depuis, sans nouveau passage complet. La conversion déduit maintenant la commande des déclencheurs que le plugin déclare, quand le modèle l'omet. Le renommage échouait par intermittence ; une relecture de la demande a produit la confirmation attendue, mais il n'a pas été relancé de bout en bout.
 
 Le détail de chaque vérification est dans `e2e/results.json` ; les captures sont dans [docs/screenshots/](docs/screenshots/).
 

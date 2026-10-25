@@ -60,7 +60,7 @@ export type AgentEvent =
   | { kind: "error"; message: string }
   | { kind: "cancelled" };
 
-/** Avis envoyé à l'interface principale : une confirmation attend dans la fenêtre dédiée. Sans paramètres ni réponse. */
+/** Avis envoyé à l'interface principale : une confirmation attend dans le cadre d'autorisation. Sans paramètres ni réponse. */
 export interface ConfirmationNotice {
   id: string;
   permission: string;
@@ -215,7 +215,7 @@ export interface NativeBridge {
   runAgent(runId: string, project: string, prompt: string): Promise<void>;
   cancelAgent(runId: string): Promise<boolean>;
   onAgentEvent(listener: (runId: string, event: AgentEvent) => void): () => void;
-  /** L'interface principale est avertie qu'une confirmation attend. Elle ne peut pas y répondre : seule la fenêtre dédiée le peut. */
+  /** L'interface principale est avertie qu'une confirmation attend ; c'est elle qui l'affiche et y répond. */
   onConfirmationNotice(listener: (notice: ConfirmationNotice) => void): () => void;
   /** Autorisations mémorisées et leur révocation. Réservé à l'interface. */
   listRules(): Promise<PermissionRule[]>;
@@ -265,7 +265,7 @@ export interface NativeBridge {
   webSearch(question: string): Promise<WebSearchHit[]>;
   webRead(url: string): Promise<WebPage>;
   /**
-   * Voix naturelle locale (Piper), une par langue : présence, installation sur accord de l'utilisateur, synthèse en WAV
+   * Voix naturelle locale (Kokoro), une par langue : présence, installation sur accord de l'utilisateur, synthèse en WAV
    * (base64). La langue est celle de la réponse.
    */
   speechNeuralAvailable(locale: string): Promise<boolean>;

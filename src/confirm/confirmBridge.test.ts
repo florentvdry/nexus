@@ -6,7 +6,7 @@ import { answerConfirmation, pendingConfirmations } from "./confirmBridge";
 vi.mock("../core/native/tauri-adapter", () => ({ callNative: vi.fn(async () => undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
-describe("pont de la fenêtre de confirmation", () => {
+describe("pont des demandes d'autorisation", () => {
   beforeEach(() => {
     vi.mocked(callNative).mockClear();
   });

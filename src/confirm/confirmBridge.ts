@@ -1,6 +1,6 @@
 /**
- * Ponts de la fenêtre de confirmation. Seule cette fenêtre appelle `permission_answer` : le natif refuse la réponse de
- * toute autre fenêtre. Les demandes complètes ne viennent qu'ici.
+ * Ponts des demandes d'autorisation. Seule l'interface principale appelle `permission_answer` : le natif refuse la réponse
+ * de toute autre fenêtre. Les demandes complètes ne viennent qu'ici.
  */
 import { listen } from "@tauri-apps/api/event";
 

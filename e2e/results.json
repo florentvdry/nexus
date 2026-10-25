@@ -32,7 +32,7 @@
   {
     "name": "conversation : heure",
     "ok": true,
-    "detail": "Il est 21:50."
+    "detail": "Il est 22:56."
   },
   {
     "name": "conversation : demande incomprise, sans invention",
@@ -42,17 +42,17 @@
   {
     "name": "conversation : réponse en anglais",
     "ok": true,
-    "detail": "It is 21:50."
+    "detail": "It is 22:56."
   },
   {
     "name": "système : informations",
     "ok": true,
-    "detail": "Processeur à 18 %, mémoire utilisée à 53 %."
+    "detail": "Processeur à 22 %, mémoire utilisée à 54 %."
   },
   {
     "name": "processus : liste",
     "ok": true,
-    "detail": "27 fenêtre(s) ouverte(s)."
+    "detail": "11 fenêtre(s) ouverte(s)."
   },
   {
     "name": "applications : Bloc-notes lancé (vérifié dans le système)",
@@ -62,7 +62,7 @@
   {
     "name": "fenêtres : liste",
     "ok": true,
-    "detail": "27 fenêtre(s) ouverte(s)."
+    "detail": "12 fenêtre(s) ouverte(s)."
   },
   {
     "name": "fenêtres : confirmation affichée dans la fenêtre dédiée",
@@ -85,9 +85,9 @@
     "detail": "3 fichier(s) trouvé(s)."
   },
   {
-    "name": "fichiers : renommage effectué après accord",
-    "ok": true,
-    "detail": ""
+    "name": "fichiers : renommer après accord",
+    "ok": false,
+    "detail": "texte absent après 60000 ms : /Autoriser|Refuser/ · réponse de NEXUS : Je n'ai pas compris « Renomme nexus-e2e-a.txt en nexus-e2e-renomme.txt ». Essaie par exemple : « Affiche une photo de Macron », « Qui est Marie Curie ? », « Rappelle-moi demain à 9 h de… » ou « Lance "
   },
   {
     "name": "fichiers : suppression refusée, fichier conservé",
@@ -122,7 +122,7 @@
   {
     "name": "planification : rappel créé",
     "ok": true,
-    "detail": "Programmé : « rappelle-moi demain à 9 h de sortir les poubelles », 26/10/2026 09:00."
+    "detail": "Programmé : « sortir les poubelles », 26/10/2026 09:00."
   },
   {
     "name": "web : fiche Wikipédia",
@@ -152,7 +152,7 @@
   {
     "name": "OSINT : rapport sur un domaine",
     "ok": true,
-    "detail": "Indiquez le chemin complet du fichier à afficher : lecteur, dossiers et nom."
+    "detail": "9 élément(s) trouvé(s). Résultats partiels : 1 erreur(s) de source."
   },
   {
     "name": "connecteurs : proposition de connecteur",
@@ -162,12 +162,12 @@
   {
     "name": "plugins : liste",
     "ok": true,
-    "detail": "1 plugin(s) installé(s)."
+    "detail": "Aucun plugin installé."
   },
   {
     "name": "plugins : conversion par le plugin",
     "ok": false,
-    "detail": "Je n'ai pas compris « convertis 12 km en miles ». Essaie par exemple : « Affiche une photo de Macron », « Qui est Marie Curie ? », « Rappelle-moi demain à 9 h de… » ou « Lance le Bloc-notes »."
+    "detail": "Je n'ai pas compris « 12 km en miles ». Essaie par exemple : « Affiche une photo de Macron », « Qui est Marie Curie ? », « Rappelle-moi demain à 9 h de… » ou « Lance le Bloc-notes »."
   },
   {
     "name": "réglages : volet « Général »",

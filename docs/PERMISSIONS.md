@@ -94,15 +94,21 @@ une image ou lire un média que NEXUS a déjà lu. Les PDF passent par pdf.js, e
 Tests : chaque commande exposée figure dans `POLICIES` et inversement ; la table des permissions correspond aux
 `plugin.json` ; la CSP interdit les scripts en ligne et l'évaluation de chaîne ; la capacité Tauri ne vise que `main`.
 
-**Fenêtre de confirmation, séparée.** Les demandes de confirmation ne s'affichent que dans une seconde fenêtre, `confirm`
-(`tauri.conf.json`, et sa capacité dans `capabilities/confirmation.json`). Seule cette fenêtre peut répondre
-(`permission_answer`, `confirmation_pending`). L'interface principale reçoit seulement un avis : « une confirmation attend »,
-sans paramètres ni boutons. Elle ne peut donc pas approuver sa propre demande. La fenêtre se cache au lieu de se fermer ;
-une demande sans fenêtre de confirmation échoue, et l'action n'a pas lieu.
+**Demandes d'autorisation, dans un cadre de l'interface.** Les demandes s'affichent dans un cadre centré sur la fenêtre
+principale, comme une fenêtre, sans fenêtre séparée. Seule l'interface principale peut y répondre (`permission_answer`,
+`confirmation_pending`). Fermer le cadre refuse la demande. Une demande qui ne trouve aucune interface pour la recevoir
+échoue, et l'action n'a pas lieu.
+
+**Changement de garantie (demandé pour l'ergonomie).** Avant, seule une fenêtre séparée pouvait approuver une action : même
+un script injecté dans l'interface principale ne le pouvait pas. Désormais, l'interface principale répond elle-même. Ce qui
+reste : la CSP interdit les scripts en ligne et l'évaluation de chaîne, le texte affiché n'est jamais interprété comme du
+HTML, et les commandes de réponse ne sont accessibles qu'à la fenêtre `main`. Une injection de script dans l'interface
+principale pourrait donc répondre à une demande. Si ce risque doit être couvert à nouveau, il faudra un canal de réponse
+séparé de l'interface principale.
 
 **Limites restantes.** Le JavaScript de la fenêtre principale peut déclencher des demandes, lire et révoquer les
-autorisations mémorisées, et lire les réglages. Il ne peut ni approuver une demande, ni modifier ce qui est affiché dans la
-fenêtre de confirmation. Cette fenêtre n'affiche que du texte (aucun HTML), et son JavaScript est celui de NEXUS.
+autorisations mémorisées, lire les réglages, et répondre aux demandes affichées dans son cadre. Le cadre n'affiche que du
+texte (aucun HTML).
 
 Il n'existe plus de pont par plugin : chaque commande porte sa politique (voir ci-dessus). « Demandé par » affiche
 l'identité native de la capacité appelée, par exemple `actions.file-operations`.
@@ -209,7 +215,7 @@ Ces fonctions sont ajoutées après la phase 4 (ADR-035 à ADR-044). Aucune n'ag
 | Capture d'écran | Une seule capture de l'écran principal, en mémoire, jamais enregistrée. Elle est lue par un modèle de vision local et affichée à l'utilisateur. | « oui » demandé à chaque question |
 | Agenda | Lecture seule d'un fichier `.ics` désigné dans les réglages (2 Mo au plus). | Choix du fichier dans les réglages |
 | Messages | Un brouillon est affiché avec un bouton « Copier ». NEXUS n'envoie rien. | Aucun envoi possible |
-| Voix neurale (Piper) | Téléchargement du moteur et de la voix française depuis des adresses fixes, avec somme SHA-256 vérifiée. | Clic sur « Installer » |
+| Voix naturelle (Kokoro, Whisper) | Téléchargement du modèle de synthèse, du runtime ONNX, de la phonétique espeak-ng et du modèle de reconnaissance, depuis des adresses fixes, avec somme SHA-256 vérifiée (environ 390 Mo). | Clic sur « Installer », une fois par langue |
 | Ollama et modèle de langage | Installation d'Ollama par `winget` et du modèle choisi. NEXUS ne parle qu'à `127.0.0.1:11434`. | Accord au premier lancement |
 | NVIDIA NIM (option) | Désactivé par défaut. Avec une clé fournie par l'utilisateur, la demande part à `integrate.api.nvidia.com`, seul hôte autorisé ; le reste du contexte seulement si l'utilisateur l'a coché. La clé est chiffrée par Windows (DPAPI) et ne quitte pas le natif. | Activation, clé et cases dans les réglages |
 | Démarrage avec Windows | Écrit la valeur `NEXUS` dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Sans droits administrateur, jamais à l'installation. | Case cochée dans les réglages |

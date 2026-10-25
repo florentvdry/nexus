@@ -99,8 +99,11 @@ pub fn valid_model_name(name: &str) -> bool {
 }
 
 /// Schéma imposé à la sortie : un objet dont `type` est une intention connue (ou `UNKNOWN`, que les règles traitent).
-fn intent_schema() -> Value {
-    let mut types: Vec<&str> = INTENT_TYPES.to_vec();
+fn intent_schema(text: &str) -> Value {
+    // Sans mot de presse-papiers dans la demande, CLIPBOARD_ACTION n'est pas une réponse possible : le modèle
+    // choisit alors une autre intention (une conversion d'unités, par exemple, relève d'un plugin).
+    let clipboard_named = mentions_clipboard(text);
+    let mut types: Vec<&str> = INTENT_TYPES.iter().copied().filter(|kind| clipboard_named || *kind != "CLIPBOARD_ACTION").collect();
     types.push("UNKNOWN");
     json!({
         "type": "object",
@@ -244,7 +247,14 @@ pub fn parse_tags(text: &str) -> Result<Vec<InstalledModel>, AdapterError> {
 
 /// Demande au modèle une intention JSON pour `text`. Renvoie le JSON brut, à valider ensuite.
 pub fn classify_at(endpoint: &str, model: &str, text: &str, memories: &[String]) -> Result<Value, AdapterError> {
-    chat_json(endpoint, model, intent_schema(), &system_prompt(memories), text, delay_for(Budget::Classify))
+    chat_json(endpoint, model, intent_schema(text), &system_prompt(memories), text, delay_for(Budget::Classify))
+}
+
+/// Le presse-papiers n'est nommé que par ces mots : sans eux, la demande ne peut pas être une action sur le presse-papiers.
+/// Même règle que dans `validate.ts`.
+fn mentions_clipboard(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("presse") || lower.contains("clipboard")
 }
 
 /// Réponse JSON libre du modèle, sans schéma d'intention : sert à choisir un outil parmi ceux d'un connecteur.
@@ -650,10 +660,20 @@ mod tests {
 
     #[test]
     fn the_schema_only_allows_known_intents_and_unknown() {
-        let schema = intent_schema();
+        let schema = intent_schema("convertis 12 km en miles");
         let allowed: Vec<&str> = schema["properties"]["type"]["enum"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert!(allowed.contains(&"OPEN_APPLICATION"));
         assert!(allowed.contains(&"UNKNOWN"));
         assert!(!allowed.contains(&"UNSUPPORTED"));
+    }
+
+    #[test]
+    fn the_clipboard_action_is_only_offered_when_the_request_names_the_clipboard() {
+        let allowed = |text: &str| -> Vec<String> {
+            intent_schema(text)["properties"]["type"]["enum"].as_array().unwrap().iter().filter_map(Value::as_str).map(str::to_string).collect()
+        };
+        assert!(!allowed("convertis 12 km en miles").contains(&"CLIPBOARD_ACTION".to_string()));
+        assert!(allowed("traduis le presse-papiers").contains(&"CLIPBOARD_ACTION".to_string()));
+        assert!(allowed("summarize the clipboard").contains(&"CLIPBOARD_ACTION".to_string()));
     }
 }

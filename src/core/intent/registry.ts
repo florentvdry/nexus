@@ -38,6 +38,18 @@ export function pluginCommandsForModel(): string[] {
   return packActions.map((action) => `${action.pluginId} / ${action.command} (ex. : ${action.triggers.join(", ")})`);
 }
 
+/**
+ * La commande d'un plugin installé quand le modèle l'a omise : la seule commande du plugin, sinon celle dont un
+ * déclencheur déclaré par le plugin figure dans la demande (« convertis », « convertir »). Aucun déclencheur reconnu :
+ * `undefined`, et rien n'est lancé.
+ */
+export function commandFor(pluginId: string, request: string): string | undefined {
+  const commands = packActions.filter((action) => action.pluginId === pluginId);
+  if (commands.length === 1) return commands[0].command;
+  const words = new Set(normalize(request).split(" ").filter(Boolean));
+  return commands.find((action) => action.triggers.some((trigger) => words.has(normalize(trigger))))?.command;
+}
+
 export function registerLanguageDictionary(locale: string, dictionary: LanguageDictionary): void {
   dictionaries.set(locale, dictionary);
 }

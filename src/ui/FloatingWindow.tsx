@@ -1,7 +1,7 @@
 import { useRef, type PointerEvent } from "react";
 
 import type { OpenWindow } from "../core/presentation/windows";
-import type { Rect } from "../core/presentation/types";
+import type { Rect, Size } from "../core/presentation/types";
 import type { MessageKey } from "../i18n/messages";
 import { PresentedContentView } from "./PresentedContentView";
 import type { ReadFile } from "./viewers/FileView";
@@ -13,6 +13,7 @@ interface FloatingWindowProps {
   /** Lecture d'un fichier pour la visionneuse. */
   readFile?: ReadFile;
   onMove: (id: string, rect: Rect) => void;
+  onResize: (id: string, size: Size) => void;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
 }
@@ -24,9 +25,42 @@ interface DragState {
   origin: Rect;
 }
 
-export function FloatingWindow({ item, zIndex, t, readFile, onMove, onFocus, onClose }: FloatingWindowProps) {
+interface ResizeState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  origin: Size;
+}
+
+export function FloatingWindow({ item, zIndex, t, readFile, onMove, onResize, onFocus, onClose }: FloatingWindowProps) {
   const drag = useRef<DragState | null>(null);
+  const resize = useRef<ResizeState | null>(null);
   const { rect } = item;
+
+  // La poignée du coin redimensionne la fenêtre ; la taille minimale et les limites de l'écran sont appliquées par le moteur.
+  const startResize = (event: PointerEvent<HTMLElement>) => {
+    resize.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin: { width: rect.width, height: rect.height },
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+  };
+
+  const moveResize = (event: PointerEvent<HTMLElement>) => {
+    const current = resize.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    onResize(item.id, {
+      width: current.origin.width + event.clientX - current.startX,
+      height: current.origin.height + event.clientY - current.startY,
+    });
+  };
+
+  const endResize = (event: PointerEvent<HTMLElement>) => {
+    if (resize.current?.pointerId === event.pointerId) resize.current = null;
+  };
 
   const startDrag = (event: PointerEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
@@ -70,6 +104,16 @@ export function FloatingWindow({ item, zIndex, t, readFile, onMove, onFocus, onC
       <div className="body">
         <PresentedContentView content={item.content} readFile={readFile} t={t} />
       </div>
+      <span
+        className="resize-grip"
+        title={t("ui.resize")}
+        aria-label={t("ui.resize")}
+        role="img"
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+      />
     </section>
   );
 }

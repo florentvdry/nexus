@@ -100,4 +100,37 @@ mod tests {
         assert_eq!(english.language.as_deref(), Some("en"));
         assert!(english.text.to_lowercase().contains("notepad"), "transcription : {}", english.text);
     }
+
+    /// Les audios de `tests/fixtures` sont synthétiques (espeak, voix robotique) : ce test-ci utilise une vraie voix.
+    /// Kokoro dit la phrase, Whisper doit la reconnaître. Exige la voix installée et le modèle Whisper.
+    #[test]
+    #[ignore = "exige la voix installée (NEXUS_VOICE_ROOT) et le modèle Whisper (NEXUS_WHISPER_MODEL)"]
+    fn live_whisper_understands_kokoro_speech() {
+        let root = std::path::PathBuf::from(std::env::var("NEXUS_VOICE_ROOT").expect("NEXUS_VOICE_ROOT défini"));
+        let model = std::env::var("NEXUS_WHISPER_MODEL").expect("NEXUS_WHISPER_MODEL défini");
+        let wav = crate::voice_tts::synthesize_at(&root, "Lance Discord.", 1.0, "fr").unwrap();
+        let mut reader = hound::WavReader::new(std::io::Cursor::new(wav)).unwrap();
+        let rate = reader.spec().sample_rate;
+        let samples: Vec<f32> = reader.samples::<i16>().map(|sample| f32::from(sample.unwrap()) / f32::from(i16::MAX)).collect();
+        let pcm = resample_linear(&samples, rate, 16_000);
+
+        let transcriber = WhisperTranscriber::load(Path::new(&model)).unwrap();
+        let transcript = transcriber.transcribe(&pcm, Some("fr")).unwrap();
+        assert!(transcript.text.to_lowercase().contains("discord"), "transcription : {}", transcript.text);
+    }
+
+    /// Interpolation linéaire : suffisant pour la reconnaissance de la parole, sans dépendance supplémentaire.
+    fn resample_linear(samples: &[f32], from: u32, to: u32) -> Vec<f32> {
+        let ratio = f64::from(from) / f64::from(to);
+        let length = (samples.len() as f64 / ratio) as usize;
+        (0..length)
+            .map(|index| {
+                let position = index as f64 * ratio;
+                let base = position.floor() as usize;
+                let next = (base + 1).min(samples.len() - 1);
+                let fraction = (position - base as f64) as f32;
+                samples[base] * (1.0 - fraction) + samples[next] * fraction
+            })
+            .collect()
+    }
 }

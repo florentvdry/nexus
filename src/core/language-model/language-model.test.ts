@@ -82,6 +82,16 @@ describe("champs donnés sous un autre nom", () => {
     expect(validateModelIntent({ type: "CLIPBOARD_ACTION", action: "translate" }, "traduis le presse-papiers")).toEqual({ type: "CLIPBOARD_ACTION", action: "translate" });
   });
 
+  it("accepte une action de plugin sans commande : le moteur la complète d'après le plugin", () => {
+    expect(validateModelIntent({ type: "PLUGIN_ACTION", pluginId: "community.exemple.convertisseur", text: "3 kg en livres" })).toEqual({
+      type: "PLUGIN_ACTION",
+      pluginId: "community.exemple.convertisseur",
+      command: "",
+      text: "3 kg en livres",
+    });
+    expect(validateModelIntent({ type: "PLUGIN_ACTION", pluginId: "community.exemple.convertisseur" })).toBeNull();
+  });
+
   it("prend le nouveau nom dans la demande quand la réponse ne le donne pas", () => {
     expect(validateModelIntent({ type: "FILE_RENAME", path: "nexus-e2e-a.txt" }, "Renomme nexus-e2e-a.txt en nexus-e2e-renomme.txt")).toEqual({ type: "FILE_RENAME", path: "nexus-e2e-a.txt", newName: "nexus-e2e-renomme.txt" });
     expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt" }, "rename a.txt to final.pdf")).toEqual({ type: "FILE_RENAME", path: "a.txt", newName: "final.pdf" });

@@ -1,7 +1,7 @@
 import type { SourceRef } from "../capabilities/types";
-import { type PlacementOptions, DEFAULT_PLACEMENT, type PlacementScene, fitIntoBounds, placeWindow, reflowWindows } from "./placement";
+import { type PlacementOptions, DEFAULT_PLACEMENT, type PlacementScene, fitIntoBounds, placeWindow, reflowWindows, resizeRect } from "./placement";
 import { estimateSize } from "./sizing";
-import type { PresentedContent, Rect } from "./types";
+import type { PresentedContent, Rect, Size } from "./types";
 
 export const HISTORY_LIMIT = 20;
 
@@ -107,8 +107,19 @@ export function moveWindow(state: WindowsState, id: string, rect: Rect, context:
   return { ...state, open: [...state.open.filter((entry) => entry.id !== id), moved] };
 }
 
-export function focusWindow(state: WindowsState, id: string): WindowsState {
+/**
+ * Redimensionne une fenêtre à la main. Elle passe au premier plan, et sa taille souhaitée devient la nouvelle taille :
+ * un réajustement de l'écran la respecte.
+ */
+export function resizeWindow(state: WindowsState, id: string, size: Size, context: WindowContext): WindowsState {
   const window = state.open.find((entry) => entry.id === id);
+  if (!window) return state;
+  const rect = resizeRect(window.rect, size, context.scene.viewport, context.options ?? DEFAULT_PLACEMENT);
+  const resized = { ...window, rect, desired: { width: rect.width, height: rect.height } };
+  return { ...state, open: [...state.open.filter((entry) => entry.id !== id), resized] };
+}
+
+export function focusWindow(state: WindowsState, id: string): WindowsState {  const window = state.open.find((entry) => entry.id === id);
   if (!window || state.open[state.open.length - 1] === window) return state;
   return { ...state, open: [...state.open.filter((entry) => entry.id !== id), window] };
 }

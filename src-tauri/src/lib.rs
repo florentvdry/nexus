@@ -20,6 +20,8 @@ pub mod power;
 pub mod resilience;
 pub mod startup;
 pub mod web;
+pub mod espeak;
+pub mod kokoro;
 pub mod voice_tts;
 pub mod plugin_store;
 pub mod plugins;
@@ -32,7 +34,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, GlobalShortcutExt, ShortcutState};
 
 use error::AdapterError;
-use grants::{require, require_confirmation, require_main};
+use grants::{require, require_main};
 use journal::{Journal, JournalEntry};
 use plugin_store::{Installed, PackData, Prepared, Store};
 use std::sync::Arc;
@@ -596,40 +598,25 @@ fn agent_cancel(runs: State<'_, Runs>, run_id: String) -> Result<bool, AdapterEr
     Ok(runs.cancel(&run_id))
 }
 
-/// Seule la fenêtre de confirmation répond aux demandes : l'interface principale ne peut pas approuver une action.
+/// Seule l'interface principale répond aux demandes : la demande s'affiche dans un cadre de cette fenêtre.
 /// `remember` : « toujours autoriser » pour le dossier ou le projet de la demande (refusé pour les actions non mémorisables).
 #[tauri::command]
 fn permission_answer(
-    app: AppHandle,
     broker: State<'_, Broker>,
     webview: tauri::Webview,
     id: String,
     approved: bool,
     remember: Option<bool>,
 ) -> Result<(), AdapterError> {
-    require_confirmation(&webview)?;
-    let answered = broker.answer_with(&id, approved, remember.unwrap_or(false));
-    permissions::hide_confirmation_window_when_idle(&app, broker.inner());
-    answered
+    require_main(&webview)?;
+    broker.answer_with(&id, approved, remember.unwrap_or(false))
 }
 
-/// Demandes qui attendent une réponse, pour la fenêtre de confirmation au moment où elle s'ouvre.
+/// Demandes qui attendent une réponse, pour l'interface principale au moment où elle les affiche.
 #[tauri::command]
 fn confirmation_pending(broker: State<'_, Broker>, webview: tauri::Webview) -> Result<Vec<permissions::PermissionRequest>, AdapterError> {
-    require_confirmation(&webview)?;
+    require_main(&webview)?;
     Ok(broker.pending_requests())
-}
-
-/// La fenêtre de confirmation se cache au lieu de se fermer : elle doit rester prête à recevoir la prochaine demande.
-fn keep_confirmation_window_hidden(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(grants::CONFIRMATION_WINDOW) else { return };
-    let handle = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = handle.hide();
-        }
-    });
 }
 
 /// Autorisations mémorisées, lues par les réglages.
@@ -714,7 +701,6 @@ pub fn run() {
         .plugin(shortcut_plugin())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            keep_confirmation_window_hidden(app.handle());
             register_voice_shortcut(app);
             app.manage(VoiceState::default());
             app.manage(open_broker(app));

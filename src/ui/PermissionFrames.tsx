@@ -4,18 +4,18 @@ import { confirmationContent } from "../core/confirmations/content";
 import type { ConfirmationRequest } from "../core/native/bridge";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { translate } from "../i18n/messages";
-import { ConfirmationCard, type ConfirmationAnswer } from "../ui/PresentedContentView";
-import { answerConfirmation, onConfirmationRequest, pendingConfirmations } from "./confirmBridge";
-import { addRequest, removeRequest } from "./queue";
+import { answerConfirmation, onConfirmationRequest, pendingConfirmations } from "../confirm/confirmBridge";
+import { addRequest, removeRequest } from "../confirm/queue";
+import { ConfirmationCard, type ConfirmationAnswer } from "./PresentedContentView";
 
 /** Délai pendant lequel la réponse reste affichée avant que la demande ne quitte la liste. */
 const STATUS_DELAY_MS = 1200;
 
 /**
- * Fenêtre de confirmation : une carte par demande, avec tous ses paramètres. Une réponse part au natif, qui la vérifie.
- * La fenêtre n'a pas d'autre rôle : elle ne lance aucune action.
+ * Demandes d'autorisation, dans un cadre de l'interface, comme une fenêtre : une par demande, avec tous ses paramètres.
+ * Une réponse part au natif, qui la vérifie. Fermer le cadre refuse la demande.
  */
-export function ConfirmApp({ locale }: { locale: Locale }) {
+export function PermissionFrames({ locale }: { locale: Locale }) {
   const [queue, setQueue] = useState<ConfirmationRequest[]>([]);
   const t = (key: MessageKey) => translate(locale, key);
 
@@ -35,17 +35,27 @@ export function ConfirmApp({ locale }: { locale: Locale }) {
     }
   };
 
-  if (queue.length === 0) {
-    return <p className="confirm-empty">{t("confirm.none")}</p>;
-  }
+  if (queue.length === 0) return null;
   return (
-    <div className="confirm-queue">
+    <div className="permission-frames">
       {queue.map((request) => {
         const content = confirmationContent(request, locale);
         return (
-          <section key={request.id} className="confirm-request" aria-label={content.title}>
-            <h2>{content.title}</h2>
-            <ConfirmationCard content={content} onAnswer={answer} t={t} />
+          <section key={request.id} className="float-window permission-frame" aria-label={content.title}>
+            <header>
+              <span>{content.title}</span>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => void answer(request.id, false)}
+                aria-label={t("confirm.refuse")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="body">
+              <ConfirmationCard content={content} onAnswer={answer} t={t} />
+            </div>
           </section>
         );
       })}

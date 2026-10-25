@@ -1,6 +1,6 @@
 /**
- * Contenu des demandes de confirmation : titres, libellés des lignes et carte présentée dans la fenêtre dédiée.
- * Le moteur n'affiche que l'avis ; la fenêtre de confirmation affiche la carte complète et seule peut répondre.
+ * Contenu des demandes de confirmation : titres, libellés des lignes et carte présentée dans le cadre d'autorisation.
+ * Le moteur n'affiche que l'avis ; le cadre d'autorisation affiche la carte complète, et seule l'interface principale répond.
  */
 import { translate, type Locale, type MessageKey } from "../../i18n/messages";
 import type { ConfirmationRequest } from "../native/bridge";
@@ -53,7 +53,7 @@ export function permissionTitle(locale: Locale, permission: string): string {
   return translate(locale, PERMISSION_TITLE[permission] ?? "confirm.title.generic");
 }
 
-/** Carte de la fenêtre de confirmation : tous les paramètres de la demande, et « toujours autoriser » si permis. */
+/** Carte du cadre d'autorisation : tous les paramètres de la demande, et « toujours autoriser » si permis. */
 export function confirmationContent(request: ConfirmationRequest, locale: Locale): ConfirmationCardContent {
   const t = (key: MessageKey, params?: Record<string, string | number>) => translate(locale, key, params);
   const remember =

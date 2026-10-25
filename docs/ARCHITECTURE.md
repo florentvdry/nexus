@@ -31,7 +31,7 @@ L'analyseur de texte par règles a été retiré (ADR-029) : il ne reste aucune 
 │ nim.rs          NVIDIA NIM, option désactivée par défaut, avec la clé de l'utilisateur    │
 │ web.rs          questions ouvertes, actualités, photos et fiches (sources publiques)      │
 │ screen.rs       capture d'écran de l'écran principal, après confirmation                  │
-│ voice_tts.rs    voix neurale locale (Piper), téléchargée après accord                     │
+│ voice_tts.rs    voix locale (Kokoro), téléchargée après accord                             │
 │ permissions.rs  confirmations natives · grants.rs : table des permissions par appelant    │
 │ memory.rs · schedule.rs · agenda.rs · power.rs · startup.rs · journal.rs · mcp/           │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
@@ -69,7 +69,7 @@ Micro (cpal) ──► 16 kHz mono ──► Silero VAD (tract) ──► Segmen
                                                               ▼
 Frontend : VoiceController ──► Engine.submit(texte, langue de réponse) ──► réponse
                  │                                                          │
-                 └── lecture à voix haute : Piper (voice_tts.rs) si la voix est installée, ◄┘
+                 └── lecture à voix haute : Kokoro (voice_tts.rs) si la voix est installée,◄┘
                      sinon voix système (API Web Speech)
 ```
 
@@ -77,11 +77,11 @@ Frontend : VoiceController ──► Engine.submit(texte, langue de réponse) �
 - Le VAD découpe la parole. Whisper ne reçoit que des énoncés complets, avec 300 ms de silence avant le début.
 - Les événements `listening`, `speech-started`, `transcribing`, `transcript`, `error`, `stopped` pilotent l'orbe et la barre de commande.
 - `VoiceController` (`src/core/voice/controller.ts`) ne connaît ni Tauri ni le DOM. Ses dépendances (entrée, sortie, moteur) sont injectées ; les tests utilisent des doubles nommés.
-- Synthèse : `NeuralSpeechOutput` (`src/core/voice/neural-output.ts`) joue le WAV produit par Piper avec Web Audio.
+- Synthèse : `NeuralSpeechOutput` (`src/core/voice/neural-output.ts`) joue le WAV produit par Kokoro avec Web Audio.
   Le chemin du moteur et de la voix est fixe côté Rust : l'interface ne transmet que le texte et la vitesse.
   Sans voix installée pour la langue de la réponse, la voix système lit la réponse.
 - Langue : Whisper détecte la langue de la voix ; un comptage de mots fréquents sert au texte. Le réglage « automatique » répond dans la langue détectée, les réglages « français » ou « anglais » l'imposent.
-- Les modèles de reconnaissance et de synthèse ne sont jamais téléchargés sans accord. Whisper (`ggml-base.bin`) se place à la main, à l'emplacement `%APPDATA%\fr.nexus.assistant\models\`, ou à celui de `NEXUS_WHISPER_MODEL`. La voix Piper s'installe depuis les réglages vocaux, sur clic.
+- Les modèles de reconnaissance et de synthèse ne sont jamais téléchargés sans accord. Whisper (`ggml-small-q5_1.bin`) et la voix Kokoro s'installent depuis les réglages vocaux, sur clic, dans `%APPDATA%\fr.nexus.assistant\`. `NEXUS_WHISPER_MODEL` pointe un autre modèle Whisper, si besoin.
 
 ## Connecteurs OSINT et isolation
 
@@ -153,14 +153,14 @@ Le DOM n'est lu que par `src/ui/scene.ts`. Le moteur reste testable sans navigat
   - base SQLite du journal des commandes (désactivé par défaut, 500 entrées au plus) ;
   - `mcp/installed.json` : connecteurs MCP installés ; leurs variables sont chiffrées par DPAPI (un ancien fichier en clair est migré) ;
   - `audit/actions.jsonl` : journal d'audit des actions sur les fichiers (empreintes, sans chemin ni contenu, ADR-047) ;
-  - `voices/` : moteur Piper et voix installées, après accord.
+  - `voices/` : espeak, runtime ONNX, Kokoro et voix installés, après accord ; `models/` : Whisper.
 - Dans le stockage local du navigateur : préférence de langue et routines détectées (`nexus.routines.v1`). La clé NVIDIA NIM, si l'option est activée, y est aussi gardée, en clair (à déplacer vers le stockage natif chiffré). Un stockage bloqué désactive simplement la fonctionnalité concernée.
 
 ## Multilinguisme
 
 - Interface : `src/i18n/messages.ts`. Le TypeScript impose la parité des clés FR et EN.
 - Commandes : elles se formulent en français ou en anglais, sans réglage de langue pour la compréhension.
-- Ajouter une langue : un jeu de messages, une voix Piper dans `VOICES` (`voice_tts.rs`) si la synthèse doit être neurale, et les formats `Intl`.
+- Ajouter une langue : un jeu de messages, une voix Kokoro dans `VOICES` (`voice_tts.rs`) si la synthèse doit être neurale, et les formats `Intl`.
 
 ## Limites connues de l'architecture
 

@@ -17,8 +17,6 @@ use crate::permissions::Permission;
 
 /// Libellé de la seule fenêtre de l'interface principale (`tauri.conf.json`).
 pub const MAIN_WINDOW: &str = "main";
-/// Fenêtre dédiée aux confirmations : seule fenêtre qui peut répondre à une demande (`tauri.conf.json`).
-pub const CONFIRMATION_WINDOW: &str = "confirm";
 
 pub const PROCESS_LIST: &str = "actions.process-list";
 pub const FILE_SEARCH: &str = "actions.file-search";
@@ -47,7 +45,6 @@ const GRANTS: &[(&str, &[Permission])] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Policy {
     MainWindow,
-    ConfirmationWindow,
     Capability(&'static str),
 }
 
@@ -111,8 +108,8 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("journal_list", Policy::MainWindow),
     ("journal_clear", Policy::MainWindow),
     ("plugin_packs", Policy::MainWindow),
-    ("permission_answer", Policy::ConfirmationWindow),
-    ("confirmation_pending", Policy::ConfirmationWindow),
+    ("permission_answer", Policy::MainWindow),
+    ("confirmation_pending", Policy::MainWindow),
     ("permission_rules", Policy::MainWindow),
     ("permission_revoke", Policy::MainWindow),
     ("permission_audit", Policy::MainWindow),
@@ -145,20 +142,6 @@ pub fn is_main_window(label: &str) -> bool {
     label == MAIN_WINDOW
 }
 
-/// Vrai seulement pour la fenêtre dédiée aux confirmations.
-pub fn is_confirmation_window(label: &str) -> bool {
-    label == CONFIRMATION_WINDOW
-}
-
-/// Refuse l'appel si la fenêtre qui l'envoie n'est pas la fenêtre de confirmation. L'interface principale ne peut donc
-/// pas approuver une action : même un script injecté dans cette fenêtre n'y parvient pas.
-pub fn require_confirmation(webview: &tauri::Webview) -> Result<(), AdapterError> {
-    if is_confirmation_window(webview.label()) {
-        Ok(())
-    } else {
-        Err(AdapterError::PermissionRefused(format!("{} : seule la fenêtre de confirmation répond", webview.label())))
-    }
-}
 
 /// Refuse l'appel si la fenêtre qui l'envoie n'est pas l'interface principale.
 pub fn require_main(webview: &tauri::Webview) -> Result<(), AdapterError> {
@@ -199,23 +182,24 @@ mod tests {
         assert!(matches!(require("core", Permission::FileRead), Err(AdapterError::PermissionRefused(_))));
     }
 
-    /// Seule la fenêtre principale est l'interface. Un autre libellé, ou une identité écrite comme « core », ne l'est pas.
+    /// La demande s'affiche dans l'interface principale, et seule cette fenêtre peut y répondre. Un autre libellé,
+    /// ou une identité écrite comme « core », ne l'est pas.
     #[test]
-    fn only_the_confirmation_window_answers_a_confirmation() {
-        assert!(is_confirmation_window("confirm"));
-        for label in ["", "main", "Confirm", "confirm-evil"] {
-            assert!(!is_confirmation_window(label), "{label} ne doit pas répondre aux confirmations");
+    fn only_the_main_window_answers_a_confirmation() {
+        assert!(is_main_window("main"));
+        for label in ["", "Main", "main-evil", "confirm"] {
+            assert!(!is_main_window(label), "{label} ne doit pas répondre aux confirmations");
         }
         let answers = POLICIES.iter().find(|(name, _)| *name == "permission_answer").map(|(_, policy)| *policy);
-        assert_eq!(answers, Some(Policy::ConfirmationWindow));
+        assert_eq!(answers, Some(Policy::MainWindow));
     }
 
-    /// Une seule fenêtre doit pouvoir approuver : l'interface principale n'a jamais la politique de confirmation.
+    /// Les commandes de confirmation suivent la politique de l'interface principale, comme les autres commandes d'affichage.
     #[test]
-    fn the_main_window_never_answers_a_confirmation() {
+    fn confirmation_commands_belong_to_the_main_window() {
         for (command, policy) in POLICIES {
             if command.starts_with("permission_answer") || command.starts_with("confirmation_") {
-                assert_eq!(*policy, Policy::ConfirmationWindow, "{command} doit être réservée à la fenêtre de confirmation");
+                assert_eq!(*policy, Policy::MainWindow, "{command} doit être réservée à l'interface principale");
             }
         }
     }
@@ -309,16 +293,12 @@ mod tests {
 
     /// Une seule fenêtre, sans capacité distante : la permission native ne s'étend pas à d'autres fenêtres.
     #[test]
-    fn each_capability_belongs_to_one_local_window() {
+    fn the_only_capability_belongs_to_the_main_window() {
         let main: serde_json::Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
-        let confirmation: serde_json::Value = serde_json::from_str(include_str!("../capabilities/confirmation.json")).unwrap();
         assert_eq!(main["windows"], serde_json::json!(["main"]));
-        assert_eq!(confirmation["windows"], serde_json::json!(["confirm"]));
-        for capability in [&main, &confirmation] {
-            assert!(capability.get("remote").is_none(), "aucune fenêtre distante");
-        }
+        assert!(main.get("remote").is_none(), "aucune fenêtre distante");
         let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let labels: Vec<&str> = config["app"]["windows"].as_array().unwrap().iter().filter_map(|window| window["label"].as_str()).collect();
-        assert_eq!(labels, vec![MAIN_WINDOW, CONFIRMATION_WINDOW]);
+        assert_eq!(labels, vec![MAIN_WINDOW]);
     }
 }

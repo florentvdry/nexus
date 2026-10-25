@@ -13,7 +13,7 @@ import type { VoiceStatus } from "../core/voice/types";
 // et un second contrôleur écouterait les mêmes événements en double.
 const controllers = new WeakMap<Engine, VoiceController>();
 
-/** Voix naturelle locale (Piper), une par langue ; la voix Windows prend le relais. */
+/** Voix naturelle locale (Kokoro), une par langue ; la voix Windows prend le relais. */
 function speechOutput() {
   const bridge = createNativeBridge();
   return new NeuralSpeechOutput(

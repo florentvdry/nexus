@@ -38,7 +38,7 @@ est refusée, l'envoi à la corbeille n'est pas utilisé sur les fichiers de l'u
 
 ## Ce qui n'est pas testé ici, et pourquoi
 
-- **Voix (micro, reconnaissance Whisper).** Il faut un micro et le modèle Whisper, non installés sur ce poste. La lecture à voix
+- **Micro.** La reconnaissance sur un vrai micro n'a pas été testée. La synthèse et la reconnaissance le sont sur des fichiers (aller-retour Kokoro vers Whisper, ADR-058). La lecture à voix
   haute n'est pas vérifiable sans écouter.
 - **NVIDIA NIM.** Aucune clé n'est configurée : le test ne peut pas envoyer de données à un service en ligne.
 - **Connecteurs MCP réels (Discord).** Le test s'arrête à la proposition : il faudrait un jeton de bot Discord.

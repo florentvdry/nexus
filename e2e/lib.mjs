@@ -61,23 +61,17 @@ export class NexusApp {
   async connect() {
     const pages = await listPages();
     const main = pages.find((item) => item.title === "NEXUS");
-    const confirm = pages.find((item) => item.title === "NEXUS — Confirmation");
     if (!main) throw new Error("fenêtre principale introuvable : l'application tourne-t-elle ?");
     this.main = openPage(main.webSocketDebuggerUrl);
     await this.main.ready;
     await this.main.send("Runtime.enable");
     await this.main.send("Page.enable");
-    if (confirm) {
-      this.confirm = openPage(confirm.webSocketDebuggerUrl);
-      await this.confirm.ready;
-      await this.confirm.send("Runtime.enable");
-      await this.confirm.send("Page.enable");
-    }
+    // Les demandes d'autorisation s'affichent dans l'interface principale : elle sert aussi de fenêtre de confirmation.
+    this.confirm = this.main;
   }
 
   close() {
     this.main?.close();
-    this.confirm?.close();
   }
 
   async evaluate(page, expression) {
@@ -145,7 +139,7 @@ export class NexusApp {
     return clicked;
   }
 
-  /** Attend une demande de confirmation dans la fenêtre dédiée, et renvoie son texte. */
+  /** Attend une demande de confirmation dans le cadre d'autorisation, et renvoie son texte. */
   async waitForConfirmation(pattern = /Autoriser|Refuser/, timeout = 60_000) {
     if (!this.confirm) throw new Error("fenêtre de confirmation non attachée");
     return this.waitForText(pattern, { page: this.confirm, timeout });

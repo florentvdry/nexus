@@ -12,7 +12,6 @@ use crate::error::AdapterError;
 use crate::grants::require_main;
 
 pub const EVENT_CHANNEL: &str = "voice://event";
-const MODEL_FILE: &str = "ggml-base.bin";
 
 #[derive(Default)]
 pub struct VoiceState {
@@ -37,7 +36,7 @@ fn model_path(app: &AppHandle) -> Result<PathBuf, AdapterError> {
         .path()
         .app_data_dir()
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?;
-    Ok(directory.join("models").join(MODEL_FILE))
+    Ok(crate::voice_tts::whisper_model_path(&directory))
 }
 
 fn transcriber_for(app: &AppHandle, state: &VoiceState) -> Result<Arc<dyn Transcriber>, AdapterError> {

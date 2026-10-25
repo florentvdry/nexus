@@ -147,8 +147,18 @@ export function fitIntoBounds(rect: Rect, viewport: Size, margin: number): Rect 
   };
 }
 
-export interface PlacedRect {
-  id: string;
+/**
+ * Taille demandée à la main (poignée de redimensionnement). Elle ne descend pas sous la taille minimale et ne déborde
+ * pas des limites utiles de l'écran ; le coin haut gauche reste en place.
+ */
+export function resizeRect(rect: Rect, size: Size, viewport: Size, options: PlacementOptions): Rect {
+  const bounds = usableBounds(viewport, options.margin);
+  const width = Math.min(Math.max(size.width, options.minSize.width), bounds.width);
+  const height = Math.min(Math.max(size.height, options.minSize.height), bounds.height);
+  return fitIntoBounds({ x: rect.x, y: rect.y, width, height }, viewport, options.margin);
+}
+
+export interface PlacedRect {  id: string;
   rect: Rect;
 }
 

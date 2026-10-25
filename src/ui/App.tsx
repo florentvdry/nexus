@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { createEngine, type Engine, type EngineEvent, type OrbState } from "../core/engine/engine";
-import type { Rect } from "../core/presentation/types";
+import type { Rect, Size } from "../core/presentation/types";
 import {
   EMPTY_WINDOWS,
   closeAllWindows,
@@ -12,6 +12,7 @@ import {
   openWindow,
   reflowOpenWindows,
   reopenFromHistory,
+  resizeWindow,
   type WindowContext,
   escapeTarget,
   type WindowRequest,
@@ -22,6 +23,7 @@ import type { Task } from "../core/tasks/taskManager";
 import { translate, type Locale, type MessageKey } from "../i18n/messages";
 import type { VoiceControl } from "./CommandBar";
 import { FloatingWindow } from "./FloatingWindow";
+import { PermissionFrames } from "./PermissionFrames";
 import { FirstRunSetup } from "./FirstRunSetup";
 import { SceneView, type ChatMessage } from "./SceneView";
 import { Rail, type View } from "./Rail";
@@ -47,6 +49,7 @@ type WindowAction =
   | { type: "closeLast"; now: number }
   | { type: "closeAll"; now: number }
   | { type: "move"; id: string; rect: Rect; context: WindowContext }
+  | { type: "resize"; id: string; size: Size; context: WindowContext }
   | { type: "focus"; id: string }
   | { type: "reopen"; id: string; context: WindowContext }
   | { type: "reflow"; context: WindowContext };
@@ -63,6 +66,8 @@ function windowsReducer(state: WindowsState, action: WindowAction): WindowsState
       return closeAllWindows(state, action.now);
     case "move":
       return moveWindow(state, action.id, action.rect, action.context);
+    case "resize":
+      return resizeWindow(state, action.id, action.size, action.context);
     case "focus":
       return focusWindow(state, action.id);
     case "reopen":
@@ -321,11 +326,14 @@ export function App({ engine: injectedEngine }: AppProps) {
             t={t}
             readFile={readFile}
             onMove={(id, rect) => dispatch({ type: "move", id, rect, context: readWindowContext() })}
+            onResize={(id, size) => dispatch({ type: "resize", id, size, context: readWindowContext() })}
             onFocus={(id) => dispatch({ type: "focus", id })}
             onClose={(id) => dispatch({ type: "close", id, now: Date.now() })}
           />
         ))}
       </div>
+
+      <PermissionFrames locale={locale} />
 
       {setupOpen && <FirstRunSetup bridge={answerBridge} t={t} onClose={closeSetup} />}
     </div>

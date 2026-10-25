@@ -14,10 +14,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::error::AdapterError;
-use crate::grants::{CONFIRMATION_WINDOW, MAIN_WINDOW};
+use crate::grants::MAIN_WINDOW;
 
 /// Demande complète, envoyée seulement à la fenêtre de confirmation : elle seule voit les paramètres.
 pub const REQUEST_EVENT: &str = "permissions://request";
@@ -410,10 +410,9 @@ pub fn confirm(app: &AppHandle, broker: &Broker, permission: Permission, rows: &
     }
     confirm_with(
         |id, permission, rows, expires_in_secs| {
-            // Sans fenêtre de confirmation, la demande échoue : l'action n'a pas lieu.
+            // La demande s'affiche dans l'interface principale, dans un cadre ; sans elle, l'action n'a pas lieu.
             let request = permission_request(id.to_string(), permission, rows.to_vec(), expires_in_secs);
-            show_confirmation_window(app);
-            app.emit_to(CONFIRMATION_WINDOW, REQUEST_EVENT, &request).map_err(|error| AdapterError::TaskFailed(error.to_string()))?;
+            app.emit_to(MAIN_WINDOW, REQUEST_EVENT, &request).map_err(|error| AdapterError::TaskFailed(error.to_string()))?;
             let notice = ConfirmationNotice { id: id.to_string(), permission: permission.id(), expires_in_secs };
             app.emit_to(MAIN_WINDOW, NOTICE_EVENT, &notice).map_err(|error| AdapterError::TaskFailed(error.to_string()))
         },
@@ -422,23 +421,6 @@ pub fn confirm(app: &AppHandle, broker: &Broker, permission: Permission, rows: &
         rows,
         CONFIRMATION_TIMEOUT,
     )
-}
-
-/// Fait apparaître la fenêtre de confirmation, sans la laisser se fermer : elle se cache seulement.
-fn show_confirmation_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(CONFIRMATION_WINDOW) {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-}
-
-/// Cache la fenêtre de confirmation quand plus rien n'attend.
-pub fn hide_confirmation_window_when_idle(app: &AppHandle, broker: &Broker) {
-    if broker.pending_count() == 0 {
-        if let Some(window) = app.get_webview_window(CONFIRMATION_WINDOW) {
-            let _ = window.hide();
-        }
-    }
 }
 
 /// Chaque permission et son niveau, pour l'affichage des réglages.
