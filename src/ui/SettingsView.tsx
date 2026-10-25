@@ -152,7 +152,7 @@ export function SettingsView({
       case "online":
         return (
           <div className="card">
-            <NimSection t={t} />
+            <NimSection bridge={bridge} t={t} />
           </div>
         );
     }

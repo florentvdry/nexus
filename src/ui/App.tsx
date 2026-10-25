@@ -29,7 +29,7 @@ import { Rail, type View } from "./Rail";
 import { SchedulePanel } from "./SchedulePanel";
 import { SettingsView } from "./SettingsView";
 import { readAgendaPath } from "./agendaSettings";
-import { readOnlineModel } from "./nimSettings";
+import { migrateLegacyNimKey, readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { readStoredLocale, storeLocale } from "./locale";
@@ -118,6 +118,10 @@ export function App({ engine: injectedEngine }: AppProps) {
   useEffect(() => {
     void engine.refreshPacks();
   }, [engine]);
+  // Une clé NIM gardée dans le navigateur par une version précédente part dans le stockage natif chiffré.
+  useEffect(() => {
+    void migrateLegacyNimKey(answerBridge);
+  }, [answerBridge]);
   // Échap ferme la dernière fenêtre ordinaire, jamais une confirmation (qui attend une réponse explicite).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

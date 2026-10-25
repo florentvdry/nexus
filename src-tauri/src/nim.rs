@@ -2,12 +2,15 @@
 //! activé, les demandes sont envoyées à NVIDIA : l'interface le dit, et Ollama reste le repli sur ce poste si NIM échoue
 //! ou n'a plus de quota. La clé n'est jamais renvoyée à l'interface.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use serde_json::{json, Value};
+use tauri::State;
 
 use crate::error::AdapterError;
 use crate::grants::require_core;
+use crate::secrets;
 
 /// Seul hôte interrogé pour ce service.
 pub const ENDPOINT: &str = "https://integrate.api.nvidia.com/v1";
@@ -80,9 +83,74 @@ pub fn classify_at(endpoint: &str, key: &str, model: &str, text: &str, context: 
     parse_chat_content(&value)
 }
 
+/// Clé NVIDIA gardée sur ce poste, chiffrée avec DPAPI (`secrets.rs`). Elle n'est jamais renvoyée à l'interface : seul
+/// son état (enregistrée ou non) l'est, et `nim_classify` la lit ici, côté natif.
+pub struct KeyStore {
+    path: Option<PathBuf>,
+}
+
+impl KeyStore {
+    /// Dossier de données de NEXUS. Sans dossier, aucune clé ne peut être enregistrée.
+    pub fn open(directory: Option<PathBuf>) -> Self {
+        KeyStore { path: directory.map(|directory| directory.join("nim.key")) }
+    }
+
+    pub fn status(&self) -> bool {
+        self.path.as_ref().is_some_and(|path| path.is_file())
+    }
+
+    pub fn save(&self, key: &str) -> Result<(), AdapterError> {
+        let key = key.trim();
+        if !valid_key(key) {
+            return Err(AdapterError::InvalidTarget("clé NVIDIA invalide".into()));
+        }
+        let path = self.path.as_ref().ok_or_else(|| AdapterError::Operation("dossier de données indisponible".into()))?;
+        let sealed = secrets::to_hex(&secrets::protect(key.as_bytes())?);
+        if let Some(directory) = path.parent() {
+            std::fs::create_dir_all(directory).map_err(|error| AdapterError::Operation(format!("dossier de données : {error}")))?;
+        }
+        std::fs::write(path, sealed).map_err(|error| AdapterError::Operation(format!("enregistrement de la clé : {error}")))
+    }
+
+    pub fn load(&self) -> Result<String, AdapterError> {
+        let path = self.path.as_ref().ok_or_else(|| AdapterError::Operation("dossier de données indisponible".into()))?;
+        let sealed = std::fs::read_to_string(path).map_err(|_| AdapterError::InvalidTarget("aucune clé NVIDIA enregistrée".into()))?;
+        let cipher = secrets::from_hex(sealed.trim()).ok_or_else(|| AdapterError::Operation("clé NVIDIA illisible".into()))?;
+        let plain = secrets::unprotect(&cipher)?;
+        String::from_utf8(plain).map_err(|_| AdapterError::Operation("clé NVIDIA illisible".into()))
+    }
+
+    pub fn clear(&self) -> Result<(), AdapterError> {
+        match self.path.as_ref() {
+            Some(path) if path.is_file() => std::fs::remove_file(path).map_err(|error| AdapterError::Operation(format!("suppression de la clé : {error}"))),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn nim_classify(caller: String, key: String, model: String, text: String, context: Vec<String>) -> Result<Value, AdapterError> {
+pub fn nim_key_status(caller: String, store: State<'_, KeyStore>) -> Result<bool, AdapterError> {
     require_core(&caller)?;
+    Ok(store.status())
+}
+
+#[tauri::command]
+pub fn nim_key_save(caller: String, store: State<'_, KeyStore>, key: String) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    store.save(&key)
+}
+
+#[tauri::command]
+pub fn nim_key_clear(caller: String, store: State<'_, KeyStore>) -> Result<(), AdapterError> {
+    require_core(&caller)?;
+    store.clear()
+}
+
+/// Classement par NIM avec la clé enregistrée. Sans clé, la commande échoue et le modèle local prend le relais.
+#[tauri::command]
+pub async fn nim_classify(caller: String, store: State<'_, KeyStore>, model: String, text: String, context: Vec<String>) -> Result<Value, AdapterError> {
+    require_core(&caller)?;
+    let key = store.load()?;
     tauri::async_runtime::spawn_blocking(move || classify_at(ENDPOINT, &key, &model, &text, &context))
         .await
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
@@ -112,6 +180,35 @@ mod tests {
     fn an_answer_that_is_not_json_is_refused() {
         let body = json!({ "choices": [{ "message": { "content": "bonjour" } }] });
         assert!(parse_chat_content(&body).is_err());
+    }
+
+    #[test]
+    fn the_key_is_kept_encrypted_and_read_back_only_natively() {
+        let directory = std::env::temp_dir().join(format!("nexus-nim-key-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        let store = KeyStore::open(Some(directory.clone()));
+        assert!(!store.status());
+        store.save("nvapi-cle-de-test-123").unwrap();
+        assert!(store.status());
+        let on_disk = std::fs::read_to_string(directory.join("nim.key")).unwrap();
+        assert!(!on_disk.contains("nvapi-cle-de-test-123"), "la clé ne doit pas être écrite en clair");
+        if cfg!(windows) {
+            assert_eq!(store.load().unwrap(), "nvapi-cle-de-test-123");
+        }
+        store.clear().unwrap();
+        assert!(!store.status());
+        assert!(store.load().is_err());
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn an_invalid_key_or_a_missing_folder_is_never_saved() {
+        assert!(KeyStore::open(None).save("nvapi-abc").is_err());
+        let directory = std::env::temp_dir().join(format!("nexus-nim-bad-{}", std::process::id()));
+        let store = KeyStore::open(Some(directory.clone()));
+        assert!(store.save("cle avec espace").is_err());
+        assert!(!store.status());
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

@@ -49,7 +49,7 @@ export interface EngineOptions {
   /** Durée pendant laquelle l'orbe garde son état de réponse ou d'erreur. */
   responseHoldMs?: number;
   /** Clé et modèle NVIDIA NIM, si l'utilisateur les a activés. Sinon null : tout reste sur ce poste. */
-  onlineModel?: () => { key: string; model: string } | null;
+  onlineModel?: () => { model: string } | null;
   /** Chemin du fichier d'agenda (.ics), ou null. Lu seulement quand l'utilisateur demande son agenda. */
   agendaPath?: () => string | null;
   /** Stockage des routines repérées. Par défaut, celui du navigateur ; les tests le fixent. */

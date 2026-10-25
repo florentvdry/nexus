@@ -569,6 +569,7 @@ pub fn run() {
             app.manage(JournalStore(open_journal(app)));
             app.manage(PluginStore(open_plugin_store(app)));
             app.manage(mcp::commands::open_state(app.path().app_data_dir().ok()));
+            app.manage(nim::KeyStore::open(app.path().app_data_dir().ok()));
             app.manage(memory::open_store(app.path().app_data_dir().ok()));
             app.manage(schedule::open_store(app.path().app_data_dir().ok()));
             Ok(())
@@ -607,6 +608,9 @@ pub fn run() {
             agenda::agenda_read,
             screen::screen_capture,
             nim::nim_classify,
+            nim::nim_key_status,
+            nim::nim_key_save,
+            nim::nim_key_clear,
             vision_ask,
             ollama_status,
             ollama_pull,

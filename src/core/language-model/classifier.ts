@@ -20,13 +20,16 @@ export function fallbackClassifier(primary: Classifier, fallback: Classifier): C
   };
 }
 
-/** Classifieur NVIDIA NIM, si une clé est enregistrée. Sans clé, il rejette : le repli prend alors le relais. */
-export function nimClassifier(bridge: NativeBridge, online: () => { key: string; model: string } | null, memories: () => Promise<string[]>): Classifier {
+/**
+ * Classifieur NVIDIA NIM, si l'utilisateur l'a activé. La clé n'est pas dans l'interface : le natif la lit depuis son
+ * stockage chiffré et rejette la demande si elle n'y est pas. Dans les deux cas, le repli prend le relais.
+ */
+export function nimClassifier(bridge: NativeBridge, online: () => { model: string } | null, memories: () => Promise<string[]>): Classifier {
   return {
     classify: async (text: string) => {
       const config = online();
-      if (!config) throw new Error("NVIDIA NIM non configuré");
-      return bridge.nimClassify(config.key, config.model, text, await memories());
+      if (!config) throw new Error("NVIDIA NIM non activé");
+      return bridge.nimClassify(config.model, text, await memories());
     },
   };
 }
