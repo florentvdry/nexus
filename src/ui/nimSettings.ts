@@ -58,7 +58,29 @@ export function writeNimShare(share: ContextShare[]): void {
 }
 
 /** Configuration pour une demande : seulement si NIM est activé. La clé est utilisée côté natif, jamais ici. */
+/** Mode strict hors ligne : aucune demande ne part vers NVIDIA, même si l'option NIM est cochée. Désactivé par défaut. */
+const OFFLINE_STRICT = "nexus.offlineStrict";
+
+export function readOfflineStrict(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(OFFLINE_STRICT) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Activer le mode strict désactive NIM ; le réactiver se fait à la main dans la section NIM. */
+export function writeOfflineStrict(on: boolean): void {
+  try {
+    window.localStorage.setItem(OFFLINE_STRICT, on ? "1" : "0");
+  } catch {
+    // Stockage indisponible : le mode vaut pour cette session.
+  }
+  if (on) writeNimSettings({ ...readNimSettings(), enabled: false });
+}
+
 export function readOnlineModel(): { model: string; share: ContextShare[] } | null {
+  if (readOfflineStrict()) return null;
   const settings = readNimSettings();
   return settings.enabled ? { model: settings.model, share: readNimShare() } : null;
 }

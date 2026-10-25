@@ -31,12 +31,14 @@ import { readAgendaPath } from "./agendaSettings";
 import { migrateLegacyNimKey, readOnlineModel } from "./nimSettings";
 import { applyLargeText, readLargeText } from "./textScale";
 import { applyTheme, readTheme } from "./theme";
+import { applyQuiet, readQuiet } from "./quiet";
 import { hasFirstConversation, hasSeenModelSetup, markFirstConversation, markModelSetupSeen } from "./setupMemory";
 import { readStoredLocale, storeLocale } from "./locale";
 import { readSelectedModel } from "../core/language-model/selection";
 import { readWindowContext } from "./scene";
 import { createNativeBridge } from "../core/native/bridge";
 import { useVoice } from "./useVoice";
+import { notify } from "./notifications";
 
 type WindowAction =
   | { type: "open"; request: WindowRequest; context: WindowContext }
@@ -150,6 +152,7 @@ export function App({ engine: injectedEngine }: AppProps) {
   useEffect(() => {
     applyLargeText(readLargeText());
     applyTheme(readTheme());
+    applyQuiet(readQuiet());
   }, []);
   // Les tâches programmées tournent tant que NEXUS est ouvert.
   useEffect(() => {
@@ -192,6 +195,9 @@ export function App({ engine: injectedEngine }: AppProps) {
           return;
         case "orb":
           setOrbState(event.state);
+          return;
+        case "notify":
+          void notify(event.title, event.body);
           return;
         case "present":
           dispatch({

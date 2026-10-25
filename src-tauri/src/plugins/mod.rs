@@ -32,7 +32,11 @@ pub fn timeout_for(connector: &str) -> Duration {
 pub fn run_connector(request: &ConnectorRequest) -> Result<ConnectorReport, AdapterError> {
     let mut collector = Collector::new(request);
     match request.connector.as_str() {
-        "domain.dns" => sources::dns::lookup(&report::validate_domain(&request.target)?, &mut collector),
+        "domain.dns" => {
+            let domain = report::validate_domain(&request.target)?;
+            sources::dns::lookup(&domain, &mut collector);
+            sources::dns::lookup_records(&domain, &mut collector);
+        }
         "domain.certificates" => {
             let domain = report::validate_domain(&request.target)?;
             sources::certificates::lookup(&http_agent(), sources::certificates::CRT_SH_BASE, &domain, &mut collector);

@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { MessageKey } from "../i18n/messages";
 import { applyLargeText, readLargeText } from "./textScale";
 import { applyTheme, readTheme, THEME_CHOICES, type ThemeChoice } from "./theme";
+import { applyQuiet, readQuiet } from "./quiet";
 
 interface AccessibilitySectionProps {
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
@@ -18,6 +19,7 @@ const THEME_LABEL: Record<ThemeChoice, MessageKey> = {
 export function AccessibilitySection({ t }: AccessibilitySectionProps) {
   const [large, setLarge] = useState(readLargeText);
   const [theme, setTheme] = useState<ThemeChoice>(readTheme);
+  const [quiet, setQuiet] = useState(readQuiet);
 
   return (
     <section className="accessibility" aria-label={t("access.title")}>
@@ -32,6 +34,17 @@ export function AccessibilitySection({ t }: AccessibilitySectionProps) {
           }}
         />
         {t("access.largeText")}
+      </label>
+      <label className="field toggle">
+        <input
+          type="checkbox"
+          checked={quiet}
+          onChange={(event) => {
+            setQuiet(event.target.checked);
+            applyQuiet(event.target.checked);
+          }}
+        />
+        {t("access.quiet")}
       </label>
       <label className="field">
         {t("access.theme")}

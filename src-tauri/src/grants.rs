@@ -127,6 +127,7 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("window_focus", Policy::Capability(WINDOW_CONTROL)),
     ("window_close", Policy::Capability(WINDOW_CONTROL)),
     ("ui_inspect", Policy::Capability(UI_AUTOMATION)),
+    ("clipboard_read", Policy::MainWindow),
     ("ui_invoke", Policy::Capability(UI_AUTOMATION)),
     ("plugin_prepare", Policy::Capability(PLUGIN_MANAGER)),
     ("plugin_install", Policy::Capability(PLUGIN_MANAGER)),

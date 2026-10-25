@@ -65,11 +65,12 @@ export function validateModelIntent(raw: unknown): Intent | null {
       return appName ? { type, appName } : null;
     }
     case "OSINT_DOMAIN": {
-      const domain = text(candidate.domain, 253);
+      // Le modèle range parfois la valeur dans « query » : c'est la même valeur, validée par la même règle.
+      const domain = text(candidate.domain ?? candidate.query, 253);
       return domain && DOMAIN.test(domain) ? { type, domain } : null;
     }
     case "OSINT_USERNAME": {
-      const username = text(candidate.username, 64);
+      const username = text(candidate.username ?? candidate.query, 64);
       return username && USERNAME.test(username) ? { type, username } : null;
     }
     case "DOCUMENT_INSPECT": {
@@ -94,12 +95,13 @@ export function validateModelIntent(raw: unknown): Intent | null {
     }
     case "FILE_RENAME": {
       const path = text(candidate.path, 1000);
-      const newName = fileName(candidate.newName);
+      // Le nouveau nom, parfois donné sous « query » ou « text » : même règle de nom de fichier dans tous les cas.
+      const newName = fileName(candidate.newName ?? candidate.query ?? candidate.text);
       return path && newName ? { type, path, newName } : null;
     }
     case "FILE_MOVE": {
       const path = text(candidate.path, 1000);
-      const toDir = text(candidate.toDir, 1000);
+      const toDir = text(candidate.toDir ?? candidate.query, 1000);
       return path && toDir ? { type, path, toDir } : null;
     }
     case "FILE_TRASH": {
@@ -110,6 +112,18 @@ export function validateModelIntent(raw: unknown): Intent | null {
       return { type };
     case "UI_READ":
       return { type };
+    case "TIME_NOW":
+      return { type };
+    case "WATCH_FOLDER": {
+      const folderHint = text(candidate.folderHint, 40);
+      return folderHint ? { type, folderHint } : null;
+    }
+    case "WATCH_STOP":
+      return { type };
+    case "CLIPBOARD_ACTION": {
+      const action = candidate.action;
+      return action === "translate" || action === "summarize" ? { type, action } : null;
+    }
     case "UI_INVOKE": {
       const name = text(candidate.name, 100);
       return name ? { type, name } : null;

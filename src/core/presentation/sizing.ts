@@ -1,6 +1,8 @@
 import type { PresentedContent, Size } from "./types";
 
 export const MAX_WINDOW_HEIGHT = 420;
+/** Hauteur maximale d'un tableau présenté : au-delà, il défile. */
+export const TABLE_MAX_HEIGHT = 300;
 /**
  * Fenêtre de visionneuse. Le placement ne réduit jusqu'à 70 % : sur un écran 1280 × 800, la colonne libre à droite
  * de l'orbe ne fait que 290 px, et seule une fenêtre de 380 px réduite (266 px) y trouve une place sur la grille.
@@ -21,7 +23,8 @@ export function estimateSize(content: PresentedContent): Size {
       return { width: 340, height: Math.min(MAX_WINDOW_HEIGHT, height) };
     }
     case "data-table":
-      return { width: 420, height: Math.min(MAX_WINDOW_HEIGHT, 72 + (content.rows.length + 1) * 30) };
+      // Un tableau défile : une fenêtre trop haute ne trouve plus sa place sur l'écran de la scène.
+      return { width: 380, height: Math.min(TABLE_MAX_HEIGHT, 72 + (content.rows.length + 1) * 30) };
     case "error-card":
       return { width: 340, height: 130 };
     case "draft":

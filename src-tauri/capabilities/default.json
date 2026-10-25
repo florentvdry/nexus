@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions de la fenêtre principale. Aucun plugin système n'est activé en phase 1.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "notification:default"]
 }

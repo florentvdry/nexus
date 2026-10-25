@@ -26,6 +26,8 @@ mod tests {
         category: String,
         got: String,
         expected: Vec<String>,
+        /// Bonne intention, mais un champ obligatoire manque : l'application refuserait la réponse.
+        missing_field: bool,
     }
 
     #[derive(Serialize, Default)]
@@ -46,6 +48,37 @@ mod tests {
         p95_seconds: f64,
         by_category: BTreeMap<String, Score>,
         misses: Vec<Miss>,
+    }
+
+    /// Champs obligatoires par intention, miroir de `src/core/language-model/validate.ts`. Un groupe séparé par « | »
+    /// est satisfait par l'un de ses champs (ex. le texte d'un rappel peut venir de `request`, `query` ou `text`).
+    fn required_fields(kind: &str) -> &'static [&'static str] {
+        match kind {
+            "OPEN_APPLICATION" => &["appName"],
+            "OSINT_DOMAIN" => &["domain|query"],
+            "OSINT_USERNAME" => &["username|query"],
+            "DOCUMENT_INSPECT" | "FILE_VIEW" | "FILE_TRASH" => &["path"],
+            "FILE_RENAME" => &["path", "newName|query|text"],
+            "FILE_MOVE" => &["path", "toDir|query"],
+            "UI_INVOKE" | "WINDOW_FOCUS" | "WINDOW_CLOSE" => &["name"],
+            "PLUGIN_INSTALL" => &["target"],
+            "PLUGIN_REMOVE" => &["id"],
+            "PLUGIN_ACTION" => &["pluginId", "command", "text"],
+            "REMEMBER" | "DRAFT_MESSAGE" => &["text"],
+            "SCHEDULE" => &["request|query|text"],
+            "SHOW_TOPIC" | "SHOW_IMAGE" | "CANCEL_SCHEDULE" => &["query"],
+            "ASK_WEB" | "SCREEN_VIEW" => &["question|query|text"],
+            "WATCH_FOLDER" => &["folderHint"],
+            "CLIPBOARD_ACTION" => &["action"],
+            "NEEDS_CONNECTOR" => &["task"],
+            _ => &[],
+        }
+    }
+
+    fn has_required_fields(kind: &str, value: &serde_json::Value) -> bool {
+        required_fields(kind).iter().all(|group| {
+            group.split('|').any(|field| value.get(field).and_then(|text| text.as_str()).is_some_and(|text| !text.trim().is_empty()))
+        })
     }
 
     fn percentile(sorted: &[f64], share: f64) -> f64 {
@@ -73,18 +106,30 @@ mod tests {
             let outcome = ollama::classify_at(ollama::ENDPOINT, &model, &case.text, &[]);
             seconds.push(started.elapsed().as_secs_f64());
 
-            let got = match outcome {
-                Ok(value) => value.get("type").and_then(|kind| kind.as_str()).unwrap_or("?").to_string(),
+            let (got, complete) = match outcome {
+                Ok(value) => {
+                    let kind = value.get("type").and_then(|kind| kind.as_str()).unwrap_or("?").to_string();
+                    let complete = has_required_fields(&kind, &value);
+                    (kind, complete)
+                }
                 Err(_) => {
                     errors += 1;
-                    "ERREUR".to_string()
+                    ("ERREUR".to_string(), false)
                 }
             };
-            let hit = case.expected.contains(&got);
+            // Une bonne intention sans son champ obligatoire est refusée par la validation de l'application : elle compte juste.
+            let typed = case.expected.contains(&got);
+            let hit = typed && complete;
             if hit {
                 correct += 1;
             } else {
-                misses.push(Miss { text: case.text.clone(), category: case.category.clone(), got, expected: case.expected.clone() });
+                misses.push(Miss {
+                    text: case.text.clone(),
+                    category: case.category.clone(),
+                    got,
+                    expected: case.expected.clone(),
+                    missing_field: typed && !complete,
+                });
             }
             let score = by_category.entry(case.category.clone()).or_default();
             score.total += 1;
@@ -124,7 +169,8 @@ mod tests {
             println!("  {category:<12} {}/{}", score.correct, score.total);
         }
         for miss in &report.misses {
-            println!("  RATÉ [{}] « {} » -> {} (attendu {:?})", miss.category, miss.text, miss.got, miss.expected);
+            let reason = if miss.missing_field { " [champ obligatoire manquant]" } else { "" };
+            println!("  RATÉ [{}] « {} » -> {} (attendu {:?}){}", miss.category, miss.text, miss.got, miss.expected, reason);
         }
 
         if let Ok(path) = std::env::var("NEXUS_BENCH_OUT") {

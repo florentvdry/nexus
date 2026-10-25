@@ -186,6 +186,8 @@ export interface NativeBridge {
   uiInspect(): Promise<UiInspection>;
   /** Active le bouton de ce nom, après confirmation du natif. Renvoie le nom activé. */
   uiInvoke(name: string): Promise<string>;
+  /** Texte du presse-papiers, à la demande. Jamais lu en arrière-plan. */
+  clipboardRead(): Promise<string>;
   /** Plugins de données : examen, installation, suppression. Chaque étape demande votre accord. */
   pluginPrepare(source: string): Promise<PreparedPlugin>;
   pluginInstall(stagingId: string, digest: string): Promise<InstalledPlugin>;
@@ -369,6 +371,10 @@ export class TauriNativeBridge implements NativeBridge {
 
   uiInvoke(name: string): Promise<string> {
     return this.#call<string>("ui_invoke", { name });
+  }
+
+  clipboardRead(): Promise<string> {
+    return this.#call<string>("clipboard_read");
   }
 
   pluginPrepare(source: string): Promise<PreparedPlugin> {
@@ -664,6 +670,7 @@ export class UnavailableNativeBridge implements NativeBridge {
   closeWindow = () => this.unavailable();
   uiInspect = () => this.unavailable();
   uiInvoke = () => this.unavailable();
+  clipboardRead = () => this.unavailable();
   listProcesses = () => this.unavailable();
   searchFiles = () => this.unavailable();
   readFile = () => this.unavailable();

@@ -5,6 +5,7 @@ pub mod host;
 pub mod model_download;
 pub mod ollama;
 pub mod audit;
+pub mod clipboard;
 pub mod journal;
 pub mod mcp;
 pub mod secrets;
@@ -330,6 +331,13 @@ async fn window_focus(app: AppHandle, broker: State<'_, Broker>, id: usize) -> R
 async fn window_close(app: AppHandle, broker: State<'_, Broker>, id: usize) -> Result<(), AdapterError> {
     require(grants::WINDOW_CONTROL, Permission::WindowControl)?;
     window_action(app, broker.inner().clone_handle(), id, WindowAction::Close).await
+}
+
+/// Texte du presse-papiers, à la demande de l'interface principale seulement. Lecture seule, jamais en arrière-plan.
+#[tauri::command]
+async fn clipboard_read(webview: tauri::Webview) -> Result<String, AdapterError> {
+    require_main(&webview)?;
+    tauri::async_runtime::spawn_blocking(clipboard::read_text).await.map_err(blocking_failed)?
 }
 
 /// Contrôles de la fenêtre active (hors NEXUS) : noms, rôles et états. Lecture seule ; les mots de passe ne sont jamais lus.
@@ -674,6 +682,7 @@ fn open_plugin_store(app: &tauri::App) -> Option<Arc<Store>> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(shortcut_plugin())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             keep_confirmation_window_hidden(app.handle());
             register_voice_shortcut(app);
@@ -752,6 +761,7 @@ pub fn run() {
             window_focus,
             window_close,
             ui_inspect,
+            clipboard_read,
             ui_invoke,
             agent_detect,
             agent_run,

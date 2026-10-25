@@ -21,6 +21,10 @@ export type Intent =
   | { type: "FILE_TRASH"; path: string }
   | { type: "FILE_UNDO" }
   | { type: "UI_READ" }
+  | { type: "TIME_NOW" }
+  | { type: "CLIPBOARD_ACTION"; action: "translate" | "summarize" }
+  | { type: "WATCH_FOLDER"; folderHint: string }
+  | { type: "WATCH_STOP" }
   | { type: "UI_INVOKE"; name: string }
   | { type: "PROCESS_LIST" }
   | { type: "WINDOW_LIST" }

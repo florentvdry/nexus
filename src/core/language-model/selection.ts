@@ -1,5 +1,5 @@
 import { candidateTiers, type HardwareProfile } from "./hardware";
-import { tierSpec } from "./tiers";
+import { tierSpec, type ModelTier } from "./tiers";
 
 const STORAGE_KEY = "nexus.model.selected";
 
@@ -25,6 +25,21 @@ export function writeSelectedModel(model: string | null): void {
   } catch {
     // Stockage indisponible : le choix reste valable pour la session courante.
   }
+}
+
+/** Profils de réglage : chacun correspond à un niveau du modèle (rapide, équilibré, précis). */
+export const PROFILE_TIERS = { fast: "light", balanced: "balanced", precise: "precise" } as const satisfies Record<string, ModelTier>;
+
+/**
+ * Modèle pour les réponses ouvertes (questions sur le web) : le plus précis installé, sinon le modèle choisi.
+ * Les demandes courtes restent sur le modèle choisi, plus rapide.
+ */
+export function answerModel(installedNames: readonly string[], selected: string | null): string | null {
+  for (const tier of ["precise", "balanced"] as const) {
+    const model = tierSpec(tier).model;
+    if (installedNames.includes(model)) return model;
+  }
+  return selected;
 }
 
 /** Modèle recommandé pour cette machine : celui du niveau le plus précis qu'elle supporte. */

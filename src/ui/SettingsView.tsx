@@ -15,6 +15,7 @@ import { NimSection } from "./NimSection";
 import { DiagnosticSection } from "./DiagnosticSection";
 import { PermissionsSection } from "./PermissionsSection";
 import { StartupSection } from "./StartupSection";
+import { NotificationsSection } from "./NotificationsSection";
 import { VoiceSettingsFields } from "./VoiceSettings";
 
 type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
@@ -143,6 +144,7 @@ export function SettingsView({
         return (
           <div className="card">
             <StartupSection bridge={bridge} t={t} />
+            <NotificationsSection t={t} />
           </div>
         );
       case "agenda":

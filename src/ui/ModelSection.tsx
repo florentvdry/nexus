@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { candidateTiers, type HardwareProfile } from "../core/language-model/hardware";
 import { type OllamaStatus } from "../core/language-model/ollama";
-import { readSelectedModel, recommendedModel, writeSelectedModel } from "../core/language-model/selection";
+import { PROFILE_TIERS, readSelectedModel, recommendedModel, writeSelectedModel } from "../core/language-model/selection";
+import { tierSpec } from "../core/language-model/tiers";
+import { readOfflineStrict, writeOfflineStrict } from "./nimSettings";
 import type { NativeBridge } from "../core/native/bridge";
 import type { MessageKey } from "../i18n/messages";
 
@@ -26,6 +28,7 @@ export function ModelSection({ bridge, t, revision = 0 }: ModelSectionProps) {
   const [profile, setProfile] = useState<HardwareProfile | null>(null);
   const [selected, setSelected] = useState<string | null>(() => readSelectedModel());
   const [unavailable, setUnavailable] = useState(false);
+  const [offline, setOffline] = useState(readOfflineStrict);
 
   const refresh = useCallback(async () => {
     try {
@@ -95,6 +98,31 @@ export function ModelSection({ bridge, t, revision = 0 }: ModelSectionProps) {
               {t("model.pullHint")} <code>ollama pull {recommended}</code>
             </p>
           )}
+
+          <fieldset className="setup-options">
+            <legend className="field-hint">{t("model.profiles")}</legend>
+            {(Object.keys(PROFILE_TIERS) as (keyof typeof PROFILE_TIERS)[]).map((key) => {
+              const name = tierSpec(PROFILE_TIERS[key]).model;
+              const available = installed.some((model) => model.name === name);
+              return (
+                <button key={key} type="button" className="chip" disabled={!available} aria-pressed={selected === name} onClick={() => choose(name)}>
+                  {t(`model.profile.${key}`)} · {name}
+                </button>
+              );
+            })}
+          </fieldset>
+
+          <label className="field toggle">
+            <input
+              type="checkbox"
+              checked={offline}
+              onChange={(event) => {
+                setOffline(event.target.checked);
+                writeOfflineStrict(event.target.checked);
+              }}
+            />
+            {t("model.offlineStrict")}
+          </label>
 
           <button type="button" className="chip" onClick={() => void refresh()}>
             {t("model.refresh")}

@@ -65,6 +65,22 @@ describe("validation de la sortie du modèle", () => {
   });
 });
 
+describe("champs donnés sous un autre nom", () => {
+  it("accepte le nouveau nom donné sous « query » ou « text »", () => {
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt", query: "b.txt" })).toEqual({ type: "FILE_RENAME", path: "a.txt", newName: "b.txt" });
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "photo.jpg", text: "vacances.jpg" })).toEqual({ type: "FILE_RENAME", path: "photo.jpg", newName: "vacances.jpg" });
+  });
+
+  it("refuse un nouveau nom qui sort du dossier, même sous un autre nom de champ", () => {
+    expect(validateModelIntent({ type: "FILE_RENAME", path: "a.txt", query: "../secret.txt" })).toBeNull();
+  });
+
+  it("accepte le pseudo et le domaine donnés sous « query »", () => {
+    expect(validateModelIntent({ type: "OSINT_USERNAME", query: "alice42" })).toEqual({ type: "OSINT_USERNAME", username: "alice42" });
+    expect(validateModelIntent({ type: "OSINT_DOMAIN", query: "example.com" })).toEqual({ type: "OSINT_DOMAIN", domain: "example.com" });
+  });
+});
+
 describe("niveaux selon la machine", () => {
   it("ne propose que le niveau léger à une machine modeste", () => {
     expect(candidateTiers(machine({ memoryGiB: 4, avx2: false }))).toEqual(["light"]);

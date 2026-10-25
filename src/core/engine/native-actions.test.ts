@@ -28,6 +28,7 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "supprime /home/ana/Documents/vieux.txt": { type: "FILE_TRASH", path: "/home/ana/Documents/vieux.txt" },
   "annule la dernière action": { type: "FILE_UNDO" },
   "qu'est-ce qu'il y a dans la fenêtre active ?": { type: "UI_READ" },
+  "quelle heure est-il ?": { type: "TIME_NOW" },
   "clique sur le bouton Enregistrer": { type: "UI_INVOKE", name: "Enregistrer" },
   "lance Claude Code dans /home/ana/projet : liste les fichiers": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "liste les fichiers" },
   "lance Claude Code dans /home/ana/projet : fais un test": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "fais un test" },
@@ -106,6 +107,7 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
       truncated: false,
     })),
     uiInvoke: vi.fn(async (name: string) => name),
+    clipboardRead: vi.fn(async () => "Bonjour, je suis en retard."),
     listProcesses: vi.fn(async () => [{ name: "Discord.exe", pid: 4242, cpuPercent: 3, memoryBytes: 512 * 1024 * 1024 }]),
     readFile: vi.fn(async () => new ArrayBuffer(0)),
     searchFiles: vi.fn(async () => [
@@ -368,6 +370,78 @@ describe("recherche et processus", () => {
     await engine.submit("Quelles applications sont ouvertes ?");
     expect(bridge.listProcesses).toHaveBeenCalledWith(8);
     expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "data-table", rows: [["Discord.exe", "4242", "0,5 Go", "3 %"]] }));
+  });
+});
+
+describe("presse-papiers : traduire ou résumer avec le modèle local seulement", () => {
+  it("lit le presse-papiers à la demande et donne le résultat du modèle local", async () => {
+    const modelJson = vi.fn(async () => ({ answer: "Hello, I am late." }));
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "CLIPBOARD_ACTION", action: "translate" })),
+      modelJson,
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("traduis le presse-papiers");
+    expect(bridge.clipboardRead).toHaveBeenCalled();
+    expect(modelJson).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("traduis"), JSON.stringify({ text: "Bonjour, je suis en retard." }));
+    expect(assistant(events).join(" ")).toContain("Hello, I am late.");
+  });
+
+  it("dit clairement quand le presse-papiers ne contient pas de texte", async () => {
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "CLIPBOARD_ACTION", action: "summarize" })),
+      clipboardRead: vi.fn(async () => {
+        throw new Error("pas de texte");
+      }),
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("résume le presse-papiers");
+    expect(assistant(events).join(" ")).toContain("ne contient pas de texte");
+  });
+});
+
+describe("surveillance d'un dossier : nouveaux fichiers annoncés, rien d'ouvert", () => {
+  it("annonce les fichiers apparus après le départ de la surveillance", async () => {
+    let folder = [{ path: "/home/ana/Downloads/a.pdf", name: "a.pdf", size: 1, modified: 1 }];
+    const searchFiles = vi.fn(async () => folder);
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async () => ({ type: "WATCH_FOLDER", folderHint: "downloads" })),
+      searchFiles,
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("surveille mes téléchargements");
+    folder = [...folder, { path: "/home/ana/Downloads/rapport.docx", name: "rapport.docx", size: 2, modified: 2 }];
+    await engine.checkWatches();
+    expect(assistant(events).join(" ")).toContain("rapport.docx");
+    expect(presented(events).some((item) => item.kind === "information-card" && item.title === "Nouveaux fichiers")).toBe(true);
+    await engine.checkWatches();
+    expect(assistant(events).filter((text) => text.includes("rapport.docx")).length).toBe(1);
+  });
+});
+
+describe("apprentissage des corrections", () => {
+  it("« non, X » juste après une application enregistre l'association, sans rien lancer", async () => {
+    const memoryAdd = vi.fn(async (text: string) => ({ id: 1, text, createdAt: 0, source: "model" as const }));
+    const bridge = fakeBridge({
+      classifyIntent: vi.fn(async (text: string) => (text === "lance Edge" ? { type: "OPEN_APPLICATION", appName: "Edge" } : { type: "UNKNOWN" })),
+      memoryAdd,
+    });
+    const { engine, events } = setup(bridge);
+    await engine.submit("lance Edge");
+    await engine.submit("non, Firefox");
+    expect(memoryAdd).toHaveBeenCalledWith(expect.stringContaining("Edge"), "model");
+    expect(memoryAdd).toHaveBeenCalledWith(expect.stringContaining("Firefox"), "model");
+    expect(assistant(events).join(" ")).toContain("Firefox");
+    expect(nativeDouble.launchApp).not.toHaveBeenCalledWith("Firefox");
+  });
+});
+
+describe("heure : lue sur l'horloge du poste, sans appel au modèle de réponse", () => {
+  it("répond l'heure locale au format hh:mm", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("quelle heure est-il ?");
+    expect(assistant(events).join(" ")).toMatch(/\d{1,2}:\d{2}/);
   });
 });
 

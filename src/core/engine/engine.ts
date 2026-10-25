@@ -12,10 +12,10 @@ import type { Intent } from "../intent/types";
 import type { Classifier } from "../language-model/benchmark";
 import { understandWithModel } from "../language-model/branch";
 import { fallbackClassifier, nativeClassifier, nimClassifier } from "../language-model/classifier";
-import { readSelectedModel } from "../language-model/selection";
+import { answerModel, readSelectedModel } from "../language-model/selection";
 import { buildContext, CONTEXT_SHARES, type ContextShare } from "../language-model/context";
 import { ConnectorFlow } from "../connectors/flow";
-import { ASK_PAGES, ASK_SYSTEM, parseWebAnswer, webSources } from "../web/ask";
+import { ASK_PAGES, ASK_SYSTEM, CLIPBOARD_SYSTEM, parseWebAnswer, webSources } from "../web/ask";
 import { MemoryController } from "../memory/memory";
 import { MEMORY_CONTEXT_LIMIT } from "../memory/relevance";
 import { ScheduleController, type ScheduledTask } from "../schedule/controller";
@@ -40,7 +40,18 @@ export type EngineEvent =
   | { type: "message"; role: "user" | "assistant"; text: string; tone: "info" | "error"; locale: Locale }
   | { type: "orb"; state: OrbState }
   | { type: "present"; content: PresentedContent; source: SourceRef }
-  | { type: "window-command"; command: "close-last" | "close-all" };
+  | { type: "window-command"; command: "close-last" | "close-all" }
+  | { type: "notify"; title: string; body: string };
+
+/** Plage silencieuse : aucune notification entre 22 h et 7 h. L'alerte reste affichée dans NEXUS. */
+/** Période de vérification des dossiers surveillés, et nombre de fichiers nommés par annonce. */
+const WATCH_INTERVAL_MS = 60_000;
+const WATCH_MAX_ANNOUNCED = 5;
+
+export function isQuietHour(date: Date, from = 22, until = 7): boolean {
+  const hour = date.getHours();
+  return from > until ? hour >= from || hour < until : hour >= from && hour < until;
+}
 
 export interface EngineOptions {
   native?: NativeAdapter;
@@ -97,6 +108,11 @@ function replyFor(locale: Locale): Reply {
   return { locale, t: (key, params) => translate(locale, key, params) };
 }
 
+/** Heure locale hh:mm, dans le format de la langue de réponse. */
+export function formatClockTime(date: Date, locale: Locale): string {
+  return date.toLocaleTimeString(locale === "en" ? "en-GB" : "fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
 /**
  * Core Engine : transforme une commande en intention, route l'intention vers une capacité,
  * suit la tâche réelle et publie des événements pour l'interface. Aucun code d'interface ici.
@@ -123,11 +139,16 @@ export class Engine {
   #routinePending: RoutineProposal | undefined;
   #scheduleTimer: ReturnType<typeof setInterval> | undefined;
   #alertTimer: ReturnType<typeof setInterval> | undefined;
+  /** Dossiers surveillés : dossier -> chemins déjà connus. */
+  readonly #watches = new Map<string, Set<string>>();
+  #watchTimer: ReturnType<typeof setInterval> | undefined;
   /** Alertes proactives : chaque alerte n'est annoncée qu'une fois tant qu'elle dure. */
   readonly #monitor = new AlertMonitor();
   readonly #agendaPath: () => string | null;
   /** Modèle local qui rédige les réponses aux questions ouvertes sur le web. */
   readonly #model: () => string | null;
+  /** Dernière application ouverte, pour apprendre une correction (« non, X »). */
+  #lastApp: string | null = null;
   /** Échange récent, borné : le modèle s'y réfère pour les demandes qui parlent de ce qui précède. */
   readonly #history: { role: "user" | "assistant"; text: string }[] = [];
   /** Question sur l'écran en attente de la confirmation de l'utilisateur. */
@@ -222,6 +243,49 @@ export class Engine {
         source: { capabilityId: "system.alerts", locality: "local", collectedAt: Date.now() },
       });
       this.#reply(reply, reply.t("alert.raised", { what, detail: alert.detail }));
+      if (!isQuietHour(new Date())) this.#emit({ type: "notify", title: reply.t("alert.title"), body: `${what} — ${alert.detail}` });
+    }
+  }
+
+  /**
+   * Surveillance d'un dossier : un instantané au départ, puis les nouveaux fichiers sont annoncés. Lecture seule :
+   * NEXUS n'ouvre, ne déplace et ne lit aucun fichier de ce dossier.
+   */
+  async #startWatch(folderHint: string, reply: Reply): Promise<void> {
+    const entries = await this.#bridge.searchFiles({ folderHint }).catch(() => null);
+    if (!entries) return this.#reply(reply, reply.t("watch.unavailable", { folder: folderHint }), "error");
+    this.#watches.set(folderHint, new Set(entries.map((entry) => entry.path)));
+    if (!this.#watchTimer) this.#watchTimer = setInterval(() => void this.checkWatches(), WATCH_INTERVAL_MS);
+    this.#reply(reply, reply.t("watch.started", { folder: folderHint }));
+  }
+
+  #stopWatches(reply: Reply): void {
+    if (this.#watches.size === 0) return this.#reply(reply, reply.t("watch.none"));
+    this.#watches.clear();
+    clearInterval(this.#watchTimer);
+    this.#watchTimer = undefined;
+    this.#reply(reply, reply.t("watch.stopped"));
+  }
+
+  /** Vérifie les dossiers surveillés et annonce les nouveaux fichiers. Public pour les tests et le minuteur. */
+  async checkWatches(): Promise<void> {
+    for (const [folderHint, seen] of this.#watches) {
+      const entries = await this.#bridge.searchFiles({ folderHint }).catch(() => null);
+      if (!entries) continue;
+      const fresh = entries.filter((entry) => !seen.has(entry.path));
+      for (const entry of fresh) seen.add(entry.path);
+      if (fresh.length === 0) continue;
+      const reply = replyFor(this.#locale);
+      const shown = fresh.slice(0, WATCH_MAX_ANNOUNCED);
+      const names = shown.map((entry) => entry.name).join(", ");
+      const message = reply.t("watch.new", { count: fresh.length, folder: folderHint, names });
+      this.#emit({
+        type: "present",
+        content: { kind: "information-card", title: reply.t("watch.title"), rows: shown.map((entry) => ({ label: entry.name, value: folderHint })) },
+        source: { capabilityId: "files.watch", locality: "local", collectedAt: Date.now() },
+      });
+      this.#reply(reply, message);
+      if (!isQuietHour(new Date())) this.#emit({ type: "notify", title: reply.t("watch.title"), body: message });
     }
   }
 
@@ -306,6 +370,7 @@ export class Engine {
     if (await this.#onboarding.consume(text)) return;
     if (await this.#consumeRoutine(text)) return;
     if (await this.#consumeVision(text)) return;
+    if (await this.#consumeCorrection(text, reply)) return;
     const pending = this.#conversation.pending();
     if (pending) {
       this.#conversation.clearPending();
@@ -315,11 +380,49 @@ export class Engine {
     }
 
     const { intent, source } = await understandWithModel(text, this.#classifier);
+    // Mémorisé avant le journal et le routage : une correction reste possible même si le lancement échoue.
+    if (intent.type === "OPEN_APPLICATION") this.#lastApp = intent.appName;
     this.#journal(text, intent.type);
     if (source === "unavailable") return this.#reply(reply, reply.t("model.unavailable"), "error");
     await this.#route(intent, reply);
     // La réponse d'abord, la proposition de routine ensuite : elle n'arrive jamais à la place de la réponse.
     if (source === "model" && !ROUTINE_EXCLUDED.has(intent.type)) this.#observeRoutine(text, reply);
+  }
+
+  /**
+   * Apprentissage des corrections : « non, Firefox » juste après « lance Edge » enregistre l'association en souvenir.
+   * Rien n'est lancé : NEXUS propose la commande, et l'utilisateur la demande s'il le veut.
+   */
+  async #consumeCorrection(text: string, reply: Reply): Promise<boolean> {
+    const previous = this.#lastApp;
+    const match = /^(?:non|no|pas|plutôt|plutot)\s*[,.]?\s+(.{2,60})$/i.exec(text);
+    if (!previous || !match) return false;
+    const corrected = match[1].trim().replace(/[.!?]+$/, "");
+    if (corrected.length === 0 || corrected.toLowerCase() === previous.toLowerCase()) return false;
+    this.#lastApp = null;
+    await this.#memory.remember(`Quand je dis « ${previous} », je veux dire « ${corrected} » (application).`);
+    this.#reply(reply, reply.t("correction.saved", { from: previous, to: corrected }));
+    return true;
+  }
+
+  /**
+   * Traduire ou résumer le presse-papiers. Le texte n'est lu qu'à cette demande, et seul le modèle local le reçoit :
+   * il ne part jamais vers NVIDIA, même si l'option est active.
+   */
+  async #clipboardAction(action: "translate" | "summarize", reply: Reply): Promise<void> {
+    let text: string;
+    try {
+      text = await this.#bridge.clipboardRead();
+    } catch {
+      return this.#reply(reply, reply.t("clipboard.none"), "error");
+    }
+    const installed = (await this.#bridge.ollamaStatus().catch(() => null))?.models.map((item) => item.name) ?? [];
+    const model = answerModel(installed, this.#model());
+    if (!model) return this.#reply(reply, reply.t("web.askNoModel"), "error");
+    const raw = await this.#bridge.modelJson(model, CLIPBOARD_SYSTEM[action], JSON.stringify({ text }));
+    const answer = parseWebAnswer(raw);
+    if (!answer) return this.#reply(reply, reply.t("web.askUnclear"), "error");
+    this.#reply(reply, answer);
   }
 
   /** Une demande répétée à la même heure devient une proposition ; rien n'est programmé sans « oui ». */
@@ -504,6 +607,15 @@ export class Engine {
       }
       case "HELP":
         return this.#reply(reply, reply.t("intent.help"));
+      case "WATCH_FOLDER":
+        return this.#startWatch(intent.folderHint, reply);
+      case "WATCH_STOP":
+        return this.#stopWatches(reply);
+      case "CLIPBOARD_ACTION":
+        return this.#clipboardAction(intent.action, reply);
+      case "TIME_NOW":
+        // L'heure vient de l'horloge du poste, sans passer par le modèle.
+        return this.#reply(reply, reply.t("time.now", { time: formatClockTime(new Date(), this.#locale) }));
       case "CHAT":
         // La réponse du modèle, telle quelle : ce n'est pas une erreur.
         return this.#reply(reply, intent.text);
@@ -678,7 +790,9 @@ export class Engine {
       const sources = webSources(hits, pages);
       if (sources.length === 0) return this.#reply(reply, reply.t("web.askNone", { question }), "error");
 
-      const model = this.#model();
+      // Une réponse ouverte prend le plus précis des modèles installés ; les commandes gardent le modèle choisi.
+      const installed = (await this.#bridge.ollamaStatus().catch(() => null))?.models.map((item) => item.name) ?? [];
+      const model = answerModel(installed, this.#model());
       if (!model) return this.#reply(reply, reply.t("web.askNoModel"), "error");
       const raw = await this.#bridge.modelJson(model, ASK_SYSTEM, JSON.stringify({ question, sources }));
       const answer = parseWebAnswer(raw);

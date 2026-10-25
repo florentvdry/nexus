@@ -83,6 +83,7 @@ pub fn inspect(raw_path: &str, collector: &mut Collector) {
         Detail { key: "SHA-256".into(), value: hex(&Sha256::digest(&bytes)) },
         Detail { key: "Modifié (epoch s)".into(), value: modified },
     ];
+    finding.details.extend(crate::plugins::documents::exif::details(&bytes));
     if kind.starts_with("Texte") {
         let text = String::from_utf8_lossy(&bytes);
         finding.details.push(Detail { key: "Lignes".into(), value: text.lines().count().to_string() });

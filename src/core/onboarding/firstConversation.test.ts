@@ -70,7 +70,8 @@ describe("première conversation", () => {
     for (const answer of ANSWERS) await conversation.consume(answer);
     expect(memoryAdd).toHaveBeenCalledTimes(QUESTIONS.length);
     expect(conversation.active).toBe(false);
-    expect(said.at(-1)).toBe(translate("fr", "onboarding.done"));
+    expect(said.at(-2)).toBe(translate("fr", "onboarding.done"));
+    expect(said.at(-1)).toBe(translate("fr", "onboarding.tip"));
     expect(await conversation.consume("quelle heure est-il ?")).toBe(false);
   });
 });

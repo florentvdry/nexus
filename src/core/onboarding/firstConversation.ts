@@ -103,6 +103,8 @@ export class FirstConversation {
       this.#ask();
     } else {
       this.#options.say(this.#options.t("onboarding.done"));
+      // Une seule astuce, après la première conversation : des exemples de ce que NEXUS sait faire de plus.
+      this.#options.say(this.#options.t("onboarding.tip"));
     }
   }
 

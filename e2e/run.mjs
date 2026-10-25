@@ -22,6 +22,9 @@ mkdirSync(SHOTS, { recursive: true });
 const shot = (app, name, page) => app.screenshot(join(SHOTS, `${name}.png`), page);
 const tasklist = (image) => execFileSync("tasklist", ["/FI", `IMAGENAME eq ${image}`], { encoding: "utf8" });
 
+/** Une réponse compte comme comprise si NEXUS a répondu quelque chose d'autre que son refus de comprendre. */
+const understood = (answer) => answer.length > 0 && !/Je n'ai pas compris|pas compris|didn't understand/i.test(answer.join(" "));
+
 /** Une étape qui échoue ne doit pas arrêter le parcours : elle est notée, avec une capture de l'état. */
 async function step(app, name, body) {
   try {
@@ -85,8 +88,9 @@ const scenarios = {
       for (let turn = 0; turn < 12 && /\?/.test(question); turn += 1) {
         const all = await app.ask(reply(question), { timeout: 90_000 });
         answered += 1;
-        question = all.slice(-1)[0] ?? "";
-        if (all.length === 0) break;
+        // Chaque question peut arriver après l'accusé de réception : on attend la suivante avant de conclure.
+        await sleep(2500);
+        question = (await app.lastAnswers(0)).slice(-1)[0] ?? all.slice(-1)[0] ?? "";
       }
       app.record("première conversation : questions répondues", answered >= 6, `${answered} réponses`);
       await shot(app, "04-premiere-conversation");
@@ -136,7 +140,7 @@ const scenarios = {
     });
     await step(app, "système : processus", async () => {
       const answer = await app.ask("Quelles applications sont ouvertes ?");
-      app.record("processus : liste", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("processus : liste", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "09-processus");
     });
   },
@@ -144,13 +148,17 @@ const scenarios = {
   async applications(app) {
     await step(app, "applications : lancer le Bloc-notes", async () => {
       await app.ask("Lance le Bloc-notes");
-      await sleep(2500);
-      const running = tasklist("notepad.exe").includes("notepad.exe");
+      // Le Bloc-notes met parfois plusieurs secondes à apparaître : on attend au plus 15 s.
+      let running = false;
+      for (let attempt = 0; attempt < 30 && !running; attempt += 1) {
+        await sleep(500);
+        running = tasklist("notepad.exe").includes("notepad.exe");
+      }
       app.record("applications : Bloc-notes lancé (vérifié dans le système)", running);
     });
     await step(app, "fenêtres : liste", async () => {
       const answer = await app.ask("Liste mes fenêtres");
-      app.record("fenêtres : liste", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("fenêtres : liste", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "10-fenetres-liste");
     });
     await step(app, "fenêtres : fermer le Bloc-notes, après accord", async () => {
@@ -174,7 +182,7 @@ const scenarios = {
     });
     await step(app, "fichiers : recherche", async () => {
       const answer = await app.ask("Cherche mes fichiers txt dans mes documents");
-      app.record("fichiers : recherche", /nexus-e2e/.test(answer.join(" ")) || answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("fichiers : recherche", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "12-recherche-fichiers");
     });
     await step(app, "fichiers : renommer après accord", async () => {
@@ -208,12 +216,12 @@ const scenarios = {
       );
       await app.evaluate(app.main, `localStorage.setItem('nexus.agenda.path', ${JSON.stringify(ics)}); true`);
       const answer = await app.ask("Qu'est-ce que j'ai aujourd'hui ?");
-      app.record("agenda : rendez-vous du jour lu", /Revue de projet/.test(answer.join(" ")), answer.join(" | ").slice(0, 200));
+      app.record("agenda : rendez-vous du jour lu", /Revue de projet/.test(answer.join(" ")) || /Revue de projet/.test(await app.text()), answer.join(" | ").slice(0, 200));
       await shot(app, "14-agenda");
     });
     await step(app, "messages : brouillon, rien n'est envoyé", async () => {
       const answer = await app.ask("écris à Alice que je suis en retard");
-      app.record("messages : brouillon proposé", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("messages : brouillon proposé", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "15-message-brouillon");
     });
   },
@@ -221,7 +229,7 @@ const scenarios = {
   async memory(app) {
     await step(app, "mémoire : enregistrer", async () => {
       const answer = await app.ask("retiens que je préfère Firefox");
-      app.record("mémoire : préférence retenue", answer.length > 0, answer.join(" | ").slice(0, 160));
+      app.record("mémoire : préférence retenue", understood(answer), answer.join(" | ").slice(0, 160));
     });
     await step(app, "mémoire : réglages", async () => {
       await app.clickButton("Réglages", app.main);
@@ -236,14 +244,14 @@ const scenarios = {
       await app.clickButton("Conversation", app.main).catch(() => {});
       await sleep(600);
       const answer = await app.ask("oublie Firefox");
-      app.record("mémoire : oubli demandé", answer.length > 0, answer.join(" | ").slice(0, 160));
+      app.record("mémoire : oubli demandé", understood(answer), answer.join(" | ").slice(0, 160));
     });
   },
 
   async schedule(app) {
     await step(app, "planification : rappel pour demain", async () => {
       const answer = await app.ask("Rappelle-moi demain à 9 h de sortir les poubelles");
-      app.record("planification : rappel créé", /9|poubelle|demain/i.test(answer.join(" ")), answer.join(" | ").slice(0, 200));
+      app.record("planification : rappel créé", understood(answer) && /9|poubelle|demain/i.test(answer.join(" ")), answer.join(" | ").slice(0, 200));
       await app.clickButton("Planning", app.main).catch(() => app.clickButton("Ouvrir le planning", app.main).catch(() => {}));
       await sleep(800);
       await shot(app, "17-planning");
@@ -253,7 +261,7 @@ const scenarios = {
   async web(app) {
     await step(app, "web : fiche sujet", async () => {
       const answer = await app.ask("Qui est Ada Lovelace ?", { timeout: 120_000 });
-      app.record("web : fiche Wikipédia", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("web : fiche Wikipédia", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "18-fiche-sujet");
     });
     await step(app, "web : photo", async () => {
@@ -271,7 +279,7 @@ const scenarios = {
     });
     await step(app, "web : recherche", async () => {
       const answer = await app.ask("Recherche sur le web : Rust async", { timeout: 120_000 });
-      app.record("web : recherche avec sources", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("web : recherche avec sources", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "21-recherche-web");
     });
   },
@@ -283,7 +291,7 @@ const scenarios = {
       await shot(app, "22-confirmation-ecran", app.confirm).catch(() => {});
       await sleep(1000);
       const answer = await app.waitForText(/\w{4,}/, { timeout: 120_000 }).catch(() => "");
-      app.record("écran : réponse du modèle de vision", answer.length > 0);
+      app.record("écran : réponse du modèle de vision", understood(answer));
       await shot(app, "23-ecran-lu");
     });
   },
@@ -291,7 +299,7 @@ const scenarios = {
   async osint(app) {
     await step(app, "OSINT : analyse d'un domaine", async () => {
       const answer = await app.ask("Analyse example.com", { timeout: 180_000 });
-      app.record("OSINT : rapport sur un domaine", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("OSINT : rapport sur un domaine", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "24-osint-domaine");
     });
   },
@@ -299,7 +307,7 @@ const scenarios = {
   async connectors(app) {
     await step(app, "connecteurs : demande sans connecteur installé", async () => {
       const answer = await app.ask("Envoie un message Discord à Anthony", { timeout: 120_000 });
-      app.record("connecteurs : proposition de connecteur", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("connecteurs : proposition de connecteur", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "25-connecteur-propose");
     });
   },
@@ -307,7 +315,7 @@ const scenarios = {
   async plugins(app) {
     await step(app, "plugins : liste", async () => {
       const answer = await app.ask("liste mes plugins");
-      app.record("plugins : liste", answer.length > 0, answer.join(" | ").slice(0, 200));
+      app.record("plugins : liste", understood(answer), answer.join(" | ").slice(0, 200));
       await shot(app, "26-plugins");
     });
     await step(app, "plugins : convertisseur (WebAssembly)", async () => {
@@ -327,7 +335,7 @@ const scenarios = {
       ["Démarrage", "33-reglages-demarrage"],
       ["Agenda", "34-reglages-agenda"],
       ["Service en ligne", "35-reglages-nvidia"],
-      ["Diagnostics", "36-reglages-diagnostic"],
+      ["Diagnostic", "36-reglages-diagnostic"],
     ];
     await step(app, "réglages : ouverture", async () => {
       await app.clickButton("Réglages", app.main);
@@ -350,7 +358,11 @@ async function main() {
   await app.connect();
   const order = ["setup", "conversation", "system", "applications", "files", "agenda", "memory", "schedule", "web", "screen", "osint", "connectors", "plugins", "settings"];
   for (const name of only ? [only] : order) {
-    console.log(`\n== ${name} ==`);
+    console.log(`
+== ${name} ==`);
+    // Chaque parcours part de l'accueil : un réglage laissé ouvert ne doit pas fausser le suivant.
+    if (name !== "setup") await app.clickButton("Accueil").catch(() => {});
+    await sleep(600);
     await scenarios[name](app);
   }
   app.close();

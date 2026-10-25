@@ -44,6 +44,10 @@ const INTENT_TYPES: &[&str] = &[
     "FILE_UNDO",
     "UI_READ",
     "UI_INVOKE",
+    "TIME_NOW",
+    "CLIPBOARD_ACTION",
+    "WATCH_FOLDER",
+    "WATCH_STOP",
     "PROCESS_LIST",
     "WINDOW_LIST",
     "WINDOW_FOCUS",
@@ -128,7 +132,10 @@ fn intent_schema() -> Value {
             "weekday": { "type": "integer" },
             "day": { "type": "string", "enum": ["today", "tomorrow"] },
             "service": { "type": "string" },
-            "task": { "type": "string" }
+            "task": { "type": "string" },
+            "request": { "type": "string" },
+            "question": { "type": "string" },
+            "action": { "type": "string", "enum": ["translate", "summarize"] }
         },
         "required": ["type"]
     })
@@ -141,9 +148,9 @@ fn base_prompt() -> String {
     format!(
         "Tu classes une demande de l'utilisateur en une intention JSON. Réponds uniquement par un objet JSON valide, sans texte autour. \
          Le champ « type » est l'une de ces valeurs : {}. Si la demande ne correspond à aucune de ces intentions (salutation, question générale, bavardage), réponds {{\"type\": \"UNKNOWN\", \"reply\": \"une réponse courte et aimable, dans la langue de l'utilisateur\"}}. \
-         Champs utiles : OPEN_APPLICATION (appName), OSINT_DOMAIN (domain), FILE_RENAME (path, newName), FILE_MOVE (path, toDir), \
+         Champs utiles (tous obligatoires) : OPEN_APPLICATION (appName), OSINT_DOMAIN (domain), FILE_RENAME (path et newName, le nouveau nom), FILE_MOVE (path, toDir), SCHEDULE (request : ce qu'il faut rappeler, sans la date ni l'heure), \
          FILE_TRASH (path), FILE_VIEW (path) affiche un fichier, DOCUMENT_INSPECT (path) analyse un document (taille, empreinte, métadonnées), FILE_SEARCH (extension, folderHint, withinDays), WINDOW_FOCUS et WINDOW_CLOSE (name) exigent le nom d'une fenêtre ; CLOSE_WINDOW sans nom ferme la fenêtre dont on parle (« cette fenêtre », « celle-ci »), PLUGIN_REMOVE (id),\
-         AGENT_RUN (project, prompt). UI_INVOKE (name) active le bouton de ce nom dans la fenêtre au premier plan, sans valeur ; UI_READ liste les boutons et champs de cette fenêtre, sans leurs valeurs. NEEDS_CONNECTOR (service, task) : la demande vise un service extérieur que NEXUS ne pilote pas seul \
+         AGENT_RUN (project, prompt). CLIPBOARD_ACTION (action : translate ou summarize) traduit ou résume le texte du presse-papiers, sans autre champ ; WATCH_FOLDER (folderHint : downloads, documents, desktop ou pictures) surveille un dossier pour les nouveaux fichiers ; WATCH_STOP arrête cette surveillance ; UI_INVOKE (name) active le bouton de ce nom dans la fenêtre au premier plan, sans valeur ; UI_READ liste les boutons et champs de cette fenêtre, sans leurs valeurs. NEEDS_CONNECTOR (service, task) : la demande vise un service extérieur que NEXUS ne pilote pas seul \
          (message Discord, Slack, agenda, etc.) ; service est le nom du service, task la demande reformulée. Quand l'utilisateur te donne une information durable sur lui (prénom, ville, métier, goûts, habitudes, préférences de réponse), réponds REMEMBER avec text : NEXUS la garde sans rien demander. FORGET (query) oublie les souvenirs qui contiennent query ; sans query, il efface toute la mémoire. Pour reply, respecte les préférences de l'utilisateur présentes dans le contexte (tutoiement ou vouvoiement, réponses courtes ou détaillées). N'invente jamais de chemin : utilise uniquement ceux de la demande. \
          « lance X » et « ouvre X » où X est une application (Edge, Discord, Paint...) sont OPEN_APPLICATION ; AGENT_RUN seulement si l'utilisateur demande explicitement de lancer un agent ou un projet (Claude Code, un projet nommé). \
          Exemples : « ouvre le bloc-notes » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"bloc-notes\"}} ; « lance Edge » -> {{\"type\": \"OPEN_APPLICATION\", \"appName\": \"Edge\"}} ; « aide-moi » -> {{\"type\": \"HELP\"}} ; \

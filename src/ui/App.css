@@ -31,6 +31,15 @@
   font-size: 14px;
 }
 
+/* Mode discret : seule l'orbe et la barre de commande restent. Les confirmations ont leur propre fenêtre. */
+:root[data-quiet="true"] .scene-side,
+:root[data-quiet="true"] .scene-answer,
+:root[data-quiet="true"] .scene-label,
+:root[data-quiet="true"] .scene-title,
+:root[data-quiet="true"] .float-window {
+  display: none !important;
+}
+
 /*
  * Thème clair. Par défaut, il suit le réglage de Windows (« Suivre Windows ») ; l'attribut data-theme impose l'un
  * ou l'autre. Les variables sont les mêmes que sur le thème sombre, seules leurs valeurs changent.
