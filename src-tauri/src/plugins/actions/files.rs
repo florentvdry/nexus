@@ -207,6 +207,8 @@ pub struct Plan {
     pub operation: Operation,
     pub rows: Vec<(String, String)>,
     source: PathBuf,
+    /// Cible réelle de la source au moment de l'aperçu : toute substitution d'ici l'exécution est détectée.
+    source_real: PathBuf,
     target: Option<PathBuf>,
 }
 
@@ -232,7 +234,7 @@ pub fn plan(operation: Operation, roots: &[PathBuf]) -> Result<Plan, AdapterErro
             }
             let target = source.parent().ok_or_else(|| AdapterError::InvalidPath(from.clone()))?.join(new_name.trim());
             ensure_free(&target, roots)?;
-            Ok(two_paths(operation, source, target))
+            two_paths(operation, source, target)
         }
         Operation::Move { from, to_dir } | Operation::Copy { from, to_dir } => {
             let source = absolute_existing(from)?;
@@ -248,28 +250,36 @@ pub fn plan(operation: Operation, roots: &[PathBuf]) -> Result<Plan, AdapterErro
             if matches!(operation, Operation::Copy { .. }) && !source.is_file() {
                 return Err(AdapterError::Operation("seuls les fichiers peuvent être copiés".into()));
             }
-            Ok(two_paths(operation, source, target))
+            two_paths(operation, source, target)
         }
         Operation::Trash { path } => {
             let source = absolute_existing(path)?;
             require_within(&source, roots)?;
+            let source_real = real_path(&source)?;
             Ok(Plan {
                 rows: vec![("path".into(), source.display().to_string())],
                 operation,
                 source,
+                source_real,
                 target: None,
             })
         }
     }
 }
 
-fn two_paths(operation: Operation, source: PathBuf, target: PathBuf) -> Plan {
-    Plan {
+fn two_paths(operation: Operation, source: PathBuf, target: PathBuf) -> Result<Plan, AdapterError> {
+    Ok(Plan {
         rows: vec![("from".into(), source.display().to_string()), ("to".into(), target.display().to_string())],
         operation,
+        source_real: real_path(&source)?,
         source,
         target: Some(target),
-    }
+    })
+}
+
+/// Chemin réel (liens et jonctions résolus) de ce qui existe.
+fn real_path(path: &Path) -> Result<PathBuf, AdapterError> {
+    path.canonicalize().map_err(|error| AdapterError::InvalidPath(format!("{} ({error})", path.display())))
 }
 
 fn ensure_free(target: &Path, roots: &[PathBuf]) -> Result<(), AdapterError> {
@@ -280,8 +290,26 @@ fn ensure_free(target: &Path, roots: &[PathBuf]) -> Result<(), AdapterError> {
     Ok(())
 }
 
-/// Exécute un plan déjà confirmé. Renvoie le chemin final, ou le chemin supprimé.
-pub fn apply(plan: &Plan) -> Result<String, AdapterError> {
+/// Revalide un plan juste avant son exécution : la confirmation peut prendre du temps, pendant lequel les fichiers
+/// peuvent changer. Refusé si la source n'est plus la même cible, si elle ou sa destination sort des emplacements
+/// autorisés, ou si la cible existe désormais (une écriture ne doit jamais écraser un fichier apparu entre-temps).
+fn revalidate(plan: &Plan, roots: &[PathBuf]) -> Result<(), AdapterError> {
+    require_within(&plan.source, roots)?;
+    if real_path(&plan.source)? != plan.source_real {
+        return Err(AdapterError::Operation("la source a changé depuis l'aperçu : rien n'a été fait".into()));
+    }
+    if let Some(target) = &plan.target {
+        require_within(target, roots)?;
+        if target.exists() {
+            return Err(AdapterError::Operation(format!("un élément existe déjà : {}", target.display())));
+        }
+    }
+    Ok(())
+}
+
+/// Exécute un plan déjà confirmé, après l'avoir revalidé. Renvoie le chemin final, ou le chemin supprimé.
+pub fn apply(plan: &Plan, roots: &[PathBuf]) -> Result<String, AdapterError> {
+    revalidate(plan, roots)?;
     let io = |error: std::io::Error| AdapterError::Operation(error.to_string());
     match (&plan.operation, &plan.target) {
         (Operation::Rename { .. } | Operation::Move { .. }, Some(target)) => {
@@ -381,7 +409,7 @@ mod tests {
         let plan = plan(Operation::Rename { from: from.clone(), new_name: "idees.txt".into() }, &roots).unwrap();
         assert!(plan.rows.iter().any(|(key, value)| key == "to" && value.ends_with("idees.txt")));
         assert!(sandbox.path().join("notes.txt").exists(), "le plan ne modifie rien");
-        apply(&plan).unwrap();
+        apply(&plan, &roots).unwrap();
         assert!(sandbox.path().join("idees.txt").exists());
         assert!(!sandbox.path().join("notes.txt").exists());
     }
@@ -406,6 +434,40 @@ mod tests {
         let result = plan(Operation::Trash { path: outside.display().to_string() }, &roots);
         let _ = fs::remove_file(&outside);
         assert!(matches!(result, Err(AdapterError::OutsideAllowedFolders(_))));
+    }
+
+    #[test]
+    fn a_target_that_appears_after_the_preview_is_never_overwritten() {
+        let sandbox = Sandbox::new("race-target");
+        let roots = vec![sandbox.path()];
+        let from = sandbox.path().join("notes.txt").display().to_string();
+        let plan = plan(Operation::Rename { from, new_name: "idees.txt".into() }, &roots).unwrap();
+        fs::write(sandbox.path().join("idees.txt"), b"apparu pendant la confirmation").unwrap();
+        assert!(apply(&plan, &roots).is_err());
+        assert_eq!(fs::read(sandbox.path().join("idees.txt")).unwrap(), b"apparu pendant la confirmation");
+        assert!(sandbox.path().join("notes.txt").exists(), "la source doit rester en place");
+    }
+
+    #[test]
+    fn a_source_that_is_replaced_after_the_preview_is_refused() {
+        let sandbox = Sandbox::new("race-source");
+        let roots = vec![sandbox.path()];
+        let from = sandbox.path().join("notes.txt").display().to_string();
+        let plan = plan(Operation::Copy { from, to_dir: sandbox.path().join("sub").display().to_string() }, &roots).unwrap();
+        // La source est remplacée par un dossier entre l'aperçu et l'exécution : la copie ne doit pas partir.
+        fs::remove_file(sandbox.path().join("notes.txt")).unwrap();
+        fs::create_dir(sandbox.path().join("notes.txt")).unwrap();
+        assert!(apply(&plan, &roots).is_err());
+        assert!(!sandbox.path().join("sub").join("notes.txt").exists());
+    }
+
+    #[test]
+    fn an_operation_is_refused_when_its_folders_are_no_longer_allowed() {
+        let sandbox = Sandbox::new("scope-change");
+        let roots = vec![sandbox.path()];
+        let plan = plan(Operation::Rename { from: sandbox.path().join("notes.txt").display().to_string(), new_name: "x.txt".into() }, &roots).unwrap();
+        assert!(matches!(apply(&plan, &[]), Err(AdapterError::OutsideAllowedFolders(_))));
+        assert!(sandbox.path().join("notes.txt").exists());
     }
 
     #[test]

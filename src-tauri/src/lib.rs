@@ -196,7 +196,7 @@ async fn files_operate(app: AppHandle, broker: State<'_, Broker>, caller: String
         let mut rows: Vec<Row> = plan.rows.iter().map(|(key, value)| Row { key: key.clone(), value: value.clone() }).collect();
         rows.push(Row { key: "requester".into(), value: caller });
         permissions::confirm(&app, &broker, permission, &rows)?;
-        files::apply(&plan)
+        files::apply(&plan, &roots)
     })
     .await
     .map_err(blocking_failed)?
