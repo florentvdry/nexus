@@ -41,10 +41,14 @@ pub enum Permission {
     WindowRead,
     WindowControl,
     PluginManage,
+    /// Installation d'un connecteur MCP : lance un paquet npm sur ce poste, à chaque fois après accord.
+    ConnectorInstall,
+    /// Appel d'un outil d'un connecteur MCP : l'outil agit au nom de l'utilisateur, à chaque fois après accord.
+    ConnectorCall,
 }
 
 /// Toutes les permissions natives, dans l'ordre d'affichage des réglages.
-pub const ALL: [Permission; 8] = [
+pub const ALL: [Permission; 10] = [
     Permission::SystemRead,
     Permission::FileRead,
     Permission::FileWrite,
@@ -53,6 +57,8 @@ pub const ALL: [Permission; 8] = [
     Permission::WindowRead,
     Permission::WindowControl,
     Permission::PluginManage,
+    Permission::ConnectorInstall,
+    Permission::ConnectorCall,
 ];
 
 impl Permission {
@@ -66,6 +72,8 @@ impl Permission {
             Permission::WindowRead => "window.read",
             Permission::WindowControl => "window.control",
             Permission::PluginManage => "plugin.manage",
+            Permission::ConnectorInstall => "connector.install",
+            Permission::ConnectorCall => "connector.call",
         }
     }
 
@@ -76,9 +84,13 @@ impl Permission {
     pub fn tier(self) -> Tier {
         match self {
             Permission::SystemRead | Permission::FileRead | Permission::WindowRead => Tier::Automatic,
-            Permission::FileWrite | Permission::FileDelete | Permission::AgentRun | Permission::WindowControl | Permission::PluginManage => {
-                Tier::Confirmation
-            }
+            Permission::FileWrite
+            | Permission::FileDelete
+            | Permission::AgentRun
+            | Permission::WindowControl
+            | Permission::PluginManage
+            | Permission::ConnectorInstall
+            | Permission::ConnectorCall => Tier::Confirmation,
         }
     }
 
@@ -457,6 +469,8 @@ mod tests {
         assert_eq!(Permission::FileDelete.tier(), Tier::Confirmation);
         assert_eq!(Permission::AgentRun.tier(), Tier::Confirmation);
         assert_eq!(Permission::WindowControl.tier(), Tier::Confirmation);
+        assert_eq!(Permission::ConnectorCall.tier(), Tier::Confirmation);
+        assert_eq!(Permission::ConnectorInstall.tier(), Tier::Confirmation);
     }
 
     #[test]
@@ -469,7 +483,7 @@ mod tests {
 
     #[test]
     fn deletion_window_closing_and_plugins_are_never_remembered() {
-        for permission in [Permission::FileDelete, Permission::WindowControl, Permission::PluginManage] {
+        for permission in [Permission::FileDelete, Permission::WindowControl, Permission::PluginManage, Permission::ConnectorCall, Permission::ConnectorInstall] {
             assert!(!permission.rememberable(), "{} ne doit jamais être mémorisée", permission.id());
         }
         assert!(Permission::FileWrite.rememberable());

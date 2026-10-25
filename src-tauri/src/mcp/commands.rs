@@ -1,17 +1,19 @@
-//! Commandes Tauri des connecteurs MCP. Réservées à l'interface principale (`require_core`). Chaque action qui lance
-//! un serveur ou appelle un outil suppose que l'utilisateur a déjà accepté, dans l'interface, l'installation ou l'envoi.
+//! Commandes Tauri des connecteurs MCP. Réservées à l'interface principale (`require_core`). Installer un connecteur
+//! et appeler un de ses outils passent par le courtier natif (`permissions::confirm`) : l'accord est donné côté natif,
+//! avec tous les paramètres, et l'action n'a lieu qu'après une réponse explicite. Une réponse de l'interface seule ne suffit pas.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use super::catalog::{Candidate, Catalog, GITHUB, REGISTRY};
 use super::client::{self, Launch, Tool};
 use super::store::{Installed, InstalledView, Store};
 use crate::error::AdapterError;
 use crate::grants::require_core;
+use crate::permissions::{self, Broker, Permission, Row};
 
 /// État des connecteurs : le catalogue de la dernière recherche et le registre des connecteurs installés.
 pub struct McpState {
@@ -59,15 +61,35 @@ pub fn mcp_installed(state: State<'_, McpState>, caller: String) -> Result<Vec<I
     Ok(state.store.list().iter().map(Installed::view).collect())
 }
 
-/// Installe un connecteur trouvé par la dernière recherche. L'identifiant ne peut pas désigner autre chose.
+/// Lignes affichées au courtier pour une installation : ce qui sera lancé sur ce poste, sans troncature.
+fn install_rows(candidate: &Candidate) -> Vec<Row> {
+    let names: Vec<&str> = candidate.env.iter().map(|spec| spec.name.as_str()).collect();
+    vec![
+        Row { key: "connector".into(), value: candidate.title.clone() },
+        Row { key: "repository".into(), value: candidate.repository.clone() },
+        Row { key: "command".into(), value: format!("npx -y {}@{}", candidate.package, candidate.version) },
+        Row { key: "variables".into(), value: if names.is_empty() { "aucune".into() } else { names.join(", ") } },
+    ]
+}
+
+/// Installe un connecteur trouvé par la dernière recherche, après accord du courtier natif.
+/// L'identifiant ne peut pas désigner autre chose.
 #[tauri::command]
-pub fn mcp_install(state: State<'_, McpState>, caller: String, id: String) -> Result<InstalledView, AdapterError> {
+pub async fn mcp_install(app: AppHandle, broker: State<'_, Broker>, state: State<'_, McpState>, caller: String, id: String) -> Result<InstalledView, AdapterError> {
     require_core(&caller)?;
     let candidate = state
         .catalog
         .get(&id)
         .ok_or_else(|| AdapterError::InvalidTarget("connecteur inconnu : relancez la recherche".into()))?;
-    Ok(state.store.install(&candidate)?.view())
+    let rows = install_rows(&candidate);
+    let broker = broker.inner().clone_handle();
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        permissions::confirm(&app, &broker, Permission::ConnectorInstall, &rows)?;
+        Ok(store.install(&candidate)?.view())
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[tauri::command]
@@ -86,20 +108,61 @@ pub async fn mcp_tools(state: State<'_, McpState>, caller: String, id: String) -
         .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
-/// Appel d'un outil, après accord de l'utilisateur dans l'interface. Renvoie le texte de la réponse.
+/// Appel d'un outil, après accord du courtier natif, avec les arguments complets. Renvoie le texte de la réponse.
 #[tauri::command]
-pub async fn mcp_call(state: State<'_, McpState>, caller: String, id: String, tool: String, arguments: Value) -> Result<String, AdapterError> {
+pub async fn mcp_call(
+    app: AppHandle,
+    broker: State<'_, Broker>,
+    state: State<'_, McpState>,
+    caller: String,
+    id: String,
+    tool: String,
+    arguments: Value,
+) -> Result<String, AdapterError> {
     require_core(&caller)?;
     let launch = launch_for(&installed_or_error(&state.store, &id)?)?;
-    tauri::async_runtime::spawn_blocking(move || client::call_tool(&launch, &tool, &arguments))
-        .await
-        .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
+    let rows = vec![
+        Row { key: "connector".into(), value: id.clone() },
+        Row { key: "tool".into(), value: tool.clone() },
+        Row { key: "arguments".into(), value: arguments.to_string() },
+        Row { key: "command".into(), value: format!("npx -y {}@{}", launch.package, launch.version) },
+    ];
+    let broker = broker.inner().clone_handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        permissions::confirm(&app, &broker, Permission::ConnectorCall, &rows)?;
+        client::call_tool(&launch, &tool, &arguments)
+    })
+    .await
+    .map_err(|error| AdapterError::TaskFailed(error.to_string()))?
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::catalog::EnvSpec;
     use super::*;
+
+    /// Ce que le courtier affiche avant une installation : la commande exacte, sans troncature, et les variables.
+    #[test]
+    fn the_install_confirmation_shows_the_exact_command_and_variables() {
+        let candidate = Candidate {
+            id: "app.example/discord".into(),
+            title: "discord".into(),
+            description: String::new(),
+            repository: "https://github.com/acme/discord-mcp".into(),
+            stars: 120,
+            package: "@acme/discord-mcp".into(),
+            version: "1.2.0".into(),
+            env: vec![
+                EnvSpec { name: "DISCORD_BOT_TOKEN".into(), required: true, secret: true, description: String::new() },
+                EnvSpec { name: "DISCORD_GUILD".into(), required: false, secret: false, description: String::new() },
+            ],
+        };
+        let rows = install_rows(&candidate);
+        let value = |key: &str| rows.iter().find(|row| row.key == key).map(|row| row.value.clone()).unwrap();
+        assert_eq!(value("command"), "npx -y @acme/discord-mcp@1.2.0");
+        assert_eq!(value("variables"), "DISCORD_BOT_TOKEN, DISCORD_GUILD");
+        assert_eq!(value("repository"), "https://github.com/acme/discord-mcp");
+    }
 
     #[test]
     fn a_connector_with_a_missing_required_value_is_never_launched() {

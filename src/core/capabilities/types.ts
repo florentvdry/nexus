@@ -24,7 +24,9 @@ export type Permission =
   | "agent.run"
   | "window.read"
   | "window.control"
-  | "plugin.manage";
+  | "plugin.manage"
+  | "connector.install"
+  | "connector.call";
 
 /** Niveau d'exécution d'une permission (voir docs/PERMISSIONS.md). */
 export type PermissionTier = "automatic" | "confirmation" | "restricted";
@@ -41,6 +43,8 @@ export const PERMISSION_TIERS: Record<Permission, PermissionTier> = {
   "agent.run": "confirmation",
   "window.control": "confirmation",
   "plugin.manage": "confirmation",
+  "connector.install": "confirmation",
+  "connector.call": "confirmation",
 };
 
 export interface CapabilityManifest {

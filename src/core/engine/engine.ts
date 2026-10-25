@@ -82,6 +82,8 @@ const DEFAULT_GRANTED: Permission[] = [
   "agent.run",
   "window.read",
   "window.control",
+  "connector.install",
+  "connector.call",
 ];
 
 /** Titre affiché pour chaque permission demandant une confirmation. */
@@ -92,6 +94,8 @@ const PERMISSION_TITLE: Record<string, MessageKey> = {
   "agent.run": "confirm.title.agentRun",
   "window.control": "confirm.title.windowControl",
   "plugin.manage": "confirm.title.pluginManage",
+  "connector.install": "confirm.title.connectorInstall",
+  "connector.call": "confirm.title.connectorCall",
 };
 
 /** Libellé de chaque ligne de détail d'une demande de confirmation. */
@@ -104,6 +108,12 @@ const ROW_LABEL: Record<string, MessageKey> = {
   window: "confirm.row.window",
   process: "confirm.row.process",
   requester: "confirm.row.requester",
+  connector: "confirm.row.connector",
+  tool: "confirm.row.tool",
+  arguments: "confirm.row.arguments",
+  command: "confirm.row.command",
+  repository: "confirm.row.repository",
+  variables: "confirm.row.variables",
   plugin: "confirm.row.plugin",
   version: "confirm.row.version",
   commit: "confirm.row.commit",
