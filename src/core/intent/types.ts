@@ -20,6 +20,8 @@ export type Intent =
   | { type: "FILE_MOVE"; path: string; toDir: string }
   | { type: "FILE_TRASH"; path: string }
   | { type: "FILE_UNDO" }
+  | { type: "UI_READ" }
+  | { type: "UI_INVOKE"; name: string }
   | { type: "PROCESS_LIST" }
   | { type: "WINDOW_LIST" }
   | { type: "WINDOW_FOCUS"; name: string }

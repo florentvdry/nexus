@@ -43,6 +43,7 @@ describe("plugins livrés", () => {
       "actions/plugin-manager",
       "actions/process-list",
       "actions/system-info",
+      "actions/ui-automation",
       "actions/window-control",
       "agents/claude-code",
       "documents/file-inspect",

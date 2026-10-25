@@ -433,6 +433,10 @@ export class Engine {
         return this.#runCapability("files.operate", { kind: "trash", path: intent.path }, { labelKey: "task.fileOperation", labelParams: { file: basename(intent.path) } }, reply);
       case "FILE_UNDO":
         return this.#runCapability("files.operate", { kind: "undo" }, { labelKey: "task.fileUndo" }, reply);
+      case "UI_READ":
+        return this.#runCapability("ui.inspect", {}, { labelKey: "task.uiInspect" }, reply);
+      case "UI_INVOKE":
+        return this.#runCapability("ui.invoke", { name: intent.name }, { labelKey: "task.uiInvoke", labelParams: { name: intent.name }, cancellable: true }, reply);
       case "PROCESS_LIST":
         return this.#runCapability("system.processes", { limit: "8" }, { labelKey: "task.processes" }, reply);
       case "PLUGIN_CATALOG":

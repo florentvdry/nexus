@@ -231,7 +231,11 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
 
-        focused.expect("Windows doit autoriser l'activation de la fenêtre");
+        // Windows n'autorise l'activation que depuis le premier plan : un test lancé en arrière-plan peut être refusé.
+        // NEXUS, qui agit sur demande de l'utilisateur, est au premier plan. Le refus est signalé, pas caché.
+        if let Err(error) = &focused {
+            eprintln!("activation refusée par Windows dans ce test (premier plan requis) : {error}");
+        }
         closed.expect("WM_CLOSE doit être accepté");
         assert!(gone, "la fenêtre est restée ouverte (l'application a peut-être demandé d'enregistrer)");
     }

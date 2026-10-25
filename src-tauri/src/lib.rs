@@ -37,6 +37,7 @@ use std::sync::Arc;
 use host::runner;
 use permissions::{Broker, Permission, Row};
 use plugins as connectors;
+use plugins::actions::accessibility;
 use plugins::actions::apps::{self, AppMatch, LaunchOutcome};
 use plugins::actions::files::{self, FileEntry, Operation, SearchQuery};
 use plugins::actions::processes::{self, ProcessEntry};
@@ -329,6 +330,35 @@ async fn window_focus(app: AppHandle, broker: State<'_, Broker>, id: usize) -> R
 async fn window_close(app: AppHandle, broker: State<'_, Broker>, id: usize) -> Result<(), AdapterError> {
     require(grants::WINDOW_CONTROL, Permission::WindowControl)?;
     window_action(app, broker.inner().clone_handle(), id, WindowAction::Close).await
+}
+
+/// Contrôles de la fenêtre active (hors NEXUS) : noms, rôles et états. Lecture seule ; les mots de passe ne sont jamais lus.
+#[tauri::command]
+async fn ui_inspect() -> Result<accessibility::Inspection, AdapterError> {
+    require(grants::UI_AUTOMATION, Permission::WindowRead)?;
+    tauri::async_runtime::spawn_blocking(accessibility::inspect).await.map_err(blocking_failed)?
+}
+
+/// Activer un bouton de la fenêtre active. L'aperçu vérifie la cible (fenêtre et bouton uniques), le courtier demande
+/// l'accord avec la fenêtre et le bouton exacts, puis l'action revérifie la fenêtre avant d'agir.
+#[tauri::command]
+async fn ui_invoke(app: AppHandle, broker: State<'_, Broker>, name: String) -> Result<String, AdapterError> {
+    require(grants::UI_AUTOMATION, Permission::WindowControl)?;
+    let broker = broker.inner().clone_handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let plan = accessibility::plan_invoke(&name)?;
+        let rows = vec![
+            Row { key: "window".into(), value: plan.window_title.clone() },
+            Row { key: "process".into(), value: plan.process.clone() },
+            Row { key: "element".into(), value: format!("bouton « {} »", plan.name) },
+            Row { key: "requester".into(), value: grants::UI_AUTOMATION.into() },
+        ];
+        permissions::confirm(&app, &broker, Permission::WindowControl, &rows)?;
+        accessibility::act(&plan)?;
+        Ok(plan.name)
+    })
+    .await
+    .map_err(blocking_failed)?
 }
 
 #[derive(Clone, Copy)]
@@ -721,6 +751,8 @@ pub fn run() {
             window_list,
             window_focus,
             window_close,
+            ui_inspect,
+            ui_invoke,
             agent_detect,
             agent_run,
             agent_cancel,

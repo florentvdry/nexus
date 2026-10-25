@@ -19,6 +19,8 @@ export const MODEL_INTENT_TYPES: readonly Intent["type"][] = [
   "FILE_MOVE",
   "FILE_TRASH",
   "FILE_UNDO",
+  "UI_READ",
+  "UI_INVOKE",
   "PROCESS_LIST",
   "WINDOW_LIST",
   "WINDOW_FOCUS",

@@ -162,10 +162,30 @@ export interface BudgetView {
   defaultSeconds: number;
 }
 
+/** Contrôle lu par l'accessibilité Windows : rôle lisible, nom, état. Jamais la valeur d'un champ. */
+export interface UiControl {
+  role: string;
+  name: string;
+  enabled: boolean;
+  depth: number;
+}
+
+/** Contrôles de la fenêtre au premier plan (hors NEXUS). `truncated` : la lecture s'est arrêtée à la limite. */
+export interface UiInspection {
+  window: string;
+  process: string;
+  controls: UiControl[];
+  truncated: boolean;
+}
+
 export interface NativeBridge {
   listWindows(): Promise<WindowEntry[]>;
   focusWindow(id: number): Promise<void>;
   closeWindow(id: number): Promise<void>;
+  /** Contrôles de la fenêtre au premier plan, hors NEXUS. Lecture seule. */
+  uiInspect(): Promise<UiInspection>;
+  /** Active le bouton de ce nom, après confirmation du natif. Renvoie le nom activé. */
+  uiInvoke(name: string): Promise<string>;
   /** Plugins de données : examen, installation, suppression. Chaque étape demande votre accord. */
   pluginPrepare(source: string): Promise<PreparedPlugin>;
   pluginInstall(stagingId: string, digest: string): Promise<InstalledPlugin>;
@@ -341,6 +361,14 @@ export class TauriNativeBridge implements NativeBridge {
 
   closeWindow(id: number): Promise<void> {
     return this.#call<void>("window_close", { id });
+  }
+
+  uiInspect(): Promise<UiInspection> {
+    return this.#call<UiInspection>("ui_inspect");
+  }
+
+  uiInvoke(name: string): Promise<string> {
+    return this.#call<string>("ui_invoke", { name });
   }
 
   pluginPrepare(source: string): Promise<PreparedPlugin> {
@@ -634,6 +662,8 @@ export class UnavailableNativeBridge implements NativeBridge {
   listWindows = () => this.unavailable();
   focusWindow = () => this.unavailable();
   closeWindow = () => this.unavailable();
+  uiInspect = () => this.unavailable();
+  uiInvoke = () => this.unavailable();
   listProcesses = () => this.unavailable();
   searchFiles = () => this.unavailable();
   readFile = () => this.unavailable();

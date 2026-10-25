@@ -26,6 +26,7 @@ pub const FILE_VIEW: &str = "actions.file-view";
 pub const FILE_OPERATIONS: &str = "actions.file-operations";
 pub const CLAUDE_CODE: &str = "agents.claude-code";
 pub const WINDOW_CONTROL: &str = "actions.window-control";
+pub const UI_AUTOMATION: &str = "actions.ui-automation";
 pub const PLUGIN_MANAGER: &str = "actions.plugin-manager";
 
 /// Permissions accordées à chaque identité de capacité, d'après leurs manifestes.
@@ -36,6 +37,7 @@ const GRANTS: &[(&str, &[Permission])] = &[
     (FILE_OPERATIONS, &[Permission::FileWrite, Permission::FileDelete]),
     (CLAUDE_CODE, &[Permission::AgentRun]),
     (WINDOW_CONTROL, &[Permission::WindowRead, Permission::WindowControl]),
+    (UI_AUTOMATION, &[Permission::WindowRead, Permission::WindowControl]),
     (PLUGIN_MANAGER, &[Permission::PluginManage]),
 ];
 
@@ -124,6 +126,8 @@ pub const POLICIES: &[(&str, Policy)] = &[
     ("window_list", Policy::Capability(WINDOW_CONTROL)),
     ("window_focus", Policy::Capability(WINDOW_CONTROL)),
     ("window_close", Policy::Capability(WINDOW_CONTROL)),
+    ("ui_inspect", Policy::Capability(UI_AUTOMATION)),
+    ("ui_invoke", Policy::Capability(UI_AUTOMATION)),
     ("plugin_prepare", Policy::Capability(PLUGIN_MANAGER)),
     ("plugin_install", Policy::Capability(PLUGIN_MANAGER)),
     ("plugin_remove", Policy::Capability(PLUGIN_MANAGER)),

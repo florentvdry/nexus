@@ -108,6 +108,12 @@ export function validateModelIntent(raw: unknown): Intent | null {
     }
     case "FILE_UNDO":
       return { type };
+    case "UI_READ":
+      return { type };
+    case "UI_INVOKE": {
+      const name = text(candidate.name, 100);
+      return name ? { type, name } : null;
+    }
     case "WINDOW_FOCUS":
     case "WINDOW_CLOSE": {
       const name = text(candidate.name, 100);

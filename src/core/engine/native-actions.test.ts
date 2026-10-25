@@ -27,6 +27,8 @@ const MODEL_ANSWERS: Record<string, unknown> = {
   "Quelles applications sont ouvertes ?": { type: "PROCESS_LIST" },
   "supprime /home/ana/Documents/vieux.txt": { type: "FILE_TRASH", path: "/home/ana/Documents/vieux.txt" },
   "annule la dernière action": { type: "FILE_UNDO" },
+  "qu'est-ce qu'il y a dans la fenêtre active ?": { type: "UI_READ" },
+  "clique sur le bouton Enregistrer": { type: "UI_INVOKE", name: "Enregistrer" },
   "lance Claude Code dans /home/ana/projet : liste les fichiers": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "liste les fichiers" },
   "lance Claude Code dans /home/ana/projet : fais un test": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "fais un test" },
   "lance Claude Code dans /home/ana/projet : tâche longue": { type: "AGENT_RUN", project: "/home/ana/projet", prompt: "tâche longue" },
@@ -94,6 +96,16 @@ function fakeBridge(overrides: Partial<NativeBridge> = {}) {
     ]),
     focusWindow: vi.fn(async () => {}),
     closeWindow: vi.fn(async () => {}),
+    uiInspect: vi.fn(async () => ({
+      window: "Bloc-notes",
+      process: "notepad.exe",
+      controls: [
+        { role: "bouton", name: "Enregistrer", enabled: true, depth: 1 },
+        { role: "champ de texte", name: "Éditeur", enabled: true, depth: 1 },
+      ],
+      truncated: false,
+    })),
+    uiInvoke: vi.fn(async (name: string) => name),
     listProcesses: vi.fn(async () => [{ name: "Discord.exe", pid: 4242, cpuPercent: 3, memoryBytes: 512 * 1024 * 1024 }]),
     readFile: vi.fn(async () => new ArrayBuffer(0)),
     searchFiles: vi.fn(async () => [
@@ -356,6 +368,23 @@ describe("recherche et processus", () => {
     await engine.submit("Quelles applications sont ouvertes ?");
     expect(bridge.listProcesses).toHaveBeenCalledWith(8);
     expect(presented(events)).toContainEqual(expect.objectContaining({ kind: "data-table", rows: [["Discord.exe", "4242", "0,5 Go", "3 %"]] }));
+  });
+});
+
+describe("contrôles de la fenêtre active : lecture, puis action confirmée côté natif", () => {
+  it("lit les contrôles de la fenêtre active et les présente en tableau", async () => {
+    const bridge = fakeBridge();
+    const { engine, events } = setup(bridge);
+    await engine.submit("qu'est-ce qu'il y a dans la fenêtre active ?");
+    expect(bridge.uiInspect).toHaveBeenCalled();
+    expect(presented(events).some((item) => item.kind === "data-table")).toBe(true);
+  });
+
+  it("active un bouton par l'opération native : le natif confirme et revérifie la cible", async () => {
+    const bridge = fakeBridge();
+    const { engine } = setup(bridge);
+    await engine.submit("clique sur le bouton Enregistrer");
+    expect(bridge.uiInvoke).toHaveBeenCalledWith("Enregistrer");
   });
 });
 

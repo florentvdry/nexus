@@ -1,0 +1,27 @@
+{
+  "id": "actions.ui-automation",
+  "name": "Contrôles de la fenêtre active",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "actions",
+  "description": "Lit les boutons et champs de la fenêtre au premier plan (hors NEXUS), et active un bouton après votre accord. Windows uniquement.",
+  "author": "NEXUS contributors",
+  "license": "MIT",
+  "entry": "index.ts",
+  "native": [
+    "actions::accessibility"
+  ],
+  "capabilities": [
+    "ui.inspect",
+    "ui.invoke"
+  ],
+  "connectors": [],
+  "languages": [],
+  "permissions": [
+    "window.read",
+    "window.control"
+  ],
+  "locality": "local",
+  "cost": "local",
+  "offline": true
+}
